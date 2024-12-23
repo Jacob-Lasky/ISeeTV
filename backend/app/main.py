@@ -243,6 +243,9 @@ mounted_directories = {}
 
 # Mount a single static files directory for all segments
 SEGMENTS_DIR = "/tmp/iseetv_segments"
+# remove existing segments directory
+if os.path.exists(SEGMENTS_DIR):
+    shutil.rmtree(SEGMENTS_DIR)
 os.makedirs(SEGMENTS_DIR, exist_ok=True)
 app.mount("/segments", StaticFiles(directory=SEGMENTS_DIR), name="segments")
 
@@ -342,6 +345,18 @@ def update_base_url(m3u8_path: str, mount_path: str):
 
         with open(m3u8_path, "w") as f:
             f.write(content)
+
+
+@app.get("/stream/cleanup")
+def cleanup_all_channel_resources():
+    """Clean up resources for all channels."""
+    # TODO: add a session ID so that only a specific session is cleaned up
+    for channel_number in list(stream_resources.keys()):
+        cleanup_channel_resources(channel_number)
+    for channel_number in os.listdir(SEGMENTS_DIR):
+        logger.info(f"Cleaning up channel {channel_number}")
+        shutil.rmtree(os.path.join(SEGMENTS_DIR, channel_number))
+    return {"message": "Cleaned up resources for all channels"}
 
 
 @app.get("/stream/{channel_number}/cleanup")

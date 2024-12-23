@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Container, Box, IconButton, ThemeProvider, CssBaseline, Drawer, useMediaQuery, Tooltip } from '@mui/material';
 import { createTheme } from '@mui/material/styles';
 import { Settings as SettingsIcon } from '@mui/icons-material';
@@ -14,6 +14,7 @@ import type { Settings } from './models/Settings';
 import type { Channel } from './models/Channel';
 import { LoadingOverlay } from './components/LoadingOverlay';
 import { NumbersIcon } from './components/NumbersIcon';
+import { API_URL } from './config';
 
 const DRAWER_WIDTH = 300;
 
@@ -24,6 +25,14 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string>();
   const [downloadProgress, setDownloadProgress] = useState<{ loaded: number; total: number }>();
+
+  // Add this new useEffect for cleanup
+  useEffect(() => {
+    console.log('Cleaning up old streams...');
+    return () => {
+      navigator.sendBeacon(`${API_URL}/stream/cleanup`);
+    };
+  }, []);
 
   const theme = React.useMemo(() => createTheme({
     palette: {
