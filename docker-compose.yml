@@ -1,65 +1,28 @@
 services:
-  init-db:
-    container_name: iseetv-init-db
-    image: python:3.11-slim
-    volumes:
-      - ./backend:/app
-      - ./data:/data
-    working_dir: /app
-    command: >
-      /bin/bash -c "
-        chmod -R 777 /data || true;
-        chown -R nobody:users /data || true;
-        python init_db.py;
-        chmod -R 777 /data || true;
-        chown -R nobody:users /data || true;
-      "
-
-  frontend:
-    container_name: iseetv-frontend
-    build: 
-      context: ./frontend
+  iseetv:
+    container_name: ISeeTV
+    build:
+      context: .
       dockerfile: Dockerfile
-    ports:
-      - "1313:3000"
-    volumes:
-      - ./frontend:/app
-      - /app/node_modules
-    networks:
-      - app-network
-    depends_on:
-      - backend
-
-  backend:
-    container_name: iseetv-backend
-    image: your_image_name
     runtime: nvidia
-    environment:
-      - NVIDIA_VISIBLE_DEVICES=GPU-25f5d0be-15d5-fcff-be10-c1afca13d69a
-      - NVIDIA_DRIVER_CAPABILITIES=all
     deploy:
       resources:
         reservations:
           devices:
             - capabilities: [gpu]
-    build: 
-      context: ./backend
-      dockerfile: Dockerfile
     ports:
-      - "1314:8000"
+      - "1313:3000"  # Frontend
+      - "1314:8000"  # Backend
     volumes:
-      - ./backend:/app
+      - ./backend:/app/backend
+      - ./frontend:/app/frontend
       - ./data:/data
-    networks:
-      - app-network
+      - /app/frontend/node_modules
     user: "nobody:users"
-    depends_on:
-      init-db:
-        condition: service_completed_successfully
 
 volumes:
   data:
 
 networks:
-  app-network:
+  default:
     driver: bridge
