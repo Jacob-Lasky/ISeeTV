@@ -114,11 +114,12 @@ def transcode_with_gpu(url: str):
 import subprocess
 import os
 import tempfile
+import time
 
 
 def transcode_audio_only(url: str, channel_dir: str, channel_number: int):
     output_m3u8 = os.path.join(channel_dir, "output.m3u8")
-    segment_pattern = os.path.join(channel_dir, "segment%03d.ts")
+    segment_pattern = os.path.join(channel_dir, "segment_%Y%m%d_%H%M%S.ts")
 
     process = subprocess.Popen(
         [
@@ -126,25 +127,25 @@ def transcode_audio_only(url: str, channel_dir: str, channel_number: int):
             "-i",
             url,
             "-c:v",
-            "copy",
+            "copy",  # Copy video stream
             "-c:a",
-            "aac",
+            "aac",  # Transcode audio to AAC
             "-ar",
-            "44100",
+            "44100",  # Ensure 44.1kHz audio
             "-b:a",
-            "128k",
+            "128k",  # Audio bitrate
             "-ac",
-            "2",
+            "2",  # Stereo audio
             "-f",
-            "hls",
+            "hls",  # Output HLS format
             "-hls_time",
-            "4",
+            "4",  # Segment length
             "-hls_list_size",
-            "0",
+            "0",  # Keep all segments
             "-hls_segment_filename",
             segment_pattern,
             "-hls_base_url",
-            f"/segments/{channel_number}/",
+            f"/segments/",  # Correct base URL
             output_m3u8,
         ],
         stdout=subprocess.PIPE,

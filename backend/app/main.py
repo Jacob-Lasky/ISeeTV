@@ -13,13 +13,12 @@ from .services.m3u_service import M3UService
 from sqlalchemy import func
 from fastapi.responses import StreamingResponse
 import requests
-from .video_helpers import get_video_codec, transcode_video, transcode_audio_only
+from .video_helpers import get_video_codec, transcode_audio_only
 import time
 import subprocess
 import os
 import shutil
 import time
-import signal
 from starlette.staticfiles import StaticFiles
 from starlette.routing import Mount
 
@@ -103,12 +102,6 @@ def clear_cache():
     global codec_cache
     codec_cache = {}
     logger.info("Cleared codec cache")
-
-
-# Add a test log at startup
-@app.on_event("startup")
-async def startup_event():
-    logger.info("ISeeTV backend starting up...")
 
 
 @app.post("/m3u/refresh")
@@ -262,60 +255,57 @@ async def stream_channel(channel_number: int, db: Session = Depends(database.get
     # Construct the m3u8 URL
     original_url = f"{channel.url}.m3u8"
 
-    # Create temp directory for this channel if it doesn't exist
-    if channel_number not in stream_resources:
-        # Create channel-specific directory inside the segments directory
-        channel_dir = os.path.join(SEGMENTS_DIR, str(channel_number))
-        os.makedirs(channel_dir, exist_ok=True)
-        logger.info(f"Created channel directory: {channel_dir}")
+    # Create channel-specific directory inside the segments directory
+    channel_dir = os.path.join(SEGMENTS_DIR, str(channel_number))
+    os.makedirs(channel_dir, exist_ok=True)
 
-        # Start FFmpeg process
-        process, output_m3u8 = transcode_audio_only(
-            original_url, channel_dir, channel_number
+    # Start FFmpeg process
+    process, output_m3u8 = transcode_audio_only(
+        original_url, channel_dir, channel_number
+    )
+
+    # Wait for the .m3u8 manifest to be ready
+    timeout = 10
+    start_time = time.time()
+    manifest_ready = False
+
+    while not manifest_ready and time.time() - start_time < timeout:
+        if os.path.exists(output_m3u8):
+            # Check if at least one segment exists
+            segments = [f for f in os.listdir(channel_dir) if f.endswith(".ts")]
+            if segments:
+                manifest_ready = True
+                break
+        time.sleep(0.5)
+
+    if not manifest_ready:
+        # Clean up if manifest isn't ready
+        if process.poll() is None:
+            process.terminate()
+            try:
+                process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                process.kill()
+        if os.path.exists(channel_dir):
+            shutil.rmtree(channel_dir)
+        raise HTTPException(
+            status_code=500,
+            detail="Failed to generate HLS manifest and segments.",
         )
 
-        # Wait for the .m3u8 manifest to be ready
-        timeout = 10
-        start_time = time.time()
-        manifest_ready = False
+    # Only store the resources after we know they're ready
+    stream_resources[channel_number] = (channel_dir, process)
+    logger.info(
+        f"Started FFmpeg process for channel {channel_number} with PID {process.pid}"
+    )
 
-        while not manifest_ready and time.time() - start_time < timeout:
-            if os.path.exists(output_m3u8):
-                # Check if at least one segment exists
-                segments = [f for f in os.listdir(channel_dir) if f.endswith(".ts")]
-                if segments:
-                    manifest_ready = True
-                    break
-            time.sleep(0.5)
-
-        if not manifest_ready:
-            # Clean up if manifest isn't ready
-            if process.poll() is None:
-                process.terminate()
-                try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-            if os.path.exists(channel_dir):
-                shutil.rmtree(channel_dir)
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to generate HLS manifest and segments.",
+    # Only after the new channel is ready, clean up other channels
+    for existing_channel in list(stream_resources.keys()):
+        if existing_channel != channel_number:
+            logger.info(
+                f"Cleaning up existing channel {existing_channel} before switching"
             )
-
-        # Only store the resources after we know they're ready
-        stream_resources[channel_number] = (channel_dir, process)
-        logger.info(
-            f"Started FFmpeg process for channel {channel_number} with PID {process.pid}"
-        )
-
-        # Only after the new channel is ready, clean up other channels
-        for existing_channel in list(stream_resources.keys()):
-            if existing_channel != channel_number:
-                logger.info(
-                    f"Cleaning up existing channel {existing_channel} before switching"
-                )
-                cleanup_channel_resources(existing_channel)
+            cleanup_channel_resources(existing_channel)
 
     channel_dir, _ = stream_resources[channel_number]
     output_m3u8 = os.path.join(channel_dir, "output.m3u8")
@@ -396,6 +386,11 @@ async def get_hls_segment(segment_path: str):
     raise HTTPException(
         status_code=response.status_code, detail="Failed to fetch segment"
     )
+
+
+@app.on_event("startup")
+async def startup_event():
+    logger.info("ISeeTV backend starting up...")
 
 
 @app.on_event("shutdown")
