@@ -2,8 +2,8 @@
 
 <hr></hr>
 
-This is the ISeeTV project. It was created due to the lack of dockerized IPTV clients. The spirit of the project is "ease" - meaning:
-- Easy to navigate
+The ISeeTV project creates a docker-based IPTV client for desktop and mobile browsers. The spirit of the project is to be:
+- Easy to use
 - Easy to deploy
 - Easy to contribute
 
@@ -103,8 +103,7 @@ This is the ISeeTV project. It was created due to the lack of dockerized IPTV cl
 
 ## Settings Modal:
 ![image](https://github.com/user-attachments/assets/56c695d2-434d-4109-9be3-8f4717bb367f)
-- Provide ISeeTV with an M3U link and (optionally) with an EPG
--   Includes a manual refresh button
+- Provide ISeeTV with an M3U link and (optionally) with an EPG link
 - Change the update interval
 - Set the M3U to update on app-startup
 - Change the theme to light, dark or system (default)
@@ -119,4 +118,4 @@ If you're thinking about contributing to this repo in any way, I want you to! I 
 - General Development Guidelines
   - Ask tons of questions
   - Keep code tested
-  - Update the README
+  - Keep the README up to date
