@@ -2,7 +2,7 @@
 
 <hr></hr>
 
-The ISeeTV project creates a docker-based IPTV client for desktop and mobile browsers. The spirit of the project is to be:
+The ISeeTV project seeks to build a docker-based IPTV client for desktop and mobile browsers. The spirit of the project is to be:
 - Easy to use
 - Easy to deploy
 - Easy to contribute
