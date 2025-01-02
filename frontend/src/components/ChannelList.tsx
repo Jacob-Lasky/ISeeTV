@@ -211,6 +211,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
   const [activeTab, setActiveTab] = useState<TabValue>('all');
   const [channelInput, setChannelInput] = useState('');
   const [loading, setLoading] = useState(false);
+  const [initialLoading, setInitialLoading] = useState(true);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [groups, setGroups] = useState<ChannelGroup[]>([]);
@@ -357,8 +358,9 @@ export const ChannelList: React.FC<ChannelListProps> = ({
 
   const loadGroups = useCallback(async () => {
     if (groups.length > 0) return;
-
+  
     try {
+      // Load groups
       const groups = await channelService.getGroups();
       setGroups(groups);
       
@@ -366,19 +368,26 @@ export const ChannelList: React.FC<ChannelListProps> = ({
         localStorage.getItem(`channelListGroups_${activeTab}`) || '{}'
       );
       
+      // Pre-fetch channels for all groups in parallel
+      const groupPromises = groups.map(group => 
+        channelService.getChannels(0, 1000, { group: group.name })
+      );
+      
+      const responses = await Promise.all(groupPromises);
+      
+      // Update group channels all at once
+      const newGroupChannels: Record<string, Channel[]> = {};
+      groups.forEach((group, index) => {
+        newGroupChannels[group.name] = responses[index].items;
+      });
+      
+      setGroupChannels(newGroupChannels);
       setExpandedGroups(savedExpandedGroups);
-
-      const expandedGroupNames = Object.entries(savedExpandedGroups)
-        .filter(([_, isExpanded]) => isExpanded)
-        .map(([groupName]) => groupName);
-
-      if (expandedGroupNames.length > 0) {
-        await loadGroupChannelsIfNeeded(expandedGroupNames);
-      }
+      
     } catch (error) {
-      console.error('Failed to load groups:', error);
+      console.error('Failed to load groups and channels:', error);
     }
-  }, [activeTab, groups.length, loadGroupChannelsIfNeeded]);
+  }, [activeTab, groups.length]);
 
   // Update the initialization effect
   useEffect(() => {
@@ -387,13 +396,20 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     const initializeList = async () => {
       if (!mounted) return;
       
-      if (activeTab === 'all') {
-        await loadGroups();
-      } else if (activeTab === 'favorites') {
-        await loadChannels(false);
-      } else if (activeTab === 'recent') {
-        const recentChannels = recentChannelsService.getRecentChannels();
-        setChannels(recentChannels);
+      setInitialLoading(true);
+      try {
+        if (activeTab === 'all') {
+          await loadGroups();
+        } else if (activeTab === 'favorites') {
+          await loadChannels(false);
+        } else if (activeTab === 'recent') {
+          const recentChannels = recentChannelsService.getRecentChannels();
+          setChannels(recentChannels);
+        }
+      } finally {
+        if (mounted) {
+          setInitialLoading(false);
+        }
       }
     };
 
@@ -716,17 +732,23 @@ export const ChannelList: React.FC<ChannelListProps> = ({
       </Tabs>
 
       <Box sx={{ flexGrow: 1 }}>
-        <VirtualizedChannelList
-          items={virtualizedItems}
-          expandedGroups={expandedGroups}
-          onToggleGroup={handleToggleGroup}
-          selectedChannel={selectedChannel}
-          onChannelSelect={handleChannelSelect}
-          onToggleFavorite={handleToggleFavorite}
-          showChannelNumbers={showChannelNumbers}
-          initialScrollOffset={tabStates[activeTab].scrollPosition}
-          onScroll={handleScroll}
-        />
+        {initialLoading ? (
+          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
+            <CircularProgress />
+          </Box>
+        ) : (
+          <VirtualizedChannelList
+            items={virtualizedItems}
+            expandedGroups={expandedGroups}
+            onToggleGroup={handleToggleGroup}
+            selectedChannel={selectedChannel}
+            onChannelSelect={handleChannelSelect}
+            onToggleFavorite={handleToggleFavorite}
+            showChannelNumbers={showChannelNumbers}
+            initialScrollOffset={tabStates[activeTab].scrollPosition}
+            onScroll={handleScroll}
+          />
+        )}
       </Box>
 
       {loading && (

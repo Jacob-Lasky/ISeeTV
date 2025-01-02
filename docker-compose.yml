@@ -16,9 +16,11 @@ services:
     volumes:
       - ./backend:/app/backend
       - ./frontend:/app/frontend
-      - ./data:/data
+      - ./data:/app/data
       - /app/frontend/node_modules
     user: "nobody:users"
+    environment:
+      - DATABASE_URL=sqlite:////app/data/sql_app.db
 
 volumes:
   data:

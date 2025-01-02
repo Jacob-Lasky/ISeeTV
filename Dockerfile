@@ -29,6 +29,22 @@ COPY frontend/package*.json ./frontend/
 WORKDIR /app/frontend
 RUN npm install
 
+# Environment variables
+ENV PYTHONUNBUFFERED=1
+ENV NVIDIA_VISIBLE_DEVICES=GPU-25f5d0be-15d5-fcff-be10-c1afca13d69a
+ENV NVIDIA_DRIVER_CAPABILITIES=all
+ENV DATA_DIRECTORY=/app/data
+
+# Create data directory and set permissions
+RUN mkdir -p $DATA_DIRECTORY && \
+    chown -R nobody:users $DATA_DIRECTORY && \
+    chmod 777 $DATA_DIRECTORY
+
+# Make sure directories are writable
+RUN mkdir -p /app/frontend/node_modules/.cache && \
+    chown -R nobody:users /app && \
+    chmod -R 777 /app
+
 # Copy all application code
 COPY backend /app/backend
 COPY frontend /app/frontend
@@ -37,14 +53,6 @@ COPY start.sh /app/
 
 # Make start.sh executable
 RUN chmod +x /app/start.sh
-
-# Create startup script
-WORKDIR /app
-
-# Environment variables
-ENV PYTHONUNBUFFERED=1
-ENV NVIDIA_VISIBLE_DEVICES=GPU-25f5d0be-15d5-fcff-be10-c1afca13d69a
-ENV NVIDIA_DRIVER_CAPABILITIES=all
 
 # Expose ports
 EXPOSE 3000 8000

@@ -1,2 +1,2 @@
 # Database
-SQLALCHEMY_DATABASE_URL = "sqlite:////data/sql_app.db"
+SQLALCHEMY_DATABASE_URL = "sqlite:////app/data/sql_app.db"

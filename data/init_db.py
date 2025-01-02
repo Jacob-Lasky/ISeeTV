@@ -2,12 +2,15 @@ import sqlite3
 import logging
 
 # Configure logging
-logging.basicConfig(level=logging.INFO, format="%(levelname)s:\t%(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(levelname)s: %(asctime)s - %(message)s",
+)
 logger = logging.getLogger(__name__)
 
 try:
     logger.info("Connecting to database...")
-    conn = sqlite3.connect("/data/sql_app.db")
+    conn = sqlite3.connect("/app/data/sql_app.db")
     cursor = conn.cursor()
 
     # Drop existing table to reset schema

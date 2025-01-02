@@ -6,7 +6,7 @@ import subprocess
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(levelname)s:\t%(message)s",
+    format="%(levelname)s: %(asctime)s - %(message)s",
     handlers=[logging.StreamHandler(sys.stdout)],
 )
 

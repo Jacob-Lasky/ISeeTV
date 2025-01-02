@@ -14,6 +14,7 @@ from sqlalchemy import func
 from fastapi.responses import StreamingResponse
 import requests
 from .video_helpers import get_video_codec, transcode_video, transcode_audio_only
+from .database import get_db, AsyncSessionLocal
 import time
 import subprocess
 import os
@@ -23,14 +24,21 @@ import time
 import signal
 from starlette.staticfiles import StaticFiles
 from starlette.routing import Mount
+import json
+from sqlalchemy.future import select
+from sqlalchemy import delete
+from sqlalchemy.ext.asyncio import AsyncSession
 
 logging.basicConfig(
     level=logging.INFO,
-    format="%(levelname)s:\t%(message)s",
+    format="%(levelname)s: %(asctime)s - %(message)s",
     handlers=[logging.StreamHandler(sys.stdout)],
 )
 
 logger = logging.getLogger(__name__)
+
+DATA_DIRECTORY = os.environ.get("DATA_DIRECTORY")
+CONFIG_FILE = os.path.join(DATA_DIRECTORY, "config.json")
 
 
 app = FastAPI()
@@ -101,14 +109,40 @@ def clear_cache():
     logger.info("Cleared codec cache")
 
 
-# Add a test log at startup
+def save_config(config: dict):
+    with open(CONFIG_FILE, "w") as f:
+        json.dump(config, f)
+        logger.info(f"Updated config.json")
+
+
+def check_config_file():
+    if not os.path.exists(CONFIG_FILE):
+        logger.info("Creating default config.json")
+        save_config({})
+
+
+def load_config():
+    with open(CONFIG_FILE, "r") as f:
+        return json.load(f)
+
+
 @app.on_event("startup")
 async def startup_event():
     logger.info("ISeeTV backend starting up...")
+    check_config_file()
+    config = load_config()
+    if "m3u_url" in config:
+        async with AsyncSessionLocal() as db:
+            try:
+                await refresh_m3u(config["m3u_url"], db)
+                await db.commit()
+            except Exception as e:
+                await db.rollback()
+                raise
 
 
 @app.post("/m3u/refresh")
-async def refresh_m3u(url: str, db: Session = Depends(database.get_db)):
+async def refresh_m3u(url: str, db: AsyncSession = Depends(get_db)):
     """Download and process M3U file from URL"""
     logger.info(f"Starting M3U refresh from {url}")
 
@@ -116,20 +150,25 @@ async def refresh_m3u(url: str, db: Session = Depends(database.get_db)):
         # Download and parse M3U
         channels = await m3u_service.download_and_parse(url)
 
-        # Clear existing channels
-        deleted_count = db.query(models.Channel).delete()
-        logger.info(f"Deleted {deleted_count} existing channels")
+        # Clear existing channels using execute
+        await db.execute(delete(models.Channel))
 
         # Save new channels
         db_channels = [models.Channel(**channel) for channel in channels]
-        db.bulk_save_objects(db_channels)
-        db.commit()
+        db.add_all(db_channels)
+        await db.commit()
+
+        # save the config
+        config = load_config()
+        config["m3u_url"] = url
+        save_config(config)
 
         logger.info(f"Successfully saved {len(channels)} channels")
         return {"message": f"Saved {len(channels)} channels"}
 
     except Exception as e:
         logger.error(f"Failed to refresh M3U: {str(e)}", exc_info=True)
+        await db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to refresh M3U: {str(e)}")
 
 
@@ -140,33 +179,39 @@ async def get_channels(
     group: Optional[str] = None,
     search: Optional[str] = None,
     favorites_only: bool = False,
-    db: Session = Depends(database.get_db),
+    db: AsyncSession = Depends(get_db),
 ):
-    logger.info(
+    logger.debug(
         f"Getting channels with skip={skip}, limit={limit}, group={group}, search={search}, favorites_only={favorites_only}"
     )
     try:
-        query = db.query(models.Channel)
+        # Build the base query
+        query = select(models.Channel)
 
         # Apply filters
         if group:
-            query = query.filter(models.Channel.group == group)
+            query = query.where(models.Channel.group == group)
         if search:
-            query = query.filter(models.Channel.name.ilike(f"%{search}%"))
+            query = query.where(models.Channel.name.ilike(f"%{search}%"))
         if favorites_only:
-            query = query.filter(models.Channel.is_favorite)
+            query = query.where(models.Channel.is_favorite)
 
         # Always order by channel number
         query = query.order_by(models.Channel.channel_number)
 
-        # Get total count before pagination
-        total = query.count()
+        # Get total count
+        count_result = await db.execute(
+            select(func.count()).select_from(query.subquery())
+        )
+        total = count_result.scalar()
 
-        # If group is specified, don't paginate
-        if group:
-            channels = query.all()
-        else:
-            channels = query.offset(skip).limit(limit).all()
+        # Apply pagination if no group specified
+        if not group:
+            query = query.offset(skip).limit(limit)
+
+        # Execute the query
+        result = await db.execute(query)
+        channels = result.scalars().all()
 
         return {"items": channels, "total": total, "skip": skip, "limit": limit}
     except Exception as e:
@@ -175,34 +220,30 @@ async def get_channels(
 
 
 @app.put("/channels/{channel_number}/favorite")
-async def toggle_favorite(channel_number: int, db: Session = Depends(database.get_db)):
+async def toggle_favorite(channel_number: int, db: AsyncSession = Depends(get_db)):
     """Toggle favorite status for a channel"""
     logger.info(f"Toggling favorite status for channel {channel_number}")
 
-    # Get the channel
-    channel = (
-        db.query(models.Channel)
-        .filter(models.Channel.channel_number == channel_number)
-        .first()
-    )
-
-    if not channel:
-        raise HTTPException(status_code=404, detail="Channel not found")
-
-    # Toggle the favorite status
-    channel.is_favorite = not channel.is_favorite
-
     try:
-        # Commit the change to the database
-        db.commit()
-        # Refresh the channel object to ensure we have the latest data
-        db.refresh(channel)
-        logger.info(
-            f"Channel {channel_number} favorite status updated to: {channel.is_favorite}"
+        # Get the channel
+        result = await db.execute(
+            select(models.Channel).where(
+                models.Channel.channel_number == channel_number
+            )
         )
+        channel = result.scalar_one_or_none()
+
+        if not channel:
+            raise HTTPException(status_code=404, detail="Channel not found")
+
+        # Toggle the favorite status
+        channel.is_favorite = not channel.is_favorite
+
+        # Commit the change
+        await db.commit()
         return channel
     except Exception as e:
-        db.rollback()
+        await db.rollback()
         logger.error(f"Failed to update favorite status: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to update favorite status")
 
@@ -211,20 +252,22 @@ m3u_service = M3UService()
 
 
 @app.get("/channels/groups")
-async def get_channel_groups(db: Session = Depends(database.get_db)):
+async def get_channel_groups(db: AsyncSession = Depends(get_db)):
     """Get all groups and their channel counts"""
     logger.info("Getting channel groups")
     try:
         # Use SQLAlchemy to get groups and counts
-        groups = (
-            db.query(
+        query = (
+            select(
                 models.Channel.group,
                 func.count(models.Channel.channel_number).label("count"),
             )
             .group_by(models.Channel.group)
             .order_by(models.Channel.group)
-            .all()
         )
+
+        result = await db.execute(query)
+        groups = result.all()
 
         return [
             {"name": group or "Uncategorized", "count": count}
@@ -251,13 +294,13 @@ app.mount("/segments", StaticFiles(directory=SEGMENTS_DIR), name="segments")
 
 
 @app.get("/stream/{channel_number}")
-async def stream_channel(channel_number: int, db: Session = Depends(database.get_db)):
-    # Fetch the channel from the database
-    channel = (
-        db.query(models.Channel)
-        .filter(models.Channel.channel_number == channel_number)
-        .first()
+async def stream_channel(channel_number: int, db: AsyncSession = Depends(get_db)):
+    # Fetch the channel from the database using async syntax
+    result = await db.execute(
+        select(models.Channel).where(models.Channel.channel_number == channel_number)
     )
+    channel = result.scalar_one_or_none()
+
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 

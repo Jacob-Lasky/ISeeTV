@@ -9,11 +9,13 @@ authors = ["Your Name <your.email@example.com>"]
 python = "^3.11"
 fastapi = "^0.109.0"
 uvicorn = "^0.27.0"
-sqlalchemy = "^2.0.25"
+sqlalchemy = {extras = ["asyncio"], version = "^2.0.36"}
 aiohttp = "^3.11.10"
 httpx = "^0.28.1"
 m3u8 = "^6.0.0"
 requests = "^2.32.3"
+aiosqlite = "^0.20.0"
+syncpg = "^1.1.3"
 
 [build-system]
 requires = ["poetry-core"]

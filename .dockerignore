@@ -7,3 +7,25 @@
 /frontend/.gitignore
 
 /backend/.venv
+
+# Exclude development files
+*.tmp
+*.log
+.vscode/
+.idea/
+
+# Exclude test files
+tests/
+__pycache__/
+
+# Exclude documentation
+docs/
+*.md
+
+# Exclude local configuration files
+.env.local
+.env.development
+
+# Exclude build artifacts
+build/
+dist/
