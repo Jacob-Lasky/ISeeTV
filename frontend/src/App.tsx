@@ -5,6 +5,7 @@ import { Settings as SettingsIcon } from '@mui/icons-material';
 import MenuIcon from '@mui/icons-material/Menu';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import ChevronRightIcon from '@mui/icons-material/ChevronRight';
+import TagIcon from '@mui/icons-material/Tag';
 import { SettingsModal } from './components/SettingsModal';
 import { VideoPlayer } from './components/VideoPlayer';
 import { ChannelList } from './components/ChannelList';
@@ -13,7 +14,6 @@ import { channelService } from './services/channelService';
 import type { Settings } from './models/Settings';
 import type { Channel } from './models/Channel';
 import { LoadingOverlay } from './components/LoadingOverlay';
-import { NumbersIcon } from './components/NumbersIcon';
 import { API_URL } from './config';
 
 const DRAWER_WIDTH = 300;
@@ -140,7 +140,7 @@ function App() {
                       size="small"
                       color={settings.showChannelNumbers ? "primary" : "default"}
                     >
-                      <NumbersIcon />
+                      <TagIcon />
                     </IconButton>
                   </Tooltip>
                 </Box>
