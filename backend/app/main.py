@@ -68,18 +68,18 @@ class ChannelBase(BaseModel):
 codec_cache = {}
 
 
-async def get_codec(channel_number: int, original_url: str):
+async def get_codec(guide_id: str, original_url: str):
     # Check cache
-    if channel_number in codec_cache:
-        return codec_cache[channel_number]
+    if guide_id in codec_cache:
+        return codec_cache[guide_id]
     else:
         # clear the cache
         clear_cache()
 
     # Fetch and cache codec
     codec = await get_video_codec(original_url)
-    logger.info(f"Cached codec for channel {channel_number}: {codec}")
-    codec_cache[channel_number] = codec
+    logger.info(f"Cached codec for channel {guide_id}: {codec}")
+    codec_cache[guide_id] = codec
     return codec
 
 
@@ -87,9 +87,9 @@ async def get_codec(channel_number: int, original_url: str):
 gpu_availability_cache = {}
 
 
-async def is_gpu_available(channel_number: int):
-    if channel_number in gpu_availability_cache:
-        return gpu_availability_cache[channel_number]
+async def is_gpu_available(guide_id: str):
+    if guide_id in gpu_availability_cache:
+        return gpu_availability_cache[guide_id]
     else:
         try:
             result = subprocess.run(
@@ -97,7 +97,7 @@ async def is_gpu_available(channel_number: int):
             )
             is_gpu_available = result.returncode == 0
             logger.info(f"GPU availability: {is_gpu_available}")
-            gpu_availability_cache[channel_number] = is_gpu_available
+            gpu_availability_cache[guide_id] = is_gpu_available
             return is_gpu_available
         except FileNotFoundError:
             return False
@@ -196,8 +196,8 @@ async def get_channels(
         if favorites_only:
             query = query.where(models.Channel.is_favorite)
 
-        # Always order by channel number
-        query = query.order_by(models.Channel.channel_number)
+        # order by channel name
+        query = query.order_by(models.Channel.name)
 
         # Get total count
         count_result = await db.execute(
@@ -219,17 +219,15 @@ async def get_channels(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.put("/channels/{channel_number}/favorite")
-async def toggle_favorite(channel_number: int, db: AsyncSession = Depends(get_db)):
+@app.put("/channels/{guide_id}/favorite")
+async def toggle_favorite(guide_id: str, db: AsyncSession = Depends(get_db)):
     """Toggle favorite status for a channel"""
-    logger.info(f"Toggling favorite status for channel {channel_number}")
+    logger.info(f"Toggling favorite status for channel {guide_id}")
 
     try:
         # Get the channel
         result = await db.execute(
-            select(models.Channel).where(
-                models.Channel.channel_number == channel_number
-            )
+            select(models.Channel).where(models.Channel.guide_id == guide_id)
         )
         channel = result.scalar_one_or_none()
 
@@ -279,7 +277,7 @@ async def get_channel_groups(db: AsyncSession = Depends(get_db)):
 
 
 # Temporary directories for streaming
-stream_resources: Dict[int, Tuple[str, subprocess.Popen]] = {}
+stream_resources: Dict[str, Tuple[str, subprocess.Popen]] = {}
 
 # Keep track of mounted directories
 mounted_directories = {}
@@ -293,11 +291,11 @@ os.makedirs(SEGMENTS_DIR, exist_ok=True)
 app.mount("/segments", StaticFiles(directory=SEGMENTS_DIR), name="segments")
 
 
-@app.get("/stream/{channel_number}")
-async def stream_channel(channel_number: int, db: AsyncSession = Depends(get_db)):
+@app.get("/stream/{guide_id}")
+async def stream_channel(guide_id: str, db: AsyncSession = Depends(get_db)):
     # Fetch the channel from the database using async syntax
     result = await db.execute(
-        select(models.Channel).where(models.Channel.channel_number == channel_number)
+        select(models.Channel).where(models.Channel.guide_id == guide_id)
     )
     channel = result.scalar_one_or_none()
 
@@ -308,16 +306,14 @@ async def stream_channel(channel_number: int, db: AsyncSession = Depends(get_db)
     original_url = f"{channel.url}.m3u8"
 
     # Create temp directory for this channel if it doesn't exist
-    if channel_number not in stream_resources:
+    if guide_id not in stream_resources:
         # Create channel-specific directory inside the segments directory
-        channel_dir = os.path.join(SEGMENTS_DIR, str(channel_number))
+        channel_dir = os.path.join(SEGMENTS_DIR, guide_id)
         os.makedirs(channel_dir, exist_ok=True)
         logger.info(f"Created channel directory: {channel_dir}")
 
         # Start FFmpeg process
-        process, output_m3u8 = transcode_audio_only(
-            original_url, channel_dir, channel_number
-        )
+        process, output_m3u8 = transcode_audio_only(original_url, channel_dir, guide_id)
 
         # Wait for the .m3u8 manifest to be ready
         timeout = 10
@@ -349,26 +345,26 @@ async def stream_channel(channel_number: int, db: AsyncSession = Depends(get_db)
             )
 
         # Only store the resources after we know they're ready
-        stream_resources[channel_number] = (channel_dir, process)
+        stream_resources[guide_id] = (channel_dir, process)
         logger.info(
-            f"Started FFmpeg process for channel {channel_number} with PID {process.pid}"
+            f"Started FFmpeg process for channel {guide_id} with PID {process.pid}"
         )
 
         # Only after the new channel is ready, clean up other channels
         for existing_channel in list(stream_resources.keys()):
-            if existing_channel != channel_number:
+            if existing_channel != guide_id:
                 logger.info(
                     f"Cleaning up existing channel {existing_channel} before switching"
                 )
                 cleanup_channel_resources(existing_channel)
 
-    channel_dir, _ = stream_resources[channel_number]
+    channel_dir, _ = stream_resources[guide_id]
     output_m3u8 = os.path.join(channel_dir, "output.m3u8")
 
     # Verify the file exists before returning
     if not os.path.exists(output_m3u8):
         # If file doesn't exist, clean up and raise error
-        cleanup_channel_resources(channel_number)
+        cleanup_channel_resources(guide_id)
         raise HTTPException(
             status_code=500,
             detail="M3U8 file not found. Channel may have been cleaned up.",
@@ -393,30 +389,29 @@ def update_base_url(m3u8_path: str, mount_path: str):
 @app.get("/stream/cleanup")
 def cleanup_all_channel_resources():
     """Clean up resources for all channels."""
-    # TODO: add a session ID so that only a specific session is cleaned up
-    for channel_number in list(stream_resources.keys()):
-        cleanup_channel_resources(channel_number)
-    for channel_number in os.listdir(SEGMENTS_DIR):
-        logger.info(f"Cleaning up channel {channel_number}")
-        shutil.rmtree(os.path.join(SEGMENTS_DIR, channel_number))
+    for guide_id in list(stream_resources.keys()):
+        cleanup_channel_resources(guide_id)
+    for guide_id in os.listdir(SEGMENTS_DIR):
+        logger.info(f"Cleaning up channel {guide_id}")
+        shutil.rmtree(os.path.join(SEGMENTS_DIR, guide_id))
     return {"message": "Cleaned up resources for all channels"}
 
 
-@app.get("/stream/{channel_number}/cleanup")
-def cleanup_channel_resources(channel_number: int):
+@app.get("/stream/{guide_id}/cleanup")
+def cleanup_channel_resources(guide_id: str):
     """Clean up resources for a specific channel."""
-    if channel_number in stream_resources:
-        channel_dir, process = stream_resources.pop(channel_number)
+    if guide_id in stream_resources:
+        channel_dir, process = stream_resources.pop(guide_id)
 
         # Terminate the FFmpeg process gracefully
         if process.poll() is None:
-            logger.info(f"Terminating FFmpeg process for channel {channel_number}")
+            logger.info(f"Terminating FFmpeg process for channel {guide_id}")
             process.terminate()
             try:
                 process.wait(timeout=5)
             except subprocess.TimeoutExpired:
                 logger.warning(
-                    f"FFmpeg process for channel {channel_number} didn't terminate gracefully, killing it"
+                    f"FFmpeg process for channel {guide_id} didn't terminate gracefully, killing it"
                 )
                 process.kill()
 
@@ -425,12 +420,12 @@ def cleanup_channel_resources(channel_number: int):
             logger.info(f"Removing channel directory: {channel_dir}")
             shutil.rmtree(channel_dir, ignore_errors=True)
 
-        return {"message": f"Cleaned up resources for channel {channel_number}"}
+        return {"message": f"Cleaned up resources for channel {guide_id}"}
 
-    return {"message": f"No resources found for channel {channel_number}"}
+    return {"message": f"No resources found for channel {guide_id}"}
 
 
-def transcode_audio_only(url: str, channel_dir: str, channel_number: int):
+def transcode_audio_only(url: str, channel_dir: str, guide_id: str):
     output_m3u8 = os.path.join(channel_dir, "output.m3u8")
     segment_pattern = os.path.join(channel_dir, "segment%03d.ts")
 
@@ -458,7 +453,7 @@ def transcode_audio_only(url: str, channel_dir: str, channel_number: int):
             "-hls_segment_filename",
             segment_pattern,
             "-hls_base_url",
-            f"/segments/{channel_number}/",  # Use the channel number in the base URL
+            f"/segments/{guide_id}/",  # Use the guide_id in the base URL
             output_m3u8,
         ],
         stdout=subprocess.PIPE,
@@ -488,7 +483,7 @@ async def get_hls_segment(segment_path: str):
 @app.on_event("shutdown")
 def cleanup_temp_dirs():
     # Clean up all channels and the segments directory
-    for channel_number in list(stream_resources.keys()):
-        cleanup_channel_resources(channel_number)
+    for guide_id in list(stream_resources.keys()):
+        cleanup_channel_resources(guide_id)
     if os.path.exists(SEGMENTS_DIR):
         shutil.rmtree(SEGMENTS_DIR)

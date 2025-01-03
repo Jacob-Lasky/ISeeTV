@@ -19,13 +19,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
 
   const cleanupStream = useCallback(async () => {
     try {
-      await fetch(`${API_URL}/stream/${channel.channel_number}/cleanup`, {
+      await fetch(`${API_URL}/stream/${channel.guide_id}/cleanup`, {
         method: 'GET',
       });
     } catch (error) {
       console.error('Failed to cleanup stream:', error);
     }
-  }, [channel.channel_number]);
+  }, [channel.guide_id]);
 
   React.useEffect(() => {
     return () => {
@@ -54,7 +54,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
           const video = videoRef.current;
           if (!video) return;
 
-          const proxyUrl = `${API_URL}/stream/${channel.channel_number}`;
+          const proxyUrl = `${API_URL}/stream/${channel.guide_id}`;
           const hls = new Hls({
             maxBufferLength: Infinity,  // the maximum number of seconds to buffer
             maxMaxBufferLength: Infinity,  // allow up to 120 seconds
@@ -109,7 +109,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
       clearTimeout(timeoutId);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channel.channel_number]);
+  }, [channel.guide_id, cleanupStream]);
 
   return (
     <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>

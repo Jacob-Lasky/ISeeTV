@@ -20,8 +20,8 @@ try:
     logger.info("Creating channels table...")
     cursor.execute(
         """CREATE TABLE IF NOT EXISTS channels (
-            channel_number INTEGER PRIMARY KEY,
-            guide_id TEXT,
+            guide_id TEXT PRIMARY KEY,
+            channel_number INTEGER,
             name TEXT NOT NULL,
             url TEXT NOT NULL,
             "group" TEXT,
@@ -32,7 +32,11 @@ try:
         )"""
     )
 
-    # Add indexes for common queries
+    # Update indexes
+    cursor.execute(
+        """CREATE INDEX IF NOT EXISTS idx_channels_number 
+           ON channels(channel_number)"""
+    )
     cursor.execute(
         """CREATE INDEX IF NOT EXISTS idx_channels_group 
            ON channels("group")"""

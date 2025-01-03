@@ -52,7 +52,7 @@ function App() {
 
   const handleToggleFavorite = async (channel: Channel) => {
     try {
-      await channelService.toggleFavorite(channel.channel_number);
+      await channelService.toggleFavorite(channel.guide_id);
     } catch (error) {
       console.error('Failed to toggle favorite:', error);
     }

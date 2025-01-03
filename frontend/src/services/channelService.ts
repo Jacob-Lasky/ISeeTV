@@ -36,9 +36,9 @@ export const channelService = {
     return response.json();
   },
 
-  async toggleFavorite(channelNumber: number): Promise<Channel> {
+  async toggleFavorite(guideId: string): Promise<Channel> {
     try {
-      const response = await fetch(`${API_URL}/channels/${channelNumber}/favorite`, {
+      const response = await fetch(`${API_URL}/channels/${guideId}/favorite`, {
         method: 'PUT',
         headers: {
           'Content-Type': 'application/json',

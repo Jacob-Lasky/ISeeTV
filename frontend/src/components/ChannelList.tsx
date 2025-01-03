@@ -422,9 +422,9 @@ export const ChannelList: React.FC<ChannelListProps> = ({
 
   const handleChannelInput = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Enter') {
-      const channel = channels.find(c => c.channel_number === parseInt(channelInput));
+      const channel = channels.find(c => c.guide_id === channelInput);
       if (channel) {
-        onChannelSelect(channel);
+        handleChannelSelect(channel);
         setChannelInput('');
       }
     }
@@ -432,12 +432,11 @@ export const ChannelList: React.FC<ChannelListProps> = ({
 
   const handleToggleFavorite = async (channel: Channel) => {
     try {
-      // Optimistically update the UI
+      // Update UI optimistically
       const newFavoriteStatus = !channel.isFavorite;
       
-      // Update all channel states at once
       const updateChannelInState = (ch: Channel) => 
-        ch.channel_number === channel.channel_number 
+        ch.guide_id === channel.guide_id 
           ? { ...ch, isFavorite: newFavoriteStatus }
           : ch;
 
@@ -452,12 +451,12 @@ export const ChannelList: React.FC<ChannelListProps> = ({
         return newState;
       });
 
-      // Call the backend to toggle the favorite status
-      const updatedChannel = await channelService.toggleFavorite(channel.channel_number);
+      // Call backend
+      const updatedChannel = await channelService.toggleFavorite(channel.guide_id);
 
-      // Ensure the UI reflects the backend's response
+      // Update states with response
       setChannels(prev => prev.map(ch => 
-        ch.channel_number === updatedChannel.channel_number 
+        ch.guide_id === updatedChannel.guide_id 
           ? { ...ch, isFavorite: updatedChannel.isFavorite }
           : ch
       ));
@@ -477,7 +476,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
           Object.keys(newState).forEach(group => {
             if (newState[group]) {
               newState[group] = newState[group].map(ch =>
-                ch.channel_number === updatedChannel.channel_number
+                ch.guide_id === updatedChannel.guide_id
                   ? { ...ch, isFavorite: updatedChannel.isFavorite }
                   : ch
               );
@@ -489,9 +488,9 @@ export const ChannelList: React.FC<ChannelListProps> = ({
 
     } catch (error) {
       console.error('Failed to toggle favorite:', error);
-      // Revert all states if the backend call fails
+      // Revert states on error
       const revertChannelInState = (ch: Channel) => 
-        ch.channel_number === channel.channel_number 
+        ch.guide_id === channel.guide_id 
           ? { ...ch, isFavorite: channel.isFavorite }
           : ch;
 

@@ -34,12 +34,11 @@ export const recentChannelsService = {
       const stored = localStorage.getItem(STORAGE_KEY);
       const recentChannels: RecentChannel[] = stored ? JSON.parse(stored) : [];
       
-      // Remove old entries and existing channel if present
       const filtered = recentChannels
         .filter(ch => (now - ch.timestamp) <= MAX_AGE_MS)
-        .filter(ch => ch.channel_number !== channel.channel_number);
+        .filter(ch => ch.guide_id !== channel.guide_id);
       
-      // Add new channel to front of array
+      // Add new channel
       const updated: RecentChannel[] = [
         { ...channel, timestamp: now },
         ...filtered
