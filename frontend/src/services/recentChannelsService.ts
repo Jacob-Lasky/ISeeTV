@@ -48,5 +48,22 @@ export const recentChannelsService = {
     } catch (error) {
       console.error('Error adding recent channel:', error);
     }
+  },
+
+  updateRecentChannels(channels: Channel[]) {
+    try {
+      const stored = localStorage.getItem(STORAGE_KEY);
+      const recentChannels: RecentChannel[] = stored ? JSON.parse(stored) : [];
+      
+      // Update stored channels while preserving timestamps
+      const updatedChannels = recentChannels.map(stored => {
+        const updated = channels.find(ch => ch.guide_id === stored.guide_id);
+        return updated ? { ...updated, timestamp: stored.timestamp } : stored;
+      });
+      
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(updatedChannels));
+    } catch (error) {
+      console.error('Error updating recent channels:', error);
+    }
   }
 }; 

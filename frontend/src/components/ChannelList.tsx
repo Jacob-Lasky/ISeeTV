@@ -146,7 +146,10 @@ const VirtualizedChannelList: React.FC<VirtualizedChannelListProps> = ({
     if ('count' in item) { // Group header
       return (
         <ListItemButton 
-          onClick={() => onToggleGroup(item.name)}
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleGroup(item.name);
+          }}
           style={style}
         >
           <ListItemText primary={`${item.name} (${item.count})`} />
@@ -308,8 +311,8 @@ export const ChannelList: React.FC<ChannelListProps> = ({
         }
       );
 
+      // Update both channels and groupChannels states
       if (activeTab === 'all') {
-        // Update groupChannels with the search results
         const newGroupChannels: Record<string, Channel[]> = {};
         response.items.forEach(channel => {
           const group = channel.group || 'Uncategorized';
@@ -319,9 +322,10 @@ export const ChannelList: React.FC<ChannelListProps> = ({
           newGroupChannels[group].push(channel);
         });
         setGroupChannels(newGroupChannels);
-      } else {
-        setChannels(response.items);
       }
+      
+      setChannels(response.items);
+      
     } catch (error) {
       console.error('Failed to load channels:', error);
     } finally {
@@ -356,9 +360,9 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     }
   }, []);
 
-  const loadGroups = useCallback(async () => {
-    if (groups.length > 0) return;
-  
+  const loadGroups = useCallback(async (forceReload = false) => {
+    if (groups.length > 0 && !forceReload) return;
+
     try {
       // Load groups
       const groups = await channelService.getGroups();
@@ -403,8 +407,20 @@ export const ChannelList: React.FC<ChannelListProps> = ({
         } else if (activeTab === 'favorites') {
           await loadChannels(false);
         } else if (activeTab === 'recent') {
+          // Get fresh data from backend
+          const response = await channelService.getChannels(0, 1000);
+          const freshChannels = response.items;
+          
+          // Get recent channels and update them with fresh data
           const recentChannels = recentChannelsService.getRecentChannels();
-          setChannels(recentChannels);
+          const updatedRecentChannels = recentChannels.map(ch => {
+            const freshChannel = freshChannels.find(f => f.guide_id === ch.guide_id);
+            return freshChannel || ch;
+          });
+          
+          // Update recent channels in storage and state
+          recentChannelsService.updateRecentChannels(updatedRecentChannels);
+          setChannels(updatedRecentChannels);
         }
       } finally {
         if (mounted) {
@@ -431,75 +447,75 @@ export const ChannelList: React.FC<ChannelListProps> = ({
   };
 
   const handleToggleFavorite = async (channel: Channel) => {
+    const originalFavoriteStatus = channel.isFavorite;
+    
     try {
-      // Update UI optimistically
-      const newFavoriteStatus = !channel.isFavorite;
+      const newFavoriteStatus = !originalFavoriteStatus;
       
-      const updateChannelInState = (ch: Channel) => 
+      // Update UI optimistically
+      setChannels(prev => prev.map(ch => 
         ch.guide_id === channel.guide_id 
           ? { ...ch, isFavorite: newFavoriteStatus }
-          : ch;
+          : ch
+      ));
 
-      setChannels(prev => prev.map(updateChannelInState));
       setGroupChannels(prev => {
         const newState = { ...prev };
         Object.keys(newState).forEach(group => {
           if (newState[group]) {
-            newState[group] = newState[group].map(updateChannelInState);
+            newState[group] = newState[group].map(ch =>
+              ch.guide_id === channel.guide_id 
+                ? { ...ch, isFavorite: newFavoriteStatus }
+                : ch
+            );
           }
         });
         return newState;
       });
 
       // Call backend
-      const updatedChannel = await channelService.toggleFavorite(channel.guide_id);
+      await onToggleFavorite(channel);
 
-      // Update states with response
-      setChannels(prev => prev.map(ch => 
-        ch.guide_id === updatedChannel.guide_id 
-          ? { ...ch, isFavorite: updatedChannel.isFavorite }
-          : ch
-      ));
-
-      // If we're in favorites tab, refresh the list
-      if (activeTab === 'favorites') {
-        const response = await channelService.getChannels(0, 1000, {
-          favoritesOnly: true
+      // Refresh all relevant states
+      if (activeTab === 'all') {
+        await loadGroups(true); // Pass true to force reload
+      } else if (activeTab === 'favorites') {
+        await loadChannels(false);
+      } else if (activeTab === 'recent') {
+        // Get fresh data from backend
+        const response = await channelService.getChannels(0, 1000);
+        const freshChannels = response.items;
+        
+        // Get recent channels and update them with fresh data
+        const recentChannels = recentChannelsService.getRecentChannels();
+        const updatedRecentChannels = recentChannels.map(ch => {
+          const freshChannel = freshChannels.find(f => f.guide_id === ch.guide_id);
+          return freshChannel || ch;
         });
-        setChannels(response.items);
-      }
-      // If we're in all tab, update the group channels
-      else if (activeTab === 'all') {
-        // Update the channel in group channels
-        setGroupChannels(prev => {
-          const newState = { ...prev };
-          Object.keys(newState).forEach(group => {
-            if (newState[group]) {
-              newState[group] = newState[group].map(ch =>
-                ch.guide_id === updatedChannel.guide_id
-                  ? { ...ch, isFavorite: updatedChannel.isFavorite }
-                  : ch
-              );
-            }
-          });
-          return newState;
-        });
+        
+        // Update recent channels in storage and state
+        recentChannelsService.updateRecentChannels(updatedRecentChannels);
+        setChannels(updatedRecentChannels);
       }
 
     } catch (error) {
       console.error('Failed to toggle favorite:', error);
-      // Revert states on error
-      const revertChannelInState = (ch: Channel) => 
+      // Revert UI changes
+      setChannels(prev => prev.map(ch => 
         ch.guide_id === channel.guide_id 
-          ? { ...ch, isFavorite: channel.isFavorite }
-          : ch;
-
-      setChannels(prev => prev.map(revertChannelInState));
+          ? { ...ch, isFavorite: originalFavoriteStatus }
+          : ch
+      ));
+      
       setGroupChannels(prev => {
         const newState = { ...prev };
         Object.keys(newState).forEach(group => {
           if (newState[group]) {
-            newState[group] = newState[group].map(revertChannelInState);
+            newState[group] = newState[group].map(ch =>
+              ch.guide_id === channel.guide_id 
+                ? { ...ch, isFavorite: originalFavoriteStatus }
+                : ch
+            );
           }
         });
         return newState;

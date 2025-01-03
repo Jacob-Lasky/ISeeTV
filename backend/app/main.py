@@ -237,6 +237,10 @@ async def toggle_favorite(guide_id: str, db: AsyncSession = Depends(get_db)):
         # Toggle the favorite status
         channel.is_favorite = not channel.is_favorite
 
+        logger.info(
+            f"Channel {guide_id} is now {'a favorite' if channel.is_favorite else 'not a favorite'}"
+        )
+
         # Commit the change
         await db.commit()
         return channel

@@ -33,7 +33,18 @@ export const channelService = {
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
-    return response.json();
+    const data = await response.json();
+    
+    // Map the backend fields to frontend fields
+    return {
+      ...data,
+      items: data.items.map((item: any) => ({
+        ...item,
+        isFavorite: item.is_favorite,
+        guide_id: item.guide_id,
+        lastWatched: item.last_watched ? new Date(item.last_watched) : undefined,
+      }))
+    };
   },
 
   async toggleFavorite(guideId: string): Promise<Channel> {
@@ -52,6 +63,7 @@ export const channelService = {
       const data = await response.json();
       return {
         ...data,
+        guide_id: data.guide_id,
         isFavorite: data.is_favorite,
         lastWatched: data.last_watched ? new Date(data.last_watched) : undefined,
       };
