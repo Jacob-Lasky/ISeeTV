@@ -12,6 +12,7 @@ import {
   Tab,
   InputAdornment,
   CircularProgress,
+  Typography,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -76,19 +77,23 @@ const ChannelListItem: React.FC<ChannelListItemProps> = ({
       {channel.isFavorite ? <StarIcon color="primary" /> : <StarBorderIcon />}
     </IconButton>
     <ListItemIcon>
-      <Avatar
-        src={channel.logo}
-        alt={channel.name}
-        variant="square"
-        sx={{ width: 32, height: 32 }}
-      >
-        {channel.name[0]}
-      </Avatar>
+      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+        <Avatar
+          src={channel.logo}
+          alt={channel.name}
+          variant="square"
+          sx={{ width: 32, height: 32 }}
+        >
+          {channel.name[0]}
+        </Avatar>
+        {showChannelNumbers && (
+          <Typography variant="caption" sx={{ mt: 0.5 }}>
+            {channel.channel_number}
+          </Typography>
+        )}
+      </Box>
     </ListItemIcon>
-    <ListItemText
-      primary={channel.name}
-      secondary={showChannelNumbers ? channel.channel_number : undefined}
-    />
+    <ListItemText primary={channel.name} />
   </ListItemButton>
 );
 
@@ -212,7 +217,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<TabValue>('all');
-  const [channelInput, setChannelInput] = useState('');
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
   const [channels, setChannels] = useState<Channel[]>([]);
@@ -435,16 +439,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
       mounted = false;
     };
   }, [activeTab, loadGroups, loadChannels]);
-
-  const handleChannelInput = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      const channel = channels.find(c => c.guide_id === channelInput);
-      if (channel) {
-        handleChannelSelect(channel);
-        setChannelInput('');
-      }
-    }
-  };
 
   const handleToggleFavorite = async (channel: Channel) => {
     const originalFavoriteStatus = channel.isFavorite;
@@ -724,16 +718,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
             ),
           }}
         />
-        {showChannelNumbers && (
-          <TextField
-            size="small"
-            placeholder="Channel #"
-            value={channelInput}
-            onChange={(e) => setChannelInput(e.target.value)}
-            onKeyPress={handleChannelInput}
-            sx={{ mt: 1, width: '100px' }}
-          />
-        )}
       </Box>
 
       <Tabs
