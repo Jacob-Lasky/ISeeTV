@@ -4,11 +4,11 @@ const SETTINGS_KEY = 'iseetv_settings';
 
 const defaultSettings: Settings = {
   m3uUrl: '',
+  m3uUpdateInterval: 24,
   epgUrl: '',
-  updateInterval: 24,
+  epgUpdateInterval: 24,
   updateOnStart: true,
   theme: 'system',
-  showChannelNumbers: false,
 };
 
 export const settingsService = {

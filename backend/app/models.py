@@ -7,7 +7,6 @@ class Channel(Base):
     __tablename__ = "channels"
 
     guide_id = Column(String, primary_key=True)
-    channel_number = Column(Integer, index=True)
     name = Column(String, index=True)
     url = Column(String)
     group = Column(String, index=True)

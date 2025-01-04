@@ -12,7 +12,6 @@ import {
   Tab,
   InputAdornment,
   CircularProgress,
-  Typography,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -37,8 +36,6 @@ interface ChannelListProps {
   onChannelSelect: (channel: Channel) => void;
   onToggleFavorite: (channel: Channel) => void;
   onRefresh?: (refreshFn: (() => Promise<void>) | undefined) => void;
-  showChannelNumbers?: boolean;
-  onToggleChannelNumbers?: () => void;
   onOpenSettings?: () => void;
 }
 
@@ -56,7 +53,6 @@ interface VirtualizedChannelListProps {
   selectedChannel?: Channel;
   onChannelSelect: (channel: Channel) => void;
   onToggleFavorite: (channel: Channel) => void;
-  showChannelNumbers?: boolean;
   initialScrollOffset?: number;
   onScroll?: (scrollOffset: number) => void;
 }
@@ -73,7 +69,6 @@ const VirtualizedChannelList: React.FC<VirtualizedChannelListProps> = ({
   selectedChannel,
   onChannelSelect,
   onToggleFavorite,
-  showChannelNumbers,
   initialScrollOffset = 0,
   onScroll,
 }) => {
@@ -118,7 +113,6 @@ const VirtualizedChannelList: React.FC<VirtualizedChannelListProps> = ({
           onChannelSelect(item);
           navigate(`/channel/${item.guide_id}`);
         }}
-        selected={item.channel_number === selectedChannel?.channel_number}
         style={style}
       >
         <IconButton
@@ -141,11 +135,6 @@ const VirtualizedChannelList: React.FC<VirtualizedChannelListProps> = ({
             >
               {item.name[0]}
             </Avatar>
-            {showChannelNumbers && (
-              <Typography variant="caption" sx={{ mt: 0.5 }}>
-                {item.channel_number}
-              </Typography>
-            )}
           </Box>
         </ListItemIcon>
         <ListItemText primary={item.name} />
@@ -189,8 +178,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
   onChannelSelect,
   onToggleFavorite,
   onRefresh,
-  showChannelNumbers = false,
-  onToggleChannelNumbers,
   onOpenSettings,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
@@ -215,8 +202,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     if (debouncedSearchTerm) {
       const search = debouncedSearchTerm.toLowerCase();
       filtered = filtered.filter(c => 
-        c.name.toLowerCase().includes(search) ||
-        c.channel_number.toString().includes(search)
+        c.name.toLowerCase().includes(search)
       );
     }
 
@@ -233,8 +219,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
         // Flatten all channels from groupChannels
         const allChannels = Object.values(groupChannels).flat();
         return allChannels.filter(c => 
-          c.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-          c.channel_number.toString().includes(debouncedSearchTerm)
+          c.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
         );
       }
       return filteredChannels;
@@ -706,7 +691,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
             selectedChannel={selectedChannel}
             onChannelSelect={handleChannelSelect}
             onToggleFavorite={handleToggleFavorite}
-            showChannelNumbers={showChannelNumbers}
             initialScrollOffset={tabStates[activeTab].scrollPosition}
             onScroll={handleScroll}
           />

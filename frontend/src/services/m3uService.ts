@@ -71,7 +71,6 @@ export const m3uService = {
       
       const channels: Channel[] = [];
       let currentChannel: Partial<Channel> = {
-        channel_number: 0,
         guide_id: '',
         name: '',
         group: 'Default',
@@ -87,7 +86,6 @@ export const m3uService = {
           const attributes = info[0].match(/([a-zA-Z-]+)="([^"]*)"/g);
           
           currentChannel = {
-            channel_number: index + 1,
             guide_id: `channel-${index}`,
             name: info[1].trim(),
             group: 'Default',

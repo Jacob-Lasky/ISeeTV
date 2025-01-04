@@ -16,18 +16,26 @@ function App() {
   const [selectedChannel, setSelectedChannel] = useState<Channel | undefined>();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState<Settings>({
-    showChannelNumbers: false,
     m3uUrl: '',
-    updateInterval: 24,
+    epgUrl: '',
+    epgUpdateInterval: 24,
+    m3uUpdateInterval: 24,
     updateOnStart: true,
     theme: 'dark'
   });
   const [channelListOpen, setChannelListOpen] = useState(true);
   
   useEffect(() => {
-    // Load initial settings
-    const loadedSettings = settingsService.getSettings();
-    setSettings(loadedSettings);
+    // Load settings from backend
+    const loadSettings = async () => {
+      try {
+        const loadedSettings = await channelService.getSettings();
+        setSettings(loadedSettings);
+      } catch (error) {
+        console.error('Failed to load settings:', error);
+      }
+    };
+    loadSettings();
   }, []);
 
   // Create theme based on settings
