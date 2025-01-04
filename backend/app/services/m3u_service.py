@@ -29,7 +29,17 @@ class M3UService:
                     content = await response.text()
                     logger.info(f"Downloaded {len(content)} bytes")
 
-                    return self.parse_m3u(content)
+                    channels = self.parse_m3u(content)
+
+                    # Get list of guide_ids from parsed channels
+                    new_guide_ids = {channel["guide_id"] for channel in channels}
+                    logger.info(f"Found {len(new_guide_ids)} channels in M3U")
+
+                    # Set is_missing=0 for all channels in the update
+                    for channel in channels:
+                        channel["is_missing"] = 0
+
+                    return channels, new_guide_ids
 
         except Exception as e:
             logger.error(f"Failed to download M3U: {str(e)}")

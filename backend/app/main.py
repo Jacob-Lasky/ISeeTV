@@ -28,6 +28,8 @@ import json
 from sqlalchemy.future import select
 from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy import update
+from sqlalchemy import insert
 
 logging.basicConfig(
     level=logging.INFO,
@@ -148,14 +150,20 @@ async def refresh_m3u(url: str, db: AsyncSession = Depends(get_db)):
 
     try:
         # Download and parse M3U
-        channels = await m3u_service.download_and_parse(url)
+        channels, new_guide_ids = await m3u_service.download_and_parse(url)
 
-        # Clear existing channels using execute
-        await db.execute(delete(models.Channel))
+        # Mark channels not in new M3U as missing
+        await db.execute(
+            update(models.Channel)
+            .where(models.Channel.guide_id.notin_(new_guide_ids))
+            .values(is_missing=1)
+        )
 
-        # Save new channels
-        db_channels = [models.Channel(**channel) for channel in channels]
-        db.add_all(db_channels)
+        # Insert or update channels
+        for channel in channels:
+            stmt = insert(models.Channel).prefix_with("OR REPLACE").values(**channel)
+            await db.execute(stmt)
+
         await db.commit()
 
         # save the config

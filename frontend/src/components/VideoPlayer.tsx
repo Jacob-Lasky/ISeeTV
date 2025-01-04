@@ -1,8 +1,10 @@
-import React, { useState, useCallback } from 'react';
-import { Box, Paper, Avatar, Typography, } from '@mui/material';
+import React, { useState, useCallback, useEffect } from 'react';
+import { Box, Paper, Avatar, Typography, IconButton } from '@mui/material';
 import Hls from 'hls.js';
 import { Channel } from '../models/Channel';
 import { API_URL } from '../config/api';
+import { useParams, useNavigate } from 'react-router-dom';
+import { Close } from '@mui/icons-material';
 
 export {};
 
@@ -12,6 +14,8 @@ interface VideoPlayerProps {
 }
 
 export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
+  const { channelId } = useParams();
+  const navigate = useNavigate();
   const videoRef = React.useRef<HTMLVideoElement>(null);
   const hlsRef = React.useRef<Hls | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -111,8 +115,23 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channel.guide_id, cleanupStream]);
 
+  const handleBack = () => {
+    navigate('/');
+  };
+
+  useEffect(() => {
+    if (channelId) {
+      // Load channel data using channelId
+    }
+  }, [channelId]);
+
   return (
     <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
+      <Box sx={{ p: 1, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+        <IconButton onClick={handleBack}>
+          <Close />
+        </IconButton>
+      </Box>
       <Box
         sx={{
           width: '100%',

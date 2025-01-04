@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   Dialog,
   DialogTitle,
@@ -35,13 +35,26 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSave,
   onThemeChange,
 }) => {
-  const [formData, setFormData] = useState<Settings>(settings);
+  const [formState, setFormState] = useState<Settings>({
+    showChannelNumbers: false,
+    m3uUrl: '',
+    updateInterval: 24,
+    updateOnStart: true,
+    theme: 'dark'
+  });
+
+  useEffect(() => {
+    if (settings) {
+      setFormState(settings);
+    }
+  }, [settings]);
+
   const [loading, setLoading] = useState(false);
 
   const handleRefreshClick = async () => {
     setLoading(true);
     try {
-      await channelService.refreshM3U(formData.m3uUrl);
+      await channelService.refreshM3U(formState.m3uUrl);
     } catch (error) {
       console.error('Failed to refresh channels:', error);
     } finally {
@@ -65,10 +78,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               label="M3U URL"
               required
               fullWidth
-              value={formData.m3uUrl}
-              onChange={(e) => setFormData({ ...formData, m3uUrl: e.target.value })}
-              error={!formData.m3uUrl}
-              helperText={!formData.m3uUrl ? "M3U URL is required" : ""}
+              value={formState.m3uUrl}
+              onChange={(e) => setFormState({ ...formState, m3uUrl: e.target.value })}
+              error={!formState.m3uUrl}
+              helperText={!formState.m3uUrl ? "M3U URL is required" : ""}
             />
             <IconButton
               onClick={handleRefreshClick}
@@ -84,8 +97,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             <TextField
               label="EPG URL (Optional)"
               fullWidth
-              value={formData.epgUrl}
-              onChange={(e) => setFormData({ ...formData, epgUrl: e.target.value })}
+              value={formState.epgUrl}
+              onChange={(e) => setFormState({ ...formState, epgUrl: e.target.value })}
             />
             <IconButton
               onClick={() => console.log('Refresh EPG URL')}
@@ -100,15 +113,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             label="Update Interval (hours)"
             type="number"
             fullWidth
-            value={formData.updateInterval}
-            onChange={(e) => setFormData({ ...formData, updateInterval: Number(e.target.value) })}
+            value={formState.updateInterval}
+            onChange={(e) => setFormState({ ...formState, updateInterval: Number(e.target.value) })}
           />
           
           <FormControlLabel
             control={
               <Switch
-                checked={formData.updateOnStart}
-                onChange={(e) => setFormData({ ...formData, updateOnStart: e.target.checked })}
+                checked={formState.updateOnStart}
+                onChange={(e) => setFormState({ ...formState, updateOnStart: e.target.checked })}
               />
             }
             label="Update on App Start"
@@ -117,10 +130,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <FormControl fullWidth>
             <InputLabel>Theme</InputLabel>
             <Select
-              value={formData.theme}
+              value={formState.theme}
               onChange={(e) => {
                 const newTheme = e.target.value as 'light' | 'dark' | 'system';
-                setFormData({ ...formData, theme: newTheme });
+                setFormState({ ...formState, theme: newTheme });
                 onThemeChange?.(newTheme);
               }}
             >
@@ -132,9 +145,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           
           <Button 
             variant="contained" 
-            onClick={() => onSave(formData)} 
+            onClick={() => onSave(formState)} 
             fullWidth
-            disabled={!formData.m3uUrl}
+            disabled={!formState.m3uUrl}
           >
             Save Settings
           </Button>

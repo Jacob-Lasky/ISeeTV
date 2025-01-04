@@ -20,6 +20,7 @@ import {
   StarBorder as StarBorderIcon,
   ExpandLess,
   ExpandMore,
+  Settings as SettingsIcon,
 } from '@mui/icons-material';
 import { Channel } from '../models/Channel';
 import { channelService } from '../services/channelService';
@@ -27,6 +28,7 @@ import { ChannelGroup } from '../types/api';
 import { recentChannelsService } from '../services/recentChannelsService';
 import { FixedSizeList } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
+import { useNavigate } from 'react-router-dom';
 
 export {};
 
@@ -37,65 +39,10 @@ interface ChannelListProps {
   onRefresh?: (refreshFn: (() => Promise<void>) | undefined) => void;
   showChannelNumbers?: boolean;
   onToggleChannelNumbers?: () => void;
+  onOpenSettings?: () => void;
 }
 
 type TabValue = 'all' | 'favorites' | 'recent';
-
-interface ChannelListItemProps {
-  channel: Channel;
-  selected: boolean;
-  onSelect: (channel: Channel) => void;
-  onToggleFavorite: (channel: Channel) => void;
-  indented?: boolean;
-  showChannelNumbers?: boolean;
-  style?: React.CSSProperties;
-}
-
-const ChannelListItem: React.FC<ChannelListItemProps> = ({
-  channel,
-  selected,
-  onSelect,
-  onToggleFavorite,
-  indented = false,
-  showChannelNumbers = false,
-  style,
-}) => (
-  <ListItemButton
-    selected={selected}
-    onClick={() => onSelect(channel)}
-    sx={{ pl: indented ? 4 : 2 }}
-    style={style}
-  >
-    <IconButton
-      size="small"
-      onClick={(e) => {
-        e.stopPropagation();
-        onToggleFavorite(channel);
-      }}
-      sx={{ mr: 1 }}
-    >
-      {channel.isFavorite ? <StarIcon color="primary" /> : <StarBorderIcon />}
-    </IconButton>
-    <ListItemIcon>
-      <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-        <Avatar
-          src={channel.logo}
-          alt={channel.name}
-          variant="square"
-          sx={{ width: 32, height: 32 }}
-        >
-          {channel.name[0]}
-        </Avatar>
-        {showChannelNumbers && (
-          <Typography variant="caption" sx={{ mt: 0.5 }}>
-            {channel.channel_number}
-          </Typography>
-        )}
-      </Box>
-    </ListItemIcon>
-    <ListItemText primary={channel.name} />
-  </ListItemButton>
-);
 
 interface TabState {
   scrollPosition: number;
@@ -131,6 +78,7 @@ const VirtualizedChannelList: React.FC<VirtualizedChannelListProps> = ({
   onScroll,
 }) => {
   const listRef = useRef<FixedSizeList>(null);
+  const navigate = useNavigate();
 
   // Restore scroll position when items change
   useEffect(() => {
@@ -165,14 +113,43 @@ const VirtualizedChannelList: React.FC<VirtualizedChannelListProps> = ({
     
     // Channel item
     return (
-      <ChannelListItem
-        channel={item}
+      <ListItemButton
+        onClick={() => {
+          onChannelSelect(item);
+          navigate(`/channel/${item.guide_id}`);
+        }}
         selected={item.channel_number === selectedChannel?.channel_number}
-        onSelect={onChannelSelect}
-        onToggleFavorite={onToggleFavorite}
-        showChannelNumbers={showChannelNumbers}
         style={style}
-      />
+      >
+        <IconButton
+          size="small"
+          onClick={(e) => {
+            e.stopPropagation();
+            onToggleFavorite(item);
+          }}
+          sx={{ mr: 1 }}
+        >
+          {item.isFavorite ? <StarIcon color="primary" /> : <StarBorderIcon />}
+        </IconButton>
+        <ListItemIcon>
+          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
+            <Avatar
+              src={item.logo}
+              alt={item.name}
+              variant="square"
+              sx={{ width: 32, height: 32 }}
+            >
+              {item.name[0]}
+            </Avatar>
+            {showChannelNumbers && (
+              <Typography variant="caption" sx={{ mt: 0.5 }}>
+                {item.channel_number}
+              </Typography>
+            )}
+          </Box>
+        </ListItemIcon>
+        <ListItemText primary={item.name} />
+      </ListItemButton>
     );
   };
 
@@ -214,11 +191,11 @@ export const ChannelList: React.FC<ChannelListProps> = ({
   onRefresh,
   showChannelNumbers = false,
   onToggleChannelNumbers,
+  onOpenSettings,
 }) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<TabValue>('all');
-  const [loading, setLoading] = useState(false);
-  const [initialLoading, setInitialLoading] = useState(true);
+  const [initialLoading, setLoading] = useState(true);
   const [channels, setChannels] = useState<Channel[]>([]);
   const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
   const [groups, setGroups] = useState<ChannelGroup[]>([]);
@@ -305,10 +282,9 @@ export const ChannelList: React.FC<ChannelListProps> = ({
 
   const loadChannels = useCallback(async (loadMore = false) => {
     try {
-      setLoading(true);
       const response = await channelService.getChannels(
-        0,  // Start from beginning
-        1000,  // Load more items at once
+        0,
+        1000,
         {
           search: debouncedSearchTerm,
           favoritesOnly: activeTab === 'favorites'
@@ -332,15 +308,12 @@ export const ChannelList: React.FC<ChannelListProps> = ({
       
     } catch (error) {
       console.error('Failed to load channels:', error);
-    } finally {
-      setLoading(false);
     }
   }, [debouncedSearchTerm, activeTab]);
 
   const loadGroupChannelsIfNeeded = useCallback(async (expandedGroupNames: string[]) => {
     if (expandedGroupNames.length === 0) return;
 
-    setLoading(true);
     try {
       const promises = expandedGroupNames.map(group =>
         channelService.getChannels(0, 1000, { group })
@@ -359,8 +332,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
       }));
     } catch (error) {
       console.error('Failed to load channels for expanded groups:', error);
-    } finally {
-      setLoading(false);
     }
   }, []);
 
@@ -376,26 +347,41 @@ export const ChannelList: React.FC<ChannelListProps> = ({
         localStorage.getItem(`channelListGroups_${activeTab}`) || '{}'
       );
       
-      // Pre-fetch channels for all groups in parallel
-      const groupPromises = groups.map(group => 
-        channelService.getChannels(0, 1000, { group: group.name })
-      );
+      // Only load channels for expanded groups
+      const expandedGroupNames = Object.entries(savedExpandedGroups)
+        .filter(([_, isExpanded]) => isExpanded)
+        .map(([groupName]) => groupName);
+
+      if (expandedGroupNames.length > 0) {
+        const groupPromises = expandedGroupNames.map(groupName => 
+          channelService.getChannels(
+            0,
+            10000,
+            { 
+              group: groupName,
+              search: debouncedSearchTerm,
+              favoritesOnly: activeTab === 'favorites'
+            }
+          )
+        );
+        
+        const responses = await Promise.all(groupPromises);
+        
+        // Update only expanded group channels
+        const newGroupChannels: Record<string, Channel[]> = {};
+        expandedGroupNames.forEach((groupName, index) => {
+          newGroupChannels[groupName] = responses[index].items;
+        });
+        
+        setGroupChannels(newGroupChannels);
+      }
       
-      const responses = await Promise.all(groupPromises);
-      
-      // Update group channels all at once
-      const newGroupChannels: Record<string, Channel[]> = {};
-      groups.forEach((group, index) => {
-        newGroupChannels[group.name] = responses[index].items;
-      });
-      
-      setGroupChannels(newGroupChannels);
       setExpandedGroups(savedExpandedGroups);
       
     } catch (error) {
       console.error('Failed to load groups and channels:', error);
     }
-  }, [activeTab, groups.length]);
+  }, [activeTab, groups.length, debouncedSearchTerm]);
 
   // Update the initialization effect
   useEffect(() => {
@@ -404,7 +390,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     const initializeList = async () => {
       if (!mounted) return;
       
-      setInitialLoading(true);
+      setLoading(true);
       try {
         if (activeTab === 'all') {
           await loadGroups();
@@ -428,7 +414,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
         }
       } finally {
         if (mounted) {
-          setInitialLoading(false);
+          setLoading(false);
         }
       }
     };
@@ -521,7 +507,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
   const debouncedRefresh = useCallback(
     () => new Promise<void>(resolve => {
       debounce(async () => {
-        setLoading(true);
         try {
           if (activeTab === 'all') {
             await loadGroups();
@@ -534,7 +519,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
         } catch (error) {
           console.error('Failed to refresh channel list:', error);
         } finally {
-          setLoading(false);
           resolve();
         }
       }, 500)();
@@ -556,38 +540,39 @@ export const ChannelList: React.FC<ChannelListProps> = ({
 
   // Update handleTabChange to preload data
   const handleTabChange = async (_: any, newValue: TabValue) => {
-    // Load data before changing tab
-    if (newValue === 'all') {
-      // Get the expanded groups for the "all" tab
-      const savedExpandedGroups = JSON.parse(
-        localStorage.getItem(`channelListGroups_${newValue}`) || '{}'
-      );
+    setLoading(true); // Show loading state while switching
+    try {
+      // Reset states first
+      setChannels([]);
+      setGroupChannels({});
+      setExpandedGroups({});
       
-      // Load groups first
-      await loadGroups();
-      
-      // Load channels for expanded groups
-      const expandedGroupNames = Object.entries(savedExpandedGroups)
-        .filter(([_, isExpanded]) => isExpanded)
-        .map(([groupName]) => groupName);
+      if (newValue === 'all') {
+        // Force reload groups and their channels
+        await loadGroups(true); // Pass true to force reload
         
-      await loadGroupChannelsIfNeeded(expandedGroupNames);
-      
-      // Set expanded state after data is loaded
-      setExpandedGroups(savedExpandedGroups);
-    } else if (newValue === 'favorites') {
-      await loadChannels(false);
-    } else if (newValue === 'recent') {
-      const recentChannels = recentChannelsService.getRecentChannels();
-      setChannels(recentChannels);
-    }
+        // Get and set expanded groups after data is loaded
+        const savedExpandedGroups = JSON.parse(
+          localStorage.getItem(`channelListGroups_${newValue}`) || '{}'
+        );
+        setExpandedGroups(savedExpandedGroups);
+        
+      } else if (newValue === 'favorites') {
+        await loadChannels(false);
+      } else if (newValue === 'recent') {
+        const recentChannels = recentChannelsService.getRecentChannels();
+        setChannels(recentChannels);
+      }
 
-    // Change tab after data is loaded
-    setActiveTab(newValue);
-    
-    // Reset search
-    setSearchTerm('');
-    setDebouncedSearchTerm('');
+      // Change tab after data is loaded
+      setActiveTab(newValue);
+      
+      // Reset search
+      setSearchTerm('');
+      setDebouncedSearchTerm('');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleToggleGroup = async (group: string) => {
@@ -606,7 +591,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
 
     // Load channels if expanding and not already loaded
     if (isExpanding && (!groupChannels[group] || groupChannels[group].length === 0)) {
-      setLoading(true);
       try {
         const response = await channelService.getChannels(0, 1000, {
           group: group,
@@ -633,8 +617,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
             [group]: false
           })
         );
-      } finally {
-        setLoading(false);
       }
     }
   };
@@ -694,7 +676,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
 
   return (
     <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ p: 1 }}>
+      <Box sx={{ p: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
         <TextField
           fullWidth
           size="small"
@@ -718,6 +700,11 @@ export const ChannelList: React.FC<ChannelListProps> = ({
             ),
           }}
         />
+        {onOpenSettings && (
+          <IconButton onClick={onOpenSettings} size="small">
+            <SettingsIcon />
+          </IconButton>
+        )}
       </Box>
 
       <Tabs
@@ -749,12 +736,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
           />
         )}
       </Box>
-
-      {loading && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
-          <CircularProgress size={24} />
-        </Box>
-      )}
     </Paper>
   );
 }; 

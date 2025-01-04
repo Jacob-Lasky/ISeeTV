@@ -27,7 +27,7 @@ RUN poetry install --no-root --no-dev
 # Copy frontend files
 COPY frontend/package*.json ./frontend/
 WORKDIR /app/frontend
-RUN npm install
+RUN npm install react-router-dom
 
 # Environment variables
 ENV PYTHONUNBUFFERED=1

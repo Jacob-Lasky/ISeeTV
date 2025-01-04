@@ -7,4 +7,5 @@ export interface Channel {
   logo?: string;
   isFavorite?: boolean;
   lastWatched?: Date;
+  is_missing: boolean;
 } 

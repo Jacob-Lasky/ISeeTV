@@ -28,8 +28,21 @@ try:
             logo TEXT,
             is_favorite INTEGER DEFAULT 0,
             last_watched TIMESTAMP,
-            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            is_missing INTEGER DEFAULT 0
         )"""
+    )
+
+    # Add ON CONFLICT clause for UPSERT support
+    cursor.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS update_channel_timestamp 
+        AFTER UPDATE ON channels
+        BEGIN
+            UPDATE channels SET created_at = CURRENT_TIMESTAMP 
+            WHERE guide_id = NEW.guide_id;
+        END
+    """
     )
 
     # Update indexes

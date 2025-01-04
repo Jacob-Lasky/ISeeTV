@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean
+from sqlalchemy import Column, Integer, String, DateTime, Boolean, func
 from app.database import Base
 import datetime
 
@@ -15,3 +15,4 @@ class Channel(Base):
     is_favorite = Column(Boolean, default=False)
     last_watched = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.utcnow)
+    is_missing = Column(Boolean, default=False)
