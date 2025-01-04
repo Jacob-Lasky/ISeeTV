@@ -30,3 +30,5 @@ __pycache__/
 backend/dev.py
 data/config.json
 backend/channels.csv
+data/m3u_content.txt
+data/epg_content.xml
