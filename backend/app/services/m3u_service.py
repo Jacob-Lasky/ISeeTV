@@ -93,6 +93,9 @@ class M3UService:
                     current_channel["url"] = line
                     channels.append(current_channel)
                     current_channel = None
+
+            elif line.startswith("#EXTM3U") or line.startswith("#EXT-X-SESSION-DATA") or line == "":
+                continue
             else:
                 logger.warning(f"Unprocessed line: {line}")
 

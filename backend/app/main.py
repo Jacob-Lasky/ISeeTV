@@ -159,6 +159,18 @@ async def refresh_m3u(url: str, db: AsyncSession = Depends(get_db)):
             .values(is_missing=1)
         )
 
+        # Get existing favorites
+        result = await db.execute(
+            select(models.Channel.guide_id, models.Channel.is_favorite)
+            .where(models.Channel.is_favorite == True)
+        )
+        favorites = {row.guide_id: row.is_favorite for row in result}
+
+        # Preserve favorite status in new channel data
+        for channel in channels:
+            if channel["guide_id"] in favorites:
+                channel["is_favorite"] = favorites[channel["guide_id"]]
+
         # Insert or update channels
         for channel in channels:
             stmt = insert(models.Channel).prefix_with("OR REPLACE").values(**channel)
@@ -171,8 +183,10 @@ async def refresh_m3u(url: str, db: AsyncSession = Depends(get_db)):
         config["m3u_url"] = url
         save_config(config)
 
-        logger.info(f"Successfully saved {len(channels)} channels")
-        return {"message": f"Saved {len(channels)} channels"}
+        logger.info(
+            f"Found {len(new_guide_ids)} channels in the M3U ({len(channels)} total channels in the DB)"
+        )
+        return {"message": f"Found {len(new_guide_ids)} new channels in the M3U"}
 
     except Exception as e:
         logger.error(f"Failed to refresh M3U: {str(e)}", exc_info=True)
