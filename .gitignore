@@ -29,3 +29,4 @@ __pycache__/
 /data/sql_app.db
 backend/dev.py
 data/config.json
+backend/channels.csv
