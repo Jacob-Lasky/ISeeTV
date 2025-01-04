@@ -311,30 +311,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     }
   }, [debouncedSearchTerm, activeTab]);
 
-  const loadGroupChannelsIfNeeded = useCallback(async (expandedGroupNames: string[]) => {
-    if (expandedGroupNames.length === 0) return;
-
-    try {
-      const promises = expandedGroupNames.map(group =>
-        channelService.getChannels(0, 1000, { group })
-      );
-
-      const responses = await Promise.all(promises);
-      const newGroupChannels: Record<string, Channel[]> = {};
-      
-      expandedGroupNames.forEach((groupName, index) => {
-        newGroupChannels[groupName] = responses[index].items;
-      });
-
-      setGroupChannels(prev => ({
-        ...prev,
-        ...newGroupChannels
-      }));
-    } catch (error) {
-      console.error('Failed to load channels for expanded groups:', error);
-    }
-  }, []);
-
   const loadGroups = useCallback(async (forceReload = false) => {
     if (groups.length > 0 && !forceReload) return;
 

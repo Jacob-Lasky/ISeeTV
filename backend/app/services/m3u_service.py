@@ -33,7 +33,7 @@ class M3UService:
 
                     # Get list of guide_ids from parsed channels
                     new_guide_ids = {channel["guide_id"] for channel in channels}
-                    logger.info(f"Found {len(new_guide_ids)} channels in M3U")
+                    logger.info(f"Found {len(new_guide_ids)} channels in the M3U")
 
                     # Set is_missing=0 for all channels in the update
                     for channel in channels:
@@ -45,12 +45,15 @@ class M3UService:
             logger.error(f"Failed to download M3U: {str(e)}")
             raise
 
-    def _generate_channel_id(self, name: str, url: str) -> str:
-        """Generate a unique channel ID from name and URL"""
-        # Create a unique string combining name and URL
-        unique_string = f"{name}:{url}"
+    def _generate_channel_id(self, name: str, logo: str) -> str:
+        """Generate a unique channel ID from name and logo"""
+        unique_string = f"{name}:{logo}"
         # Create an MD5 hash and take first 12 characters
         return hashlib.md5(unique_string.encode()).hexdigest()[:12]
+
+    def _sanitize_name(self, name: str) -> str:
+        """Sanitize name to remove special characters to be used in url"""
+        return re.sub(r"[^a-zA-Z0-9]+", "-", name)
 
     def parse_m3u(self, content: str) -> List[Channel]:
         """Parse M3U content into channel objects"""
@@ -67,12 +70,18 @@ class M3UService:
                 info = line[8:].split(",", 1)
                 if len(info) == 2:
                     attrs = self._parse_attributes(info[0])
-                    name = info[1].strip()
+
+                    name = attrs.get("tvg-name", "")
+
+                    guide_id = self._sanitize_name(name)
+                    if guide_id == "":
+                        guide_id = self._generate_channel_id(
+                            name, attrs.get("tvg-logo", "")
+                        )
+
                     current_channel = {
+                        "guide_id": guide_id,
                         "channel_number": channel_number,  # Add channel number
-                        "guide_id": self._generate_channel_id(
-                            name, attrs.get("tvg-id", "")
-                        ),
                         "name": name,
                         "group": attrs.get("group-title", "Uncategorized"),
                         "logo": attrs.get("tvg-logo"),
@@ -84,6 +93,16 @@ class M3UService:
                     current_channel["url"] = line
                     channels.append(current_channel)
                     current_channel = None
+            else:
+                logger.warning(f"Unprocessed line: {line}")
+
+            if any(
+                guide_id in existing_guide_ids["guide_id"]
+                for existing_guide_ids in channels
+            ):
+                logger.debug(f"{guide_id} - already exists, renaming")
+                guide_id += self._sanitize_name(attrs.get("tvg-id", ""))
+                logger.debug(f"--- New guide_id: {guide_id}")
 
         return channels
 
