@@ -5,6 +5,10 @@ from ..models import Channel
 import re
 import hashlib
 import sys
+import os
+import json
+from pathlib import Path
+from datetime import datetime
 
 logging.basicConfig(
     level=logging.INFO,
@@ -16,8 +20,17 @@ logger = logging.getLogger(__name__)
 
 
 class M3UService:
-    async def download_and_parse(self, url: str) -> List[Channel]:
-        """Download M3U file and parse it into channels"""
+    def __init__(self, config: dict):
+        self.update_interval = config.get("m3u_update_interval", 24)
+        self.last_updated = config.get("m3u_last_updated", datetime.now().isoformat())
+        self.file = config.get("m3u_file", "")
+
+    def calculate_hours_since_update(self):
+        last_updated = datetime.strptime(self.last_updated, "%Y-%m-%dT%H:%M:%S.%f")
+        return (datetime.now() - last_updated).total_seconds() / 3600
+
+    async def download(self, url: str) -> str:
+        """Download M3U file from URL and save to disk"""
         logger.info(f"Downloading M3U from {url}")
 
         try:
@@ -29,20 +42,50 @@ class M3UService:
                     content = await response.text()
                     logger.info(f"Downloaded {len(content)} bytes")
 
-                    channels = self.parse_m3u(content)
+                    # Setup paths
+                    data_dir = os.path.join(Path(__file__).resolve().parents[3], "data")
+                    m3u_file = os.path.join(data_dir, "m3u_content.txt")
 
-                    # Get list of guide_ids from parsed channels
-                    new_guide_ids = {channel["guide_id"] for channel in channels}
-                    logger.info(f"Found {len(new_guide_ids)} channels in the M3U")
+                    # Ensure data directory exists
+                    os.makedirs(data_dir, exist_ok=True)
+                    logger.info(f"Data directory is at {data_dir}")
 
-                    # Set is_missing=0 for all channels in the update
-                    for channel in channels:
-                        channel["is_missing"] = 0
+                    # Write M3U content to file
+                    with open(m3u_file, "w", encoding="utf-8") as file:
+                        file.write(content)
+                    logger.info(f"Wrote M3U content to {m3u_file}")
 
-                    return channels, new_guide_ids
+                    # update the m3u_service with the new file and last_updated
+                    self.file = str(m3u_file)
+                    self.last_updated = datetime.now().isoformat()
+                    self.content_length = len(content)
+
+                    return m3u_file
 
         except Exception as e:
             logger.error(f"Failed to download M3U: {str(e)}")
+            raise
+
+    async def read_and_parse(self, file_path: str) -> List[Channel]:
+        """Read M3U file from disk and parse into channels"""
+        try:
+            with open(file_path, "r", encoding="utf-8") as file:
+                content = file.read()
+
+            channels = self.parse_m3u(content)
+
+            # Get list of guide_ids from parsed channels
+            new_guide_ids = {channel["guide_id"] for channel in channels}
+            logger.info(f"Found {len(new_guide_ids)} channels in the M3U")
+
+            # Set is_missing=0 for all channels in the update
+            for channel in channels:
+                channel["is_missing"] = 0
+
+            return channels, new_guide_ids
+
+        except Exception as e:
+            logger.error(f"Failed to read and parse M3U: {str(e)}")
             raise
 
     def _generate_channel_id(self, name: str, logo: str) -> str:
@@ -60,7 +103,6 @@ class M3UService:
         lines = content.split("\n")
         channels = []
         current_channel = None
-        channel_number = 1  # Initialize counter
 
         for line in lines:
             line = line.strip()
@@ -81,12 +123,10 @@ class M3UService:
 
                     current_channel = {
                         "guide_id": guide_id,
-                        "channel_number": channel_number,  # Add channel number
                         "name": name,
                         "group": attrs.get("group-title", "Uncategorized"),
                         "logo": attrs.get("tvg-logo"),
                     }
-                    channel_number += 1  # Increment counter
 
             elif line.startswith("http"):
                 if current_channel:
@@ -94,7 +134,11 @@ class M3UService:
                     channels.append(current_channel)
                     current_channel = None
 
-            elif line.startswith("#EXTM3U") or line.startswith("#EXT-X-SESSION-DATA") or line == "":
+            elif (
+                line.startswith("#EXTM3U")
+                or line.startswith("#EXT-X-SESSION-DATA")
+                or line == ""
+            ):
                 continue
             else:
                 logger.warning(f"Unprocessed line: {line}")

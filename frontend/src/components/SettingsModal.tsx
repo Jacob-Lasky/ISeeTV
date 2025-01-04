@@ -36,9 +36,10 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onThemeChange,
 }) => {
   const [formState, setFormState] = useState<Settings>({
-    showChannelNumbers: false,
     m3uUrl: '',
-    updateInterval: 24,
+    m3uUpdateInterval: 24,
+    epgUrl: '',
+    epgUpdateInterval: 24,
     updateOnStart: true,
     theme: 'dark'
   });
@@ -51,14 +52,39 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const [loading, setLoading] = useState(false);
 
-  const handleRefreshClick = async () => {
+  const handleM3uRefreshClick = async () => {
     setLoading(true);
     try {
-      await channelService.refreshM3U(formState.m3uUrl);
+      await channelService.refreshM3U(formState.m3uUrl, formState.m3uUpdateInterval, true);
     } catch (error) {
       console.error('Failed to refresh channels:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleEpgRefreshClick = async () => {
+    if (!formState.epgUrl) {
+      console.warn('No EPG URL provided');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      await channelService.refreshEPG(formState.epgUrl, formState.epgUpdateInterval, true);
+    } catch (error) {
+      console.error('Failed to refresh EPG:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSave = async () => {
+    try {
+      await channelService.saveSettings(formState);
+      onSave(formState);
+    } catch (error) {
+      console.error('Failed to save settings:', error);
     }
   };
 
@@ -83,10 +109,18 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               error={!formState.m3uUrl}
               helperText={!formState.m3uUrl ? "M3U URL is required" : ""}
             />
+            <TextField
+              label="Update Interval (hours)"
+              type="number"
+              sx={{ ml: 1, width: '300px' }}
+              value={formState.m3uUpdateInterval}
+              onChange={(e) => setFormState({ ...formState, m3uUpdateInterval: Number(e.target.value) })}
+            />
             <IconButton
-              onClick={handleRefreshClick}
+              onClick={handleM3uRefreshClick}
               edge="end"
               sx={{ ml: 1 }}
+              title="Force M3U Refresh"
             >
               {loading ? <CircularProgress size={24} /> : <RefreshIcon />}
             </IconButton>
@@ -100,22 +134,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               value={formState.epgUrl}
               onChange={(e) => setFormState({ ...formState, epgUrl: e.target.value })}
             />
+            <TextField
+              label="Update Interval (hours)"
+              type="number"
+              sx={{ ml: 1, width: '300px' }}
+              value={formState.epgUpdateInterval}
+              onChange={(e) => setFormState({ ...formState, epgUpdateInterval: Number(e.target.value) })}
+            />
             <IconButton
-              onClick={() => console.log('Refresh EPG URL')}
+              onClick={handleEpgRefreshClick}
               edge="end"
               sx={{ ml: 1 }}
+              title="Force EPG Refresh"
             >
               <RefreshIcon />
             </IconButton>
           </Box>
-          
-          <TextField
-            label="Update Interval (hours)"
-            type="number"
-            fullWidth
-            value={formState.updateInterval}
-            onChange={(e) => setFormState({ ...formState, updateInterval: Number(e.target.value) })}
-          />
           
           <FormControlLabel
             control={
@@ -145,7 +179,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           
           <Button 
             variant="contained" 
-            onClick={() => onSave(formState)} 
+            onClick={handleSave}
             fullWidth
             disabled={!formState.m3uUrl}
           >

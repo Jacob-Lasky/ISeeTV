@@ -1,5 +1,6 @@
 import { Channel } from '../models/Channel';
 import { ChannelGroup } from '../types/api';
+import { Settings } from '../models/Settings';
 import { API_URL } from '../config/api';
 
 interface GetChannelsParams {
@@ -73,13 +74,25 @@ export const channelService = {
     }
   },
 
-  async refreshM3U(url: string): Promise<void> {
-    const response = await fetch(`${API_URL}/m3u/refresh?url=${encodeURIComponent(url)}`, {
-      method: 'POST'
-    });
+  async refreshM3U(url: string, interval: number, force: boolean = false): Promise<void> {
+    const response = await fetch(
+      `${API_URL}/m3u/refresh?url=${encodeURIComponent(url)}&interval=${interval}&force=${force}`, 
+      { method: 'POST' }
+    );
     
     if (!response.ok) {
       throw new Error(`Failed to refresh M3U: ${response.statusText}`);
+    }
+  },
+
+  async refreshEPG(url: string, interval: number, force: boolean = false): Promise<void> {
+    const response = await fetch(
+      `${API_URL}/epg/refresh?url=${encodeURIComponent(url)}&interval=${interval}&force=${force}`, 
+      { method: 'POST' }
+    );
+    
+    if (!response.ok) {
+      throw new Error(`Failed to refresh EPG: ${response.statusText}`);
     }
   },
 
@@ -103,5 +116,27 @@ export const channelService = {
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
+  },
+
+  async saveSettings(settings: Settings): Promise<void> {
+    const response = await fetch(`${API_URL}/settings/save`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(settings),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to save settings: ${response.statusText}`);
+    }
+  },
+
+  async getSettings(): Promise<Settings> {
+    const response = await fetch(`${API_URL}/settings`);
+    if (!response.ok) {
+      throw new Error(`Failed to load settings: ${response.statusText}`);
+    }
+    return response.json();
   },
 }; 

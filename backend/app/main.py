@@ -1,4 +1,5 @@
-from fastapi import FastAPI, Depends, HTTPException
+from app.services.epg_service import EPGService
+from fastapi import FastAPI, Depends, HTTPException, Request
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
@@ -10,6 +11,7 @@ import logging
 import sys
 import datetime
 from .services.m3u_service import M3UService
+from .services.epg_service import EPGService
 from sqlalchemy import func
 from fastapi.responses import StreamingResponse
 import requests
@@ -112,8 +114,10 @@ def clear_cache():
 
 
 def save_config(config: dict):
+    # first, sort the keys
+    config = {k: v for k, v in sorted(config.items(), key=lambda item: item[0])}
     with open(CONFIG_FILE, "w") as f:
-        json.dump(config, f)
+        json.dump(config, f, indent=4)
         logger.info(f"Updated config.json")
 
 
@@ -136,21 +140,45 @@ async def startup_event():
     if "m3u_url" in config:
         async with AsyncSessionLocal() as db:
             try:
-                await refresh_m3u(config["m3u_url"], db)
+                m3u_service = M3UService(config=load_config())
+                await refresh_m3u(
+                    url=config["m3u_url"],
+                    interval=m3u_service.update_interval,
+                    force=False,
+                    db=db,
+                )
                 await db.commit()
             except Exception as e:
-                await db.rollback()
-                raise
+                raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.post("/m3u/refresh")
-async def refresh_m3u(url: str, db: AsyncSession = Depends(get_db)):
-    """Download and process M3U file from URL"""
-    logger.info(f"Starting M3U refresh from {url}")
-
+async def refresh_m3u(
+    url: str, interval: int, force: bool = False, db: AsyncSession = Depends(get_db)
+):
     try:
-        # Download and parse M3U
-        channels, new_guide_ids = await m3u_service.download_and_parse(url)
+        m3u_service = M3UService(config=load_config())
+
+        if not force:
+            # Check if the m3u was last updated more than "interval" hours ago
+            if m3u_service.last_updated:
+                if m3u_service.calculate_hours_since_update() < interval:
+                    logger.info(
+                        f"M3U last updated < {interval} hours ago, will not redownload"
+                    )
+                    return {
+                        "message": f"M3U last updated < {interval} hours ago, will not redownload"
+                    }
+
+            logger.info(f"M3U last updated > {interval} hours ago, will redownload")
+        else:
+            logger.info("Force refresh requested, will redownload")
+
+        # First download the M3U and get the file path
+        m3u_file = await m3u_service.download(url)
+
+        # Then read and parse the file
+        channels, new_guide_ids = await m3u_service.read_and_parse(m3u_file)
 
         # Mark channels not in new M3U as missing
         await db.execute(
@@ -161,8 +189,9 @@ async def refresh_m3u(url: str, db: AsyncSession = Depends(get_db)):
 
         # Get existing favorites
         result = await db.execute(
-            select(models.Channel.guide_id, models.Channel.is_favorite)
-            .where(models.Channel.is_favorite == True)
+            select(models.Channel.guide_id, models.Channel.is_favorite).where(
+                models.Channel.is_favorite == True
+            )
         )
         favorites = {row.guide_id: row.is_favorite for row in result}
 
@@ -180,7 +209,11 @@ async def refresh_m3u(url: str, db: AsyncSession = Depends(get_db)):
 
         # save the config
         config = load_config()
-        config["m3u_url"] = url
+        config["m3u_url"] = m3u_service.file
+        config["m3u_last_updated"] = m3u_service.last_updated
+        config["m3u_update_interval"] = m3u_service.update_interval
+        config["m3u_file"] = m3u_file
+        config["m3u_content_length"] = m3u_service.content_length
         save_config(config)
 
         logger.info(
@@ -190,8 +223,49 @@ async def refresh_m3u(url: str, db: AsyncSession = Depends(get_db)):
 
     except Exception as e:
         logger.error(f"Failed to refresh M3U: {str(e)}", exc_info=True)
-        await db.rollback()
         raise HTTPException(status_code=500, detail=f"Failed to refresh M3U: {str(e)}")
+
+
+@app.post("/epg/refresh")
+async def refresh_epg(
+    url: str, interval: int, force: bool = False, db: AsyncSession = Depends(get_db)
+):
+    """Download and process EPG file from URL"""
+    logger.info(f"Starting EPG refresh from {url}")
+    try:
+        epg_service = EPGService(load_config())
+
+        if not force:
+            # Check if the epg was last updated more than "interval" hours ago
+            if epg_service.last_updated:
+                if epg_service.calculate_hours_since_update() < interval:
+                    logger.info(
+                        f"EPG last updated < {interval} hours ago, will not redownload"
+                    )
+                    return {
+                        "message": f"EPG last updated < {interval} hours ago, will not redownload"
+                    }
+
+            logger.info(f"EPG last updated > {interval} hours ago, will redownload")
+        else:
+            logger.info("Force refresh requested, will redownload")
+
+        await epg_service.download(url)
+
+        # save the config
+        config = load_config()
+        config["epg_url"] = epg_service.file
+        config["epg_last_updated"] = epg_service.last_updated
+        config["epg_update_interval"] = epg_service.update_interval
+        config["epg_file"] = epg_service.file
+        config["epg_content_length"] = epg_service.content_length
+        save_config(config)
+
+        return {"status": "success"}
+
+    except Exception as e:
+        logger.error(f"Failed to refresh EPG: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get("/channels")
@@ -267,12 +341,11 @@ async def toggle_favorite(guide_id: str, db: AsyncSession = Depends(get_db)):
         await db.commit()
         return channel
     except Exception as e:
-        await db.rollback()
         logger.error(f"Failed to update favorite status: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to update favorite status")
 
 
-m3u_service = M3UService()
+m3u_service = M3UService(config=load_config())
 
 
 @app.get("/channels/groups")
@@ -284,7 +357,7 @@ async def get_channel_groups(db: AsyncSession = Depends(get_db)):
         query = (
             select(
                 models.Channel.group,
-                func.count(models.Channel.channel_number).label("count"),
+                func.count(models.Channel.guide_id).label("count"),
             )
             .group_by(models.Channel.group)
             .order_by(models.Channel.group)
@@ -513,3 +586,47 @@ def cleanup_temp_dirs():
         cleanup_channel_resources(guide_id)
     if os.path.exists(SEGMENTS_DIR):
         shutil.rmtree(SEGMENTS_DIR)
+
+
+@app.post("/settings/save")
+async def save_settings(request: Request):
+    """Save settings to config file"""
+    logger.info("Saving settings")
+    try:
+        data = await request.json()
+        logger.debug(f"Saving settings: {data}")
+        config = load_config()
+
+        # Update config with new settings
+        config["m3u_url"] = data.get("m3uUrl", config.get("m3u_url"))
+        config["m3u_update_interval"] = data.get("m3uUpdateInterval", 24)
+        config["epg_url"] = data.get("epgUrl", config.get("epg_url"))
+        config["epg_update_interval"] = data.get("epgUpdateInterval", 24)
+        config["update_on_start"] = data.get("updateOnStart", True)
+        config["theme"] = data.get("theme", "light")
+
+        save_config(config)
+        return {"status": "success"}
+
+    except Exception as e:
+        logger.error(f"Failed to save settings: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/settings")
+async def get_settings():
+    """Get settings from config file"""
+    logger.debug("Getting settings")
+    try:
+        config = load_config()
+        return {
+            "m3uUrl": config.get("m3u_url", ""),
+            "m3uUpdateInterval": config.get("m3u_update_interval", 24),
+            "epgUrl": config.get("epg_url", ""),
+            "epgUpdateInterval": config.get("epg_update_interval", 24),
+            "updateOnStart": config.get("update_on_start", True),
+            "theme": config.get("theme", "dark"),
+        }
+    except Exception as e:
+        logger.error(f"Failed to load settings: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
