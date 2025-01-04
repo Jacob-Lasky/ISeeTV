@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import {
   Box,
   ListItemButton,
@@ -173,13 +173,13 @@ const debounce = <T extends (...args: any[]) => any>(
   };
 };
 
-export const ChannelList: React.FC<ChannelListProps> = ({
+export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelListProps>(({
   selectedChannel,
   onChannelSelect,
   onToggleFavorite,
   onRefresh,
   onOpenSettings,
-}) => {
+}, ref) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<TabValue>('all');
   const [initialLoading, setLoading] = useState(true);
@@ -635,6 +635,17 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     }, 300);
   };
 
+  // Expose refresh method via ref
+  useImperativeHandle(ref, () => ({
+    refresh: async () => {
+      if (activeTab === 'all') {
+        await loadGroups(true);
+      } else if (activeTab === 'favorites') {
+        await loadChannels(false);
+      }
+    }
+  }));
+
   return (
     <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ p: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -698,6 +709,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
       </Box>
     </Paper>
   );
-}; 
+});
 
 export type { ChannelListProps }; 

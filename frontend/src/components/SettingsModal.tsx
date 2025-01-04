@@ -26,6 +26,8 @@ interface SettingsModalProps {
   settings: Settings;
   onSave: (settings: Settings) => void;
   onThemeChange?: (theme: 'light' | 'dark' | 'system') => void;
+  onM3uProgress?: (current: number, total: number) => void;
+  onEpgProgress?: (current: number, total: number) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -34,6 +36,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   settings,
   onSave,
   onThemeChange,
+  onM3uProgress,
+  onEpgProgress,
 }) => {
   const [formState, setFormState] = useState<Settings>({
     m3uUrl: '',
@@ -54,8 +58,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleM3uRefreshClick = async () => {
     setLoading(true);
+    onM3uProgress?.(0, 0);
+    
     try {
-      await channelService.refreshM3U(formState.m3uUrl, formState.m3uUpdateInterval, true);
+      await channelService.refreshM3U(
+        formState.m3uUrl, 
+        formState.m3uUpdateInterval, 
+        true,
+        onM3uProgress
+      );
     } catch (error) {
       console.error('Failed to refresh channels:', error);
     } finally {
@@ -70,8 +81,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
 
     setLoading(true);
+    onEpgProgress?.(0, 0);
+    
     try {
-      await channelService.refreshEPG(formState.epgUrl, formState.epgUpdateInterval, true);
+      await channelService.refreshEPG(
+        formState.epgUrl, 
+        formState.epgUpdateInterval, 
+        true,
+        onEpgProgress
+      );
     } catch (error) {
       console.error('Failed to refresh EPG:', error);
     } finally {
@@ -81,23 +99,58 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
   const handleSave = async () => {
     try {
+      // Save settings first
       await channelService.saveSettings(formState);
+      
+      // Refresh M3U if URL is provided
+      if (formState.m3uUrl) {
+        setLoading(true);
+        onM3uProgress?.(0, 0);
+        await channelService.refreshM3U(
+          formState.m3uUrl,
+          formState.m3uUpdateInterval,
+          false, // don't force
+          onM3uProgress
+        );
+      }
+
+      // Refresh EPG if URL is provided
+      if (formState.epgUrl) {
+        onEpgProgress?.(0, 0);
+        await channelService.refreshEPG(
+          formState.epgUrl,
+          formState.epgUpdateInterval,
+          false, // don't force
+          onEpgProgress
+        );
+      }
+
       onSave(formState);
     } catch (error) {
       console.error('Failed to save settings:', error);
+    } finally {
+      setLoading(false);
     }
   };
 
   return (
     <Dialog 
       open={open} 
-      onClose={settings.m3uUrl ? onClose : undefined}
+      onClose={formState.m3uUrl ? onClose : undefined}
       maxWidth="sm" 
       fullWidth
+      disableEscapeKeyDown={!formState.m3uUrl}
     >
-      <DialogTitle>Settings</DialogTitle>
+      <DialogTitle>
+        {!formState.m3uUrl ? 'Initial Setup Required' : 'Settings'}
+      </DialogTitle>
       <DialogContent>
         <Stack spacing={3} sx={{ mt: 2 }}>
+          {!formState.m3uUrl && (
+            <Box sx={{ mb: 2 }}>
+              Please enter an M3U URL to get started.
+            </Box>
+          )}
           {/* M3U URL with Refresh Icon */}
           <Box sx={{ display: 'flex', alignItems: 'center' }}>
             <TextField

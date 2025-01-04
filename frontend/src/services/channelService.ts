@@ -16,6 +16,10 @@ interface GetChannelsResponse {
   limit: number;
 }
 
+interface ProgressCallback {
+  (current: number, total: number): void;
+}
+
 export const channelService = {
   async getChannels(
     skip: number = 0,
@@ -74,18 +78,60 @@ export const channelService = {
     }
   },
 
-  async refreshM3U(url: string, interval: number, force: boolean = false): Promise<void> {
+  async refreshM3U(
+    url: string, 
+    interval: number, 
+    force: boolean = false,
+    onProgress?: ProgressCallback
+  ): Promise<void> {
     const response = await fetch(
       `${API_URL}/m3u/refresh?url=${encodeURIComponent(url)}&interval=${interval}&force=${force}`, 
       { method: 'POST' }
     );
-    
+
     if (!response.ok) {
       throw new Error(`Failed to refresh M3U: ${response.statusText}`);
     }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (reader) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (!line) continue;
+            try {
+              const data = JSON.parse(line);
+              if (data.type === 'progress' && onProgress) {
+                onProgress(data.current, data.total);
+              } else if (data.type === 'complete') {
+                // Signal completion with total value
+                onProgress?.(100, 100);
+              }
+            } catch (e) {
+              console.warn('Failed to parse line:', line);
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    }
   },
 
-  async refreshEPG(url: string, interval: number, force: boolean = false): Promise<void> {
+  async refreshEPG(
+    url: string, 
+    interval: number, 
+    force: boolean = false,
+    onProgress?: ProgressCallback
+  ): Promise<void> {
     const response = await fetch(
       `${API_URL}/epg/refresh?url=${encodeURIComponent(url)}&interval=${interval}&force=${force}`, 
       { method: 'POST' }
@@ -93,6 +139,20 @@ export const channelService = {
     
     if (!response.ok) {
       throw new Error(`Failed to refresh EPG: ${response.statusText}`);
+    }
+
+    const reader = response.body?.getReader();
+    const contentLength = +(response.headers.get('Content-Length') ?? '0');
+
+    if (reader) {
+      let receivedLength = 0;
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+        
+        receivedLength += value.length;
+        onProgress?.(receivedLength, contentLength);
+      }
     }
   },
 

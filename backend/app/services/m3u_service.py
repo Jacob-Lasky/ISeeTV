@@ -22,45 +22,59 @@ logger = logging.getLogger(__name__)
 class M3UService:
     def __init__(self, config: dict):
         self.update_interval = config.get("m3u_update_interval", 24)
-        self.last_updated = config.get("m3u_last_updated", datetime.now().isoformat())
+        self.last_updated = config.get(
+            "m3u_last_updated", datetime(1970, 1, 1).strftime("%Y-%m-%dT%H:%M:%S.%f")
+        )
         self.file = config.get("m3u_file", "")
+        self.url = config.get("m3u_url", "")
+        self.content_length = config.get("m3u_content_length", 0)
 
     def calculate_hours_since_update(self):
         last_updated = datetime.strptime(self.last_updated, "%Y-%m-%dT%H:%M:%S.%f")
         return (datetime.now() - last_updated).total_seconds() / 3600
 
-    async def download(self, url: str) -> str:
+    async def download(self, url: str):
         """Download M3U file from URL and save to disk"""
         logger.info(f"Downloading M3U from {url}")
 
         try:
+            self.url = url
+            content = []
+            total_bytes = 0
+            chunk_count = 0
+
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as response:
                     if not response.ok:
                         raise Exception(f"HTTP {response.status}: {response.reason}")
 
-                    content = await response.text()
-                    logger.info(f"Downloaded {len(content)} bytes")
+                    async for chunk in response.content.iter_chunked(8192):
+                        chunk_count += 1
+                        content.append(chunk)
+                        total_bytes += len(chunk)
 
-                    # Setup paths
-                    data_dir = os.path.join(Path(__file__).resolve().parents[3], "data")
-                    m3u_file = os.path.join(data_dir, "m3u_content.txt")
+                        yield {
+                            "type": "progress",
+                            "current": total_bytes,
+                            "total": self.content_length,
+                        }
 
-                    # Ensure data directory exists
-                    os.makedirs(data_dir, exist_ok=True)
-                    logger.info(f"Data directory is at {data_dir}")
+            logger.info(
+                f"Download complete. {chunk_count} chunks, {total_bytes} bytes total"
+            )
+            content_str = b"".join(content).decode("utf-8")
 
-                    # Write M3U content to file
-                    with open(m3u_file, "w", encoding="utf-8") as file:
-                        file.write(content)
-                    logger.info(f"Wrote M3U content to {m3u_file}")
+            # Setup paths and save file
+            data_dir = os.path.join(Path(__file__).resolve().parents[3], "data")
+            m3u_file = os.path.join(data_dir, "m3u_content.txt")
+            os.makedirs(data_dir, exist_ok=True)
 
-                    # update the m3u_service with the new file and last_updated
-                    self.file = str(m3u_file)
-                    self.last_updated = datetime.now().isoformat()
-                    self.content_length = len(content)
+            with open(m3u_file, "w", encoding="utf-8") as file:
+                file.write(content_str)
 
-                    return m3u_file
+            self.file = str(m3u_file)
+            self.last_updated = datetime.now().isoformat()
+            self.content_length = total_bytes
 
         except Exception as e:
             logger.error(f"Failed to download M3U: {str(e)}")

@@ -122,12 +122,23 @@ def save_config(config: dict):
 
 
 def check_config_file():
+    # if the config file doesn't exist, create it
     if not os.path.exists(CONFIG_FILE):
         logger.info("Creating default config.json")
-        save_config({})
+        save_config(
+            {
+                "m3u_url": "",
+                "epg_url": "",
+                "epg_update_interval": 24,
+                "m3u_update_interval": 24,
+                "update_on_start": True,
+                "theme": "dark",
+            }
+        )
 
 
 def load_config():
+    check_config_file()
     with open(CONFIG_FILE, "r") as f:
         return json.load(f)
 
@@ -156,70 +167,94 @@ async def startup_event():
 async def refresh_m3u(
     url: str, interval: int, force: bool = False, db: AsyncSession = Depends(get_db)
 ):
+    logger.info(f"Starting M3U refresh from {url}")
     try:
         m3u_service = M3UService(config=load_config())
+        needs_refresh = False
 
         if not force:
             # Check if the m3u was last updated more than "interval" hours ago
-            if m3u_service.last_updated:
+            if m3u_service.last_updated and m3u_service.last_updated != "":
                 if m3u_service.calculate_hours_since_update() < interval:
                     logger.info(
-                        f"M3U last updated < {interval} hours ago, will not redownload"
+                        f"M3U last updated at {m3u_service.last_updated} (< {interval} hours ago), will not redownload"
                     )
-                    return {
-                        "message": f"M3U last updated < {interval} hours ago, will not redownload"
-                    }
-
-            logger.info(f"M3U last updated > {interval} hours ago, will redownload")
+                    needs_refresh = False
+                else:
+                    logger.info(
+                        f"M3U last updated at {m3u_service.last_updated} (> {interval} hours ago), will redownload"
+                    )
+                    needs_refresh = True
+            else:
+                logger.info("M3U last updated is None, will redownload")
+                needs_refresh = True
         else:
             logger.info("Force refresh requested, will redownload")
+            needs_refresh = True
 
-        # First download the M3U and get the file path
-        m3u_file = await m3u_service.download(url)
+        logger.debug(f"Needs refresh: {needs_refresh}")
 
-        # Then read and parse the file
-        channels, new_guide_ids = await m3u_service.read_and_parse(m3u_file)
+        if needs_refresh:
 
-        # Mark channels not in new M3U as missing
-        await db.execute(
-            update(models.Channel)
-            .where(models.Channel.guide_id.notin_(new_guide_ids))
-            .values(is_missing=1)
-        )
+            async def progress_stream():
+                # First download the M3U and get the file path
+                async for progress in m3u_service.download(url):
+                    yield json.dumps(progress).encode() + b"\n"
 
-        # Get existing favorites
-        result = await db.execute(
-            select(models.Channel.guide_id, models.Channel.is_favorite).where(
-                models.Channel.is_favorite == True
-            )
-        )
-        favorites = {row.guide_id: row.is_favorite for row in result}
+                # After download is complete, process the file
+                channels, new_guide_ids = await m3u_service.read_and_parse(
+                    m3u_service.file
+                )
 
-        # Preserve favorite status in new channel data
-        for channel in channels:
-            if channel["guide_id"] in favorites:
-                channel["is_favorite"] = favorites[channel["guide_id"]]
+                # Mark channels not in new M3U as missing
+                await db.execute(
+                    update(models.Channel)
+                    .where(models.Channel.guide_id.notin_(new_guide_ids))
+                    .values(is_missing=1)
+                )
 
-        # Insert or update channels
-        for channel in channels:
-            stmt = insert(models.Channel).prefix_with("OR REPLACE").values(**channel)
-            await db.execute(stmt)
+                # Get existing favorites
+                result = await db.execute(
+                    select(models.Channel.guide_id, models.Channel.is_favorite).where(
+                        models.Channel.is_favorite == True
+                    )
+                )
+                favorites = {row.guide_id: row.is_favorite for row in result}
 
-        await db.commit()
+                # Preserve favorite status in new channel data
+                for channel in channels:
+                    if channel["guide_id"] in favorites:
+                        channel["is_favorite"] = favorites[channel["guide_id"]]
 
-        # save the config
-        config = load_config()
-        config["m3u_url"] = m3u_service.file
-        config["m3u_last_updated"] = m3u_service.last_updated
-        config["m3u_update_interval"] = m3u_service.update_interval
-        config["m3u_file"] = m3u_file
-        config["m3u_content_length"] = m3u_service.content_length
-        save_config(config)
+                # Insert or update channels
+                for channel in channels:
+                    stmt = (
+                        insert(models.Channel)
+                        .prefix_with("OR REPLACE")
+                        .values(**channel)
+                    )
+                    await db.execute(stmt)
 
-        logger.info(
-            f"Found {len(new_guide_ids)} channels in the M3U ({len(channels)} total channels in the DB)"
-        )
-        return {"message": f"Found {len(new_guide_ids)} new channels in the M3U"}
+                await db.commit()
+
+                # Save config after processing
+                config = load_config()
+                config["m3u_url"] = m3u_service.url
+                config["m3u_last_updated"] = m3u_service.last_updated
+                config["m3u_update_interval"] = m3u_service.update_interval
+                config["m3u_file"] = m3u_service.file
+                config["m3u_content_length"] = m3u_service.content_length
+                save_config(config)
+
+                # Final message after everything is done
+                yield json.dumps(
+                    {
+                        "type": "complete",
+                        "message": f"Found {len(new_guide_ids)} new channels in the M3U",
+                    }
+                ).encode() + b"\n"
+
+            return StreamingResponse(progress_stream(), media_type="application/json")
 
     except Exception as e:
         logger.error(f"Failed to refresh M3U: {str(e)}", exc_info=True)

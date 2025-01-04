@@ -20,6 +20,7 @@ class EPGService:
         self.update_interval = config.get("epg_update_interval", 24)
         self.last_updated = config.get("epg_last_updated", datetime.now().isoformat())
         self.file = config.get("epg_file", "")
+        self.url = config.get("epg_url", "")
 
     async def download(self, url: str) -> None:
         """Download EPG XML and save it to file"""
@@ -30,6 +31,9 @@ class EPGService:
         logger.info(f"Downloading EPG from {url}")
 
         try:
+            # Update the service URL
+            self.url = url
+
             async with aiohttp.ClientSession() as session:
                 async with session.get(url) as response:
                     if not response.ok:
