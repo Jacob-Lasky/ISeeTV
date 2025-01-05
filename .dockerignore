@@ -13,6 +13,7 @@
 *.log
 .vscode/
 .idea/
+*_dev.py
 
 # Exclude test files
 tests/
