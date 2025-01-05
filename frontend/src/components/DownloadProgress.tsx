@@ -24,7 +24,7 @@ export const DownloadProgress: React.FC<DownloadProgressProps> = ({ type, curren
       }}
     >
       <Typography variant="body2" color="textSecondary">
-        {type} Download Progress: {currentMB}MB {total > 0 ? `/ ${totalMB}MB` : ''}
+        {type} Update: {currentMB}MB {total > 0 ? `/ ${totalMB}MB` : ''}
       </Typography>
       <LinearProgress 
         variant={total > 0 ? "determinate" : "indeterminate"} 

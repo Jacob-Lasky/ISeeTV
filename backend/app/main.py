@@ -167,34 +167,15 @@ async def startup_event():
 async def refresh_m3u(
     url: str, interval: int, force: bool = False, db: AsyncSession = Depends(get_db)
 ):
-    logger.info(f"Starting M3U refresh from {url}")
+    logger.info("Checking if M3U needs to be refreshed")
     try:
         m3u_service = M3UService(config=load_config())
-        needs_refresh = False
-
-        if not force:
-            # Check if the m3u was last updated more than "interval" hours ago
-            if m3u_service.last_updated and m3u_service.last_updated != "":
-                if m3u_service.calculate_hours_since_update() < interval:
-                    logger.info(
-                        f"M3U last updated at {m3u_service.last_updated} (< {interval} hours ago), will not redownload"
-                    )
-                    needs_refresh = False
-                else:
-                    logger.info(
-                        f"M3U last updated at {m3u_service.last_updated} (> {interval} hours ago), will redownload"
-                    )
-                    needs_refresh = True
-            else:
-                logger.info("M3U last updated is None, will redownload")
-                needs_refresh = True
-        else:
-            logger.info("Force refresh requested, will redownload")
-            needs_refresh = True
+        needs_refresh = force or m3u_service.calculate_hours_since_update() >= interval
 
         logger.debug(f"Needs refresh: {needs_refresh}")
 
         if needs_refresh:
+            logger.info(f"Starting M3U refresh from {url}")
 
             async def m3u_progress_stream():
                 # First download the M3U and get the file path
@@ -258,6 +239,7 @@ async def refresh_m3u(
                 m3u_progress_stream(), media_type="application/json"
             )
         else:
+            logger.info("M3U does not need to be refreshed")
             # Send completion signal even when no update is needed
             return StreamingResponse(
                 iter([json.dumps({"type": "complete"}).encode() + b"\n"]),
@@ -274,42 +256,36 @@ async def refresh_epg(
     url: str, interval: int, force: bool = False, db: AsyncSession = Depends(get_db)
 ):
     """Download and process EPG file from URL"""
-    logger.info(f"Starting EPG refresh from {url}")
+    logger.info("Checking if EPG needs to be refreshed")
     try:
         epg_service = EPGService(load_config())
-
-        needs_refresh = False
-
-        if not force:
-            # Check if the epg was last updated more than "interval" hours ago
-            if epg_service.last_updated:
-                if epg_service.calculate_hours_since_update() < interval:
-                    logger.info(
-                        f"EPG last updated at {epg_service.last_updated} (< {interval} hours ago), will not redownload"
-                    )
-                    needs_refresh = False
-                else:
-                    logger.info(
-                        f"EPG last updated at {epg_service.last_updated} (> {interval} hours ago), will redownload"
-                    )
-                    needs_refresh = True
-            else:
-                logger.info("EPG last updated is None, will redownload")
-                needs_refresh = True
-        else:
-            logger.info("Force refresh requested, will redownload")
-            needs_refresh = True
-
-        logger.debug(f"Needs refresh: {needs_refresh}")
+        needs_refresh = force or epg_service.calculate_hours_since_update() >= interval
 
         if needs_refresh:
+            logger.info(f"Starting EPG refresh from {url}")
 
             async def epg_progress_stream():
-                # First download the EPG and get the file path
+                # Download EPG
                 async for progress in epg_service.download(url):
                     yield json.dumps(progress).encode() + b"\n"
 
-                # save the config
+                # # Parse and store EPG data
+                # channels, programs = await epg_service.read_and_parse(epg_service.file)
+
+                # # Clear existing EPG data
+                # await db.execute(delete(models.EPGChannel))
+                # await db.execute(delete(models.Program))
+
+                # # Insert new data
+                # for channel in channels:
+                #     await db.execute(insert(models.EPGChannel).values(**channel))
+
+                # for program in programs:
+                #     await db.execute(insert(models.Program).values(**program))
+
+                # await db.commit()
+
+                # Update config
                 config = load_config()
                 config["epg_url"] = epg_service.url
                 config["epg_last_updated"] = epg_service.last_updated
@@ -318,11 +294,15 @@ async def refresh_epg(
                 config["epg_content_length"] = epg_service.content_length
                 save_config(config)
 
+                yield json.dumps(
+                    {"type": "complete", "message": "EPG data updated"}
+                ).encode() + b"\n"
+
             return StreamingResponse(
                 epg_progress_stream(), media_type="application/json"
             )
         else:
-            # Send completion signal even when no update is needed
+            logger.info("EPG does not need to be refreshed")
             return StreamingResponse(
                 iter([json.dumps({"type": "complete"}).encode() + b"\n"]),
                 media_type="application/json",

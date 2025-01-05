@@ -7,7 +7,9 @@ import os
 import logging
 from pathlib import Path
 from datetime import datetime
+import math
 from ..common.download_helper import stream_download
+from ..common.utils import generate_channel_id
 
 logging.basicConfig(
     level=logging.INFO,
@@ -29,6 +31,8 @@ class M3UService:
         self.content_length = config.get("m3u_content_length", 0)
 
     def calculate_hours_since_update(self):
+        if not self.last_updated:
+            return -math.inf
         last_updated = datetime.strptime(self.last_updated, "%Y-%m-%dT%H:%M:%S.%f")
         return (datetime.now() - last_updated).total_seconds() / 3600
 
@@ -103,11 +107,9 @@ class M3UService:
 
                     name = attrs.get("tvg-name", "")
 
-                    guide_id = self._sanitize_name(name)
-                    if guide_id == "":
-                        guide_id = self._generate_channel_id(
-                            name, attrs.get("tvg-logo", "")
-                        )
+                    guide_id = generate_channel_id(
+                        attrs.get("tvg-id", None), name, attrs.get("tvg-logo", "")
+                    )
 
                     current_channel = {
                         "guide_id": guide_id,
