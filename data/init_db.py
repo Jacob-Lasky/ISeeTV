@@ -13,8 +13,11 @@ try:
     conn = sqlite3.connect("/app/data/sql_app.db")
     cursor = conn.cursor()
 
-    # Drop existing table to reset schema
-    logger.info("Dropping existing channels table...")
+    # Drop existing tables to reset schema
+    logger.info("Dropping existing tables...")
+    cursor.execute("DROP TABLE IF EXISTS programs")
+    cursor.execute("DROP TABLE IF EXISTS epg_channels")
+    cursor.execute("DROP TABLE IF EXISTS channel_streams")
     cursor.execute("DROP TABLE IF EXISTS channels")
 
     logger.info("Creating channels table...")
@@ -32,16 +35,41 @@ try:
         )"""
     )
 
+    logger.info("Creating channel_streams table...")
+    cursor.execute(
+        """CREATE TABLE IF NOT EXISTS channel_streams (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            channel_id TEXT NOT NULL,
+            variant_name TEXT NOT NULL,
+            url TEXT NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (channel_id) REFERENCES channels(guide_id),
+            UNIQUE(channel_id, variant_name)
+        )"""
+    )
+
     # Add ON CONFLICT clause for UPSERT support
     cursor.execute(
         """
-        CREATE TRIGGER IF NOT EXISTS update_channel_timestamp 
+        CREATE TRIGGER IF NOT EXISTS update_channel_timestamp
         AFTER UPDATE ON channels
         BEGIN
-            UPDATE channels SET created_at = CURRENT_TIMESTAMP 
+            UPDATE channels SET created_at = CURRENT_TIMESTAMP
             WHERE guide_id = NEW.guide_id;
         END
-    """
+        """
+    )
+
+    # Create trigger for channel_streams
+    cursor.execute(
+        """
+        CREATE TRIGGER IF NOT EXISTS update_channel_stream_timestamp
+        AFTER UPDATE ON channel_streams
+        BEGIN
+            UPDATE channel_streams SET created_at = CURRENT_TIMESTAMP
+            WHERE id = NEW.id;
+        END
+        """
     )
 
     # Update indexes
@@ -56,6 +84,51 @@ try:
     cursor.execute(
         """CREATE INDEX IF NOT EXISTS idx_channels_name 
            ON channels(name)"""
+    )
+    cursor.execute(
+        """CREATE INDEX IF NOT EXISTS idx_channel_streams_channel_id 
+           ON channel_streams(channel_id)"""
+    )
+
+    logger.info("Creating EPG tables...")
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS epg_channels (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            channel_id TEXT NOT NULL,
+            display_name TEXT NOT NULL,
+            icon TEXT,
+            is_primary INTEGER DEFAULT 0,
+            FOREIGN KEY (channel_id) REFERENCES channels(guide_id)
+        )
+        """
+    )
+
+    cursor.execute(
+        """
+        CREATE TABLE IF NOT EXISTS programs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            channel_id TEXT NOT NULL,
+            start_time TIMESTAMP NOT NULL,
+            end_time TIMESTAMP NOT NULL,
+            title TEXT NOT NULL,
+            description TEXT,
+            category TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (channel_id) REFERENCES channels(guide_id)
+        )
+        """
+    )
+
+    # Add EPG indexes
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_epg_channel_id ON epg_channels(channel_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_program_channel ON programs(channel_id)"
+    )
+    cursor.execute(
+        "CREATE INDEX IF NOT EXISTS idx_program_time ON programs(start_time, end_time)"
     )
 
     logger.info("Committing changes...")
