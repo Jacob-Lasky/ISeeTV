@@ -1,14 +1,13 @@
-import aiohttp
-import logging
 from typing import List
 from ..models import Channel
 import re
 import hashlib
 import sys
 import os
-import json
+import logging
 from pathlib import Path
 from datetime import datetime
+from ..common.download_helper import stream_download
 
 logging.basicConfig(
     level=logging.INFO,
@@ -37,48 +36,23 @@ class M3UService:
         """Download M3U file from URL and save to disk"""
         logger.info(f"Downloading M3U from {url}")
 
+        # Setup paths and save file
+        data_dir = os.path.join(Path(__file__).resolve().parents[3], "data")
+        m3u_file = os.path.join(data_dir, "m3u_content.txt")
+        os.makedirs(data_dir, exist_ok=True)
+
         try:
-            self.url = url
-            content = []
-            total_bytes = 0
-            chunk_count = 0
-
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as response:
-                    if not response.ok:
-                        raise Exception(f"HTTP {response.status}: {response.reason}")
-
-                    async for chunk in response.content.iter_chunked(8192):
-                        chunk_count += 1
-                        content.append(chunk)
-                        total_bytes += len(chunk)
-
-                        yield {
-                            "type": "progress",
-                            "current": total_bytes,
-                            "total": self.content_length,
-                        }
-
-            logger.info(
-                f"Download complete. {chunk_count} chunks, {total_bytes} bytes total"
-            )
-            content_str = b"".join(content).decode("utf-8")
-
-            # Setup paths and save file
-            data_dir = os.path.join(Path(__file__).resolve().parents[3], "data")
-            m3u_file = os.path.join(data_dir, "m3u_content.txt")
-            os.makedirs(data_dir, exist_ok=True)
-
-            with open(m3u_file, "w", encoding="utf-8") as file:
-                file.write(content_str)
-
-            self.file = str(m3u_file)
-            self.last_updated = datetime.now().isoformat()
-            self.content_length = total_bytes
+            async for progress in stream_download(url, self.content_length, m3u_file):
+                yield progress
 
         except Exception as e:
             logger.error(f"Failed to download M3U: {str(e)}")
             raise
+
+        self.url = url
+        self.file = m3u_file
+        self.last_updated = datetime.now().isoformat()
+        self.content_length = os.path.getsize(m3u_file)
 
     async def read_and_parse(self, file_path: str) -> List[Channel]:
         """Read M3U file from disk and parse into channels"""

@@ -26,13 +26,37 @@ export default function App() {
       try {
         const loadedSettings = await channelService.getSettings();
         setSettings(loadedSettings);
+        
         // Show settings modal if no M3U URL
         if (!loadedSettings.m3uUrl) {
           setSettingsOpen(true);
+          return;
+        }
+
+        // If updateOnStart is enabled, refresh both M3U and EPG
+        if (loadedSettings.updateOnStart) {
+          // Refresh M3U
+          await channelService.refreshM3U(
+            loadedSettings.m3uUrl,
+            loadedSettings.m3uUpdateInterval,
+            false,
+            handleM3uProgress
+          );
+          await channelListRef.current?.refresh();
+
+          // Refresh EPG if URL is provided
+          if (loadedSettings.epgUrl) {
+            await channelService.refreshEPG(
+              loadedSettings.epgUrl,
+              loadedSettings.epgUpdateInterval,
+              false,
+              handleEpgProgress
+            );
+          }
         }
       } catch (error) {
         console.error('Failed to load settings:', error);
-        setSettingsOpen(true); // Show settings on error too
+        setSettingsOpen(true);
       }
     };
 
@@ -77,6 +101,15 @@ export default function App() {
         // Refresh channel list after M3U download
         await channelListRef.current?.refresh();
       }
+
+      if (newSettings.epgUrl) {
+        await channelService.refreshEPG(
+          newSettings.epgUrl,
+          newSettings.epgUpdateInterval,
+          false,
+          handleEpgProgress
+        );
+      }
       
       setSettingsOpen(false);
     } catch (error) {
@@ -95,8 +128,8 @@ export default function App() {
   const handleM3uProgress = (current: number, total: number) => {
     setM3uProgress({ current, total });
     
-    // Clear progress after completion
-    if (current === total && total > 0) {
+    // Clear progress after completion or if no update needed
+    if ((current === total && total > 0) || total === 0) {
       setTimeout(() => setM3uProgress(null), 2000);
     }
   };
@@ -104,8 +137,8 @@ export default function App() {
   const handleEpgProgress = (current: number, total: number) => {
     setEpgProgress({ current, total });
     
-    // Clear progress after completion
-    if (current === total && total > 0) {
+    // Clear progress after completion or if no update needed
+    if ((current === total && total > 0) || total === 0) {
       setTimeout(() => setEpgProgress(null), 2000);
     }
   };

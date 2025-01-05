@@ -196,7 +196,7 @@ async def refresh_m3u(
 
         if needs_refresh:
 
-            async def progress_stream():
+            async def m3u_progress_stream():
                 # First download the M3U and get the file path
                 async for progress in m3u_service.download(url):
                     yield json.dumps(progress).encode() + b"\n"
@@ -254,7 +254,15 @@ async def refresh_m3u(
                     }
                 ).encode() + b"\n"
 
-            return StreamingResponse(progress_stream(), media_type="application/json")
+            return StreamingResponse(
+                m3u_progress_stream(), media_type="application/json"
+            )
+        else:
+            # Send completion signal even when no update is needed
+            return StreamingResponse(
+                iter([json.dumps({"type": "complete"}).encode() + b"\n"]),
+                media_type="application/json",
+            )
 
     except Exception as e:
         logger.error(f"Failed to refresh M3U: {str(e)}", exc_info=True)
@@ -270,33 +278,55 @@ async def refresh_epg(
     try:
         epg_service = EPGService(load_config())
 
+        needs_refresh = False
+
         if not force:
             # Check if the epg was last updated more than "interval" hours ago
             if epg_service.last_updated:
                 if epg_service.calculate_hours_since_update() < interval:
                     logger.info(
-                        f"EPG last updated < {interval} hours ago, will not redownload"
+                        f"EPG last updated at {epg_service.last_updated} (< {interval} hours ago), will not redownload"
                     )
-                    return {
-                        "message": f"EPG last updated < {interval} hours ago, will not redownload"
-                    }
-
-            logger.info(f"EPG last updated > {interval} hours ago, will redownload")
+                    needs_refresh = False
+                else:
+                    logger.info(
+                        f"EPG last updated at {epg_service.last_updated} (> {interval} hours ago), will redownload"
+                    )
+                    needs_refresh = True
+            else:
+                logger.info("EPG last updated is None, will redownload")
+                needs_refresh = True
         else:
             logger.info("Force refresh requested, will redownload")
+            needs_refresh = True
 
-        await epg_service.download(url)
+        logger.debug(f"Needs refresh: {needs_refresh}")
 
-        # save the config
-        config = load_config()
-        config["epg_url"] = epg_service.file
-        config["epg_last_updated"] = epg_service.last_updated
-        config["epg_update_interval"] = epg_service.update_interval
-        config["epg_file"] = epg_service.file
-        config["epg_content_length"] = epg_service.content_length
-        save_config(config)
+        if needs_refresh:
 
-        return {"status": "success"}
+            async def epg_progress_stream():
+                # First download the EPG and get the file path
+                async for progress in epg_service.download(url):
+                    yield json.dumps(progress).encode() + b"\n"
+
+                # save the config
+                config = load_config()
+                config["epg_url"] = epg_service.url
+                config["epg_last_updated"] = epg_service.last_updated
+                config["epg_update_interval"] = epg_service.update_interval
+                config["epg_file"] = epg_service.file
+                config["epg_content_length"] = epg_service.content_length
+                save_config(config)
+
+            return StreamingResponse(
+                epg_progress_stream(), media_type="application/json"
+            )
+        else:
+            # Send completion signal even when no update is needed
+            return StreamingResponse(
+                iter([json.dumps({"type": "complete"}).encode() + b"\n"]),
+                media_type="application/json",
+            )
 
     except Exception as e:
         logger.error(f"Failed to refresh EPG: {str(e)}")

@@ -1,10 +1,9 @@
-import aiohttp
 import logging
 import sys
 import os
-import json
 from pathlib import Path
 from datetime import datetime
+from ..common.download_helper import stream_download
 
 logging.basicConfig(
     level=logging.INFO,
@@ -18,51 +17,35 @@ logger = logging.getLogger(__name__)
 class EPGService:
     def __init__(self, config: dict):
         self.update_interval = config.get("epg_update_interval", 24)
-        self.last_updated = config.get("epg_last_updated", datetime.now().isoformat())
+        self.last_updated = config.get(
+            "epg_last_updated", datetime(1970, 1, 1).strftime("%Y-%m-%dT%H:%M:%S.%f")
+        )
         self.file = config.get("epg_file", "")
         self.url = config.get("epg_url", "")
+        self.content_length = config.get("epg_content_length", 0)
 
-    async def download(self, url: str) -> None:
-        """Download EPG XML and save it to file"""
-        if not url:
-            logger.warning("No EPG URL provided")
-            return
+    def calculate_hours_since_update(self):
+        last_updated = datetime.strptime(self.last_updated, "%Y-%m-%dT%H:%M:%S.%f")
+        return (datetime.now() - last_updated).total_seconds() / 3600
 
+    async def download(self, url: str):
+        """Download EPG XML and save to disk"""
         logger.info(f"Downloading EPG from {url}")
 
+        # Setup paths and save file
+        data_dir = os.path.join(Path(__file__).resolve().parents[3], "data")
+        epg_file = os.path.join(data_dir, "epg_content.xml")
+        os.makedirs(data_dir, exist_ok=True)
+
         try:
-            # Update the service URL
-            self.url = url
-
-            async with aiohttp.ClientSession() as session:
-                async with session.get(url) as response:
-                    if not response.ok:
-                        raise Exception(f"HTTP {response.status}: {response.reason}")
-
-                    content = await response.text()
-                    logger.info(f"Downloaded {len(content)} bytes")
-
-                    # Setup paths
-                    data_dir = os.path.join(Path(__file__).resolve().parents[3], "data")
-                    epg_file = os.path.join(data_dir, "epg_content.xml")
-                    config_file = os.path.join(data_dir, "config.json")
-
-                    # Ensure data directory exists
-                    os.makedirs(data_dir, exist_ok=True)
-                    logger.info(f"Data directory is at {data_dir}")
-
-                    # Write EPG content to file
-                    with open(epg_file, "w", encoding="utf-8") as file:
-                        file.write(content)
-                    logger.info(f"Wrote EPG content to {epg_file}")
-
-                    # update the epg_service with the new file and last_updated
-                    self.file = str(epg_file)
-                    self.last_updated = datetime.now().isoformat()
-                    self.content_length = len(content)
-
-                    return epg_file
+            async for progress in stream_download(url, self.content_length, epg_file):
+                yield progress
 
         except Exception as e:
             logger.error(f"Failed to download EPG: {str(e)}")
             raise
+
+        self.url = url
+        self.file = epg_file
+        self.last_updated = datetime.now().isoformat()
+        self.content_length = os.path.getsize(epg_file)
