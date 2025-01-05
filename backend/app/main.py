@@ -255,7 +255,6 @@ async def refresh_m3u(
 async def refresh_epg(
     url: str, interval: int, force: bool = False, db: AsyncSession = Depends(get_db)
 ):
-    """Download and process EPG file from URL"""
     logger.info("Checking if EPG needs to be refreshed")
     try:
         epg_service = EPGService(load_config())
@@ -267,26 +266,75 @@ async def refresh_epg(
             async def epg_progress_stream():
                 # Download EPG
                 async for progress in epg_service.download(url):
-                    yield json.dumps(progress).encode() + b"\n"
+                    # Check if progress is a tuple or dict
+                    if isinstance(progress, tuple):
+                        current, total = progress
+                        yield json.dumps(
+                            {
+                                "type": "progress",
+                                "current": current,
+                                "total": total,
+                                "message": "Downloading EPG file...",
+                            }
+                        ).encode() + b"\n"
+                    else:
+                        # If it's not a tuple, assume it's already formatted correctly
+                        yield json.dumps(progress).encode() + b"\n"
 
                 # Parse and store EPG data
                 channels, programs = await epg_service.read_and_parse(epg_service.file)
 
                 # Clear existing EPG data
                 logger.info(f"Clearing existing EPG data")
+                yield json.dumps(
+                    {
+                        "type": "progress",
+                        "current": 0,
+                        "total": len(programs),
+                        "message": "Clearing existing EPG data...",
+                    }
+                ).encode() + b"\n"
+
                 await db.execute(delete(models.EPGChannel))
                 await db.execute(delete(models.Program))
 
                 # Insert new data
                 logger.info(f"Inserting new EPG data")
+                yield json.dumps(
+                    {
+                        "type": "progress",
+                        "current": 0,
+                        "total": len(programs),
+                        "message": "Inserting EPG channels...",
+                    }
+                ).encode() + b"\n"
+
                 for channel in channels:
                     await db.execute(insert(models.EPGChannel).values(**channel))
 
-                logger.info(f"Inserting new EPG programs")
-                for program in programs:
+                logger.info(f"Inserting {len(programs)} EPG programs")
+                for i, program in enumerate(programs, 1):
+                    if i % 1000 == 0:  # Update progress every 1000 programs
+                        yield json.dumps(
+                            {
+                                "type": "progress",
+                                "current": i,
+                                "total": len(programs),
+                                "message": f"Inserting program data ({i}/{len(programs)})...",
+                            }
+                        ).encode() + b"\n"
                     await db.execute(insert(models.Program).values(**program))
 
                 logger.info(f"Committing changes")
+                yield json.dumps(
+                    {
+                        "type": "progress",
+                        "current": len(programs),
+                        "total": len(programs),
+                        "message": "Finalizing EPG update...",
+                    }
+                ).encode() + b"\n"
+
                 await db.commit()
 
                 # Update config
@@ -298,9 +346,7 @@ async def refresh_epg(
                 config["epg_content_length"] = epg_service.content_length
                 save_config(config)
 
-                yield json.dumps(
-                    {"type": "complete", "message": "EPG data updated"}
-                ).encode() + b"\n"
+                yield json.dumps({"type": "complete"}).encode() + b"\n"
 
             return StreamingResponse(
                 epg_progress_stream(), media_type="application/json"

@@ -24,10 +24,9 @@ interface SettingsModalProps {
   open: boolean;
   onClose: () => void;
   settings: Settings;
-  onSave: (settings: Settings) => void;
-  onThemeChange?: (theme: 'light' | 'dark' | 'system') => void;
-  onM3uProgress?: (current: number, total: number) => void;
-  onEpgProgress?: (current: number, total: number) => void;
+  onSave: (settings: Settings) => Promise<void>;
+  onM3uProgress?: (current: number, total: number | { type: 'complete' }) => void;
+  onEpgProgress?: (current: number, total: number | { type: 'complete' }) => void;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -35,7 +34,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onClose,
   settings,
   onSave,
-  onThemeChange,
   onM3uProgress,
   onEpgProgress,
 }) => {
@@ -221,7 +219,6 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               onChange={(e) => {
                 const newTheme = e.target.value as 'light' | 'dark' | 'system';
                 setFormState({ ...formState, theme: newTheme });
-                onThemeChange?.(newTheme);
               }}
             >
               <MenuItem value="light">Light</MenuItem>

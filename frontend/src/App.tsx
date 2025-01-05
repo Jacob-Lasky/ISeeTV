@@ -10,15 +10,30 @@ import type { Channel } from './models/Channel';
 import type { Settings } from './models/Settings';
 import MenuIcon from '@mui/icons-material/Menu';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
-import { DownloadProgress } from './components/DownloadProgress';
+import { LoadingPopup } from './components/LoadingPopup';
+
+// Interface for progress data state
+interface ProgressData {
+  current: number;
+  total: number;
+  message?: string;
+}
+
+// Interface for progress messages from backend
+interface ProgressMessage {
+  type: string;
+  current?: number;
+  total?: number;
+  message?: string;
+}
 
 export default function App() {
   const [selectedChannel, setSelectedChannel] = useState<Channel | undefined>();
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [settings, setSettings] = useState<Settings | null>(null);
   const [channelListOpen, setChannelListOpen] = useState(true);
-  const [m3uProgress, setM3uProgress] = useState<{ current: number; total: number } | null>(null);
-  const [epgProgress, setEpgProgress] = useState<{ current: number; total: number } | null>(null);
+  const [m3uProgress, setM3uProgress] = useState<ProgressData | null>(null);
+  const [epgProgress, setEpgProgress] = useState<ProgressData | null>(null);
   const channelListRef = useRef<{ refresh: () => Promise<void> }>(null);
   
   useEffect(() => {
@@ -125,21 +140,39 @@ export default function App() {
     await channelService.toggleFavorite(channel.guide_id);
   };
 
-  const handleM3uProgress = (current: number, total: number) => {
-    setM3uProgress({ current, total });
-    
-    // Clear progress after completion or if no update needed
-    if ((current === total && total > 0) || total === 0) {
-      setTimeout(() => setM3uProgress(null), 2000);
+  const handleM3uProgress = (current: number, total: number | ProgressMessage) => {
+    if (typeof total === 'object' && total.type === 'complete') {
+      setM3uProgress(null);
+    } else if (typeof total === 'number') {
+      setM3uProgress({ 
+        current, 
+        total,
+        message: undefined
+      });
+    } else if (typeof total === 'object') {
+      setM3uProgress({ 
+        current, 
+        total: total.current || 0,
+        message: total.message
+      });
     }
   };
 
-  const handleEpgProgress = (current: number, total: number) => {
-    setEpgProgress({ current, total });
-    
-    // Clear progress after completion or if no update needed
-    if ((current === total && total > 0) || total === 0) {
-      setTimeout(() => setEpgProgress(null), 2000);
+  const handleEpgProgress = (current: number, total: number | ProgressMessage) => {
+    if (typeof total === 'object' && total.type === 'complete') {
+      setEpgProgress(null);
+    } else if (typeof total === 'number') {
+      setEpgProgress({ 
+        current, 
+        total,
+        message: undefined
+      });
+    } else if (typeof total === 'object') {
+      setEpgProgress({ 
+        current, 
+        total: total.current || 0,
+        message: total.message
+      });
     }
   };
 
@@ -240,20 +273,10 @@ export default function App() {
           onM3uProgress={handleM3uProgress}
           onEpgProgress={handleEpgProgress}
         />
-        {m3uProgress && (
-          <DownloadProgress 
-            type="M3U" 
-            current={m3uProgress.current} 
-            total={m3uProgress.total} 
-          />
-        )}
-        {epgProgress && (
-          <DownloadProgress 
-            type="EPG" 
-            current={epgProgress.current} 
-            total={epgProgress.total} 
-          />
-        )}
+        <LoadingPopup 
+          m3uProgress={m3uProgress}
+          epgProgress={epgProgress}
+        />
       </BrowserRouter>
     </ThemeProvider>
   );

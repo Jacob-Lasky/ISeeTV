@@ -17,7 +17,7 @@ interface GetChannelsResponse {
 }
 
 interface ProgressCallback {
-  (current: number, total: number): void;
+  (current: number, total: number | { type: 'complete' }): void;
 }
 
 export const channelService = {
@@ -112,8 +112,7 @@ export const channelService = {
               if (data.type === 'progress' && onProgress) {
                 onProgress(data.current, data.total);
               } else if (data.type === 'complete') {
-                // Signal completion with total value
-                onProgress?.(100, 100);
+                onProgress?.(0, { type: 'complete' });
               }
             } catch (e) {
               console.warn('Failed to parse line:', line);
@@ -160,8 +159,7 @@ export const channelService = {
               if (data.type === 'progress' && onProgress) {
                 onProgress(data.current, data.total);
               } else if (data.type === 'complete') {
-                // Signal completion with total value
-                onProgress?.(100, 100);
+                onProgress?.(0, { type: 'complete' });
               }
             } catch (e) {
               console.warn('Failed to parse line:', line);
