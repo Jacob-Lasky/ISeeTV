@@ -269,21 +269,24 @@ async def refresh_epg(
                 async for progress in epg_service.download(url):
                     yield json.dumps(progress).encode() + b"\n"
 
-                # # Parse and store EPG data
-                # channels, programs = await epg_service.read_and_parse(epg_service.file)
+                # Parse and store EPG data
+                channels, programs = await epg_service.read_and_parse(epg_service.file)
 
-                # # Clear existing EPG data
-                # await db.execute(delete(models.EPGChannel))
-                # await db.execute(delete(models.Program))
+                # Clear existing EPG data
+                logger.info(f"Clearing existing EPG data")
+                await db.execute(delete(models.EPGChannel))
+                await db.execute(delete(models.Program))
 
-                # # Insert new data
-                # for channel in channels:
-                #     await db.execute(insert(models.EPGChannel).values(**channel))
+                # Insert new data
+                logger.info(f"Inserting new EPG data")
+                for channel in channels:
+                    await db.execute(insert(models.EPGChannel).values(**channel))
 
-                # for program in programs:
-                #     await db.execute(insert(models.Program).values(**program))
+                logger.info(f"Inserting new EPG programs")
+                for program in programs:
+                    await db.execute(insert(models.Program).values(**program))
 
-                # await db.commit()
+                await db.commit()
 
                 # Update config
                 config = load_config()
