@@ -286,6 +286,7 @@ async def refresh_epg(
                 for program in programs:
                     await db.execute(insert(models.Program).values(**program))
 
+                logger.info(f"Committing changes")
                 await db.commit()
 
                 # Update config

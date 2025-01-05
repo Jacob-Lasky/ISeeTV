@@ -107,9 +107,7 @@ class M3UService:
 
                     name = attrs.get("tvg-name", "")
 
-                    guide_id = generate_channel_id(
-                        attrs.get("tvg-id", None), name, attrs.get("tvg-logo", "")
-                    )
+                    guide_id = generate_channel_id(attrs.get("tvg-id", None), name)
 
                     current_channel = {
                         "guide_id": guide_id,

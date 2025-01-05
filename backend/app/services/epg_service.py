@@ -74,11 +74,6 @@ class EPGService:
                 channel_id = generate_channel_id(
                     channel.get("id"),
                     channel.find("display-name").text,
-                    (
-                        channel.find("icon").get("src")
-                        if channel.find("icon") is not None
-                        else None
-                    ),
                 )
 
                 if channel_id not in channel_ids:

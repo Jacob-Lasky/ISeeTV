@@ -1,12 +1,15 @@
 import hashlib
+import re
 
 
-def generate_channel_id(tvg_id: str | None, name: str, logo: str) -> str:
+def generate_channel_id(tvg_id: str | None, name: str) -> str:
     """Generate a unique channel ID prioritizing tvg-id if available"""
+    # sanitize id and name for a url
     if tvg_id:
-        # Use tvg-id directly as it's already a good unique identifier
-        return tvg_id
+        tvg_id = re.sub(r"[^a-zA-Z0-9]+", "-", tvg_id)
     else:
-        # Fallback to generate a unique ID for channels without tvg-id
-        unique_string = f"{name}:{logo}"
-        return hashlib.md5(unique_string.encode()).hexdigest()[:12]
+        tvg_id = "no-id"
+
+    name = re.sub(r"[^a-zA-Z0-9]+", "-", name)
+
+    return f"{tvg_id}-{name}"
