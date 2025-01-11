@@ -33,3 +33,6 @@ data/config.json
 data/m3u_content.txt
 data/epg_content.xml
 *.fuse_hidden*
+
+# Deveopment
+backend/dev.py
