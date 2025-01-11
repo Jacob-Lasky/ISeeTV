@@ -11,6 +11,8 @@ import type { Settings } from './models/Settings';
 import MenuIcon from '@mui/icons-material/Menu';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import { LoadingPopup } from './components/LoadingPopup';
+import { ProgressBar } from './components/EpgProgressBar';
+
 
 // Interface for progress data state
 interface ProgressData {
@@ -275,8 +277,8 @@ export default function App() {
         />
         <LoadingPopup 
           m3uProgress={m3uProgress}
-          epgProgress={epgProgress}
         />
+        <ProgressBar progress={epgProgress} />
       </BrowserRouter>
     </ThemeProvider>
   );
