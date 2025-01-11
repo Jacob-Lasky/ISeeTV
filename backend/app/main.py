@@ -619,44 +619,6 @@ def cleanup_channel_resources(guide_id: str):
     return {"message": f"No resources found for channel {guide_id}"}
 
 
-def transcode_audio_only(url: str, channel_dir: str, guide_id: str):
-    output_m3u8 = os.path.join(channel_dir, "output.m3u8")
-    segment_pattern = os.path.join(channel_dir, "segment%03d.ts")
-
-    process = subprocess.Popen(
-        [
-            "ffmpeg",
-            "-i",
-            url,
-            "-c:v",
-            "copy",
-            "-c:a",
-            "aac",
-            "-ar",
-            "44100",
-            "-b:a",
-            "128k",
-            "-ac",
-            "2",
-            "-f",
-            "hls",
-            "-hls_time",
-            "4",
-            "-hls_list_size",
-            "0",
-            "-hls_segment_filename",
-            segment_pattern,
-            "-hls_base_url",
-            f"/segments/{guide_id}/",  # Use the guide_id in the base URL
-            output_m3u8,
-        ],
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-    )
-
-    return process, output_m3u8
-
-
 # used by hls.js
 @app.get("/hls/{segment_path:path}")
 async def get_hls_segment(segment_path: str):

@@ -115,9 +115,9 @@ import os
 import tempfile
 
 
-def transcode_audio_only(url: str, temp_dir: str):
-    output_m3u8 = os.path.join(temp_dir, "output.m3u8")
-    segment_pattern = os.path.join(temp_dir, "segment%03d.ts")
+def transcode_audio_only(url: str, channel_dir: str, guide_id: str):
+    output_m3u8 = os.path.join(channel_dir, "output.m3u8")
+    segment_pattern = os.path.join(channel_dir, "segment%06d.ts")
 
     process = subprocess.Popen(
         [
@@ -125,25 +125,25 @@ def transcode_audio_only(url: str, temp_dir: str):
             "-i",
             url,
             "-c:v",
-            "copy",  # Copy video stream
+            "copy",
             "-c:a",
-            "aac",  # Transcode audio to AAC
+            "aac",
             "-ar",
-            "44100",  # Ensure 44.1kHz audio
+            "44100",
             "-b:a",
-            "128k",  # Audio bitrate
+            "128k",
             "-ac",
-            "2",  # Stereo audio
+            "2",
             "-f",
-            "hls",  # Output HLS format
+            "hls",
             "-hls_time",
-            "4",  # Segment length
+            "4",
             "-hls_list_size",
-            "0",  # Keep all segments
+            "0",
             "-hls_segment_filename",
             segment_pattern,
             "-hls_base_url",
-            f"/segments/",  # Correct base URL
+            f"/segments/{guide_id}/",  # Use the guide_id in the base URL
             output_m3u8,
         ],
         stdout=subprocess.PIPE,
