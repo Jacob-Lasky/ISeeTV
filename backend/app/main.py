@@ -32,6 +32,7 @@ from sqlalchemy import delete
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import update
 from sqlalchemy import insert
+import asyncio
 
 logging.basicConfig(
     level=logging.INFO,
@@ -72,7 +73,7 @@ class ChannelBase(BaseModel):
 codec_cache = {}
 
 
-async def get_codec(guide_id: str, original_url: str):
+async def get_codec(guide_id: str, channel_url: str):
     # Check cache
     if guide_id in codec_cache:
         return codec_cache[guide_id]
@@ -81,7 +82,7 @@ async def get_codec(guide_id: str, original_url: str):
         clear_cache()
 
     # Fetch and cache codec
-    codec = await get_video_codec(original_url)
+    codec = await get_video_codec(channel_url)
     logger.info(f"Cached codec for channel {guide_id}: {codec}")
     codec_cache[guide_id] = codec
     return codec
@@ -471,7 +472,7 @@ async def get_channel_groups(db: AsyncSession = Depends(get_db)):
 
 
 # Temporary directories for streaming
-stream_resources: Dict[str, Tuple[str, subprocess.Popen]] = {}
+STREAM_RESOURCES: Dict[str, Tuple[str, subprocess.Popen]] = {}
 
 # Keep track of mounted directories
 mounted_directories = {}
@@ -483,6 +484,61 @@ if os.path.exists(SEGMENTS_DIR):
     shutil.rmtree(SEGMENTS_DIR)
 os.makedirs(SEGMENTS_DIR, exist_ok=True)
 app.mount("/segments", StaticFiles(directory=SEGMENTS_DIR), name="segments")
+
+async def monitor_ffmpeg_process(guide_id: str, process: subprocess.Popen, stream_url: str):
+    """Monitor FFmpeg process and restart if it fails"""
+    # TODO: make these dynamic
+    SEGMENT_DURATION = 4  # Duration of each segment in seconds
+    TIMEOUT_MULTIPLIER = 1.5  # How many times the segment duration to wait before restart
+    TIMEOUT_THRESHOLD = SEGMENT_DURATION * TIMEOUT_MULTIPLIER  # 8 seconds in this case
+
+    while True:
+        try:
+            return_code = process.poll()
+
+            if guide_id not in STREAM_RESOURCES:
+                logger.warning(f"FFmpeg process for {guide_id} not found in STREAM_RESOURCES")
+                return
+
+            channel_dir, _ = STREAM_RESOURCES[guide_id]
+
+            if return_code is not None:  # Process has terminated
+                logger.warning(f"FFmpeg process for {guide_id} terminated with code {return_code}")
+
+                # Capture stderr output for debugging
+                stderr_output = process.stderr.read()
+
+                if stderr_output:
+                    logger.warning(f"FFmpeg stderr output: {stderr_output.decode('utf-8', errors='ignore')}")
+
+                if guide_id in STREAM_RESOURCES:
+                    # Start a new process
+                    new_process, _ = transcode_audio_only(stream_url, channel_dir, guide_id)
+                    STREAM_RESOURCES[guide_id] = (channel_dir, new_process)
+                    logger.info(f"Restarted FFmpeg process for {guide_id}")
+                    # Update the process we're monitoring
+                    process = new_process
+                else:
+                    logger.warning(f"Channel {guide_id} no longer in stream_resources")
+                    return
+            else:
+                # get the most recent .ts file modified time
+                most_recent_segment = max(os.path.getmtime(os.path.join(channel_dir, f)) for f in os.listdir(channel_dir) if f.endswith(".ts"))
+                time_since_last_segment = time.time() - most_recent_segment
+                logger.info(f"Time since last segment: {round(time_since_last_segment, 1):.1f} seconds")
+                if time_since_last_segment > TIMEOUT_THRESHOLD:
+                    logger.warning(f"FFmpeg process for {guide_id} is not producing segments")
+                    # restart the process
+                    new_process, _ = transcode_audio_only(stream_url, channel_dir, guide_id)
+                    STREAM_RESOURCES[guide_id] = (channel_dir, new_process)
+                    process = new_process
+                else:
+                    logger.debug(f"FFmpeg process for {guide_id} is producing segments")
+                    await asyncio.sleep(SEGMENT_DURATION)  # Check every X seconds
+
+        except Exception as e:
+            logger.error(f"Error monitoring FFmpeg process: {e}")
+        await asyncio.sleep(SEGMENT_DURATION)  # Check every X seconds
 
 
 @app.get("/stream/{guide_id}")
@@ -497,17 +553,17 @@ async def stream_channel(guide_id: str, db: AsyncSession = Depends(get_db)):
         raise HTTPException(status_code=404, detail="Channel not found")
 
     # Construct the m3u8 URL
-    original_url = f"{channel.url}.m3u8"
+    stream_url = f"{channel.url}.m3u8"
 
     # Create temp directory for this channel if it doesn't exist
-    if guide_id not in stream_resources:
+    if guide_id not in STREAM_RESOURCES:
         # Create channel-specific directory inside the segments directory
         channel_dir = os.path.join(SEGMENTS_DIR, guide_id)
         os.makedirs(channel_dir, exist_ok=True)
         logger.info(f"Created channel directory: {channel_dir}")
 
         # Start FFmpeg process
-        process, output_m3u8 = transcode_audio_only(original_url, channel_dir, guide_id)
+        process, output_m3u8 = transcode_audio_only(stream_url, channel_dir, guide_id)
 
         # Wait for the .m3u8 manifest to be ready
         timeout = 10
@@ -539,20 +595,23 @@ async def stream_channel(guide_id: str, db: AsyncSession = Depends(get_db)):
             )
 
         # Only store the resources after we know they're ready
-        stream_resources[guide_id] = (channel_dir, process)
+        STREAM_RESOURCES[guide_id] = (channel_dir, process)
         logger.info(
             f"Started FFmpeg process for channel {guide_id} with PID {process.pid}"
         )
 
         # Only after the new channel is ready, clean up other channels
-        for existing_channel in list(stream_resources.keys()):
+        for existing_channel in list(STREAM_RESOURCES.keys()):
             if existing_channel != guide_id:
                 logger.info(
                     f"Cleaning up existing channel {existing_channel} before switching"
                 )
                 cleanup_channel_resources(existing_channel)
 
-    channel_dir, _ = stream_resources[guide_id]
+        # Start the monitoring task
+        asyncio.create_task(monitor_ffmpeg_process(guide_id, process, stream_url))
+
+    channel_dir, _ = STREAM_RESOURCES[guide_id]
     output_m3u8 = os.path.join(channel_dir, "output.m3u8")
 
     # Verify the file exists before returning
@@ -583,7 +642,7 @@ def update_base_url(m3u8_path: str, mount_path: str):
 @app.get("/stream/cleanup")
 def cleanup_all_channel_resources():
     """Clean up resources for all channels."""
-    for guide_id in list(stream_resources.keys()):
+    for guide_id in list(STREAM_RESOURCES.keys()):
         cleanup_channel_resources(guide_id)
     for guide_id in os.listdir(SEGMENTS_DIR):
         logger.info(f"Cleaning up channel {guide_id}")
@@ -594,8 +653,8 @@ def cleanup_all_channel_resources():
 @app.get("/stream/{guide_id}/cleanup")
 def cleanup_channel_resources(guide_id: str):
     """Clean up resources for a specific channel."""
-    if guide_id in stream_resources:
-        channel_dir, process = stream_resources.pop(guide_id)
+    if guide_id in STREAM_RESOURCES:
+        channel_dir, process = STREAM_RESOURCES.pop(guide_id)
 
         # Terminate the FFmpeg process gracefully
         if process.poll() is None:
@@ -639,7 +698,7 @@ async def get_hls_segment(segment_path: str):
 @app.on_event("shutdown")
 def cleanup_temp_dirs():
     # Clean up all channels and the segments directory
-    for guide_id in list(stream_resources.keys()):
+    for guide_id in list(STREAM_RESOURCES.keys()):
         cleanup_channel_resources(guide_id)
     if os.path.exists(SEGMENTS_DIR):
         shutil.rmtree(SEGMENTS_DIR)
