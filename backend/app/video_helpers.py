@@ -55,8 +55,6 @@ def transcode_audio_only(stream_url: str, channel_dir: str, guide_id: str):
             "-reconnect", "1",
             "-reconnect_streamed", "1", 
             "-reconnect_delay_max", "10",
-            # "-headers", "Cache-Control: no-cache\r\n",  # Prevent caching
-            # "-reload", "1",
             "-i", stream_url,
             "-c:v", "copy",
             "-c:a", "aac",
