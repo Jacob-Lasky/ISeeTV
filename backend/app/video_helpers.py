@@ -2,7 +2,7 @@ import subprocess
 from fastapi import HTTPException
 import logging
 import sys
-import subprocess
+import os
 
 logging.basicConfig(
     level=logging.INFO,
@@ -45,11 +45,6 @@ async def get_video_codec(url: str) -> str:
         raise HTTPException(status_code=500, detail="Failed to analyze video codec.")
 
 
-import subprocess
-import os
-import tempfile
-
-
 def transcode_audio_only(stream_url: str, channel_dir: str, guide_id: str):
     output_m3u8 = os.path.join(channel_dir, "output.m3u8")
     segment_pattern = os.path.join(channel_dir, "segment%06d.ts")
@@ -60,6 +55,8 @@ def transcode_audio_only(stream_url: str, channel_dir: str, guide_id: str):
             "-reconnect", "1",
             "-reconnect_streamed", "1", 
             "-reconnect_delay_max", "10",
+            # "-headers", "Cache-Control: no-cache\r\n",  # Prevent caching
+            # "-reload", "1",
             "-i", stream_url,
             "-c:v", "copy",
             "-c:a", "aac",
