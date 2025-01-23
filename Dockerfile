@@ -20,14 +20,15 @@ WORKDIR /app
 RUN pip install poetry
 RUN poetry config virtualenvs.create false
 
-# Copy backend files
+# Copy dependency files first
 COPY backend/pyproject.toml backend/poetry.lock ./
-RUN poetry install --no-root --no-dev
+COPY backend/python-ffmpeg-video-streaming/ ./python-ffmpeg-video-streaming
+RUN poetry install --no-root
 
-# Copy frontend files
-COPY frontend/package*.json ./frontend/
+# Install frontend dependencies
 WORKDIR /app/frontend
-RUN npm install react-router-dom
+COPY frontend/package*.json ./
+RUN npm ci
 
 # Environment variables
 ENV PYTHONUNBUFFERED=1
@@ -40,12 +41,7 @@ RUN mkdir -p $DATA_DIRECTORY && \
     chown -R nobody:users $DATA_DIRECTORY && \
     chmod 777 $DATA_DIRECTORY
 
-# Make sure directories are writable
-RUN mkdir -p /app/frontend/node_modules/.cache && \
-    chown -R nobody:users /app && \
-    chmod -R 777 /app
-
-# Copy all application code
+# Copy application code last
 COPY backend /app/backend
 COPY frontend /app/frontend
 COPY data/init_db.py /app/data/
