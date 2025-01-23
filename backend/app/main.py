@@ -164,6 +164,12 @@ async def startup_event():
                 raise HTTPException(status_code=500, detail=str(e))
 
 
+# redirect to docs
+@app.get("/")
+async def redirect_to_docs():
+    return RedirectResponse(url="/docs")
+
+
 @app.post("/m3u/refresh")
 async def refresh_m3u(
     url: str, interval: int, force: bool = False, db: AsyncSession = Depends(get_db)
