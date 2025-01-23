@@ -1,5 +1,6 @@
 import { Channel } from '../models/Channel';
 import { ChannelGroup } from '../types/api';
+import { Settings } from '../models/Settings';
 import { API_URL } from '../config/api';
 
 interface GetChannelsParams {
@@ -13,6 +14,10 @@ interface GetChannelsResponse {
   total: number;
   skip: number;
   limit: number;
+}
+
+interface ProgressCallback {
+  (current: number, total: number | { type: 'complete' }): void;
 }
 
 export const channelService = {
@@ -73,13 +78,97 @@ export const channelService = {
     }
   },
 
-  async refreshM3U(url: string): Promise<void> {
-    const response = await fetch(`${API_URL}/m3u/refresh?url=${encodeURIComponent(url)}`, {
-      method: 'POST'
-    });
-    
+  async refreshM3U(
+    url: string, 
+    interval: number, 
+    force: boolean = false,
+    onProgress?: ProgressCallback
+  ): Promise<void> {
+    const response = await fetch(
+      `${API_URL}/m3u/refresh?url=${encodeURIComponent(url)}&interval=${interval}&force=${force}`, 
+      { method: 'POST' }
+    );
+
     if (!response.ok) {
       throw new Error(`Failed to refresh M3U: ${response.statusText}`);
+    }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (reader) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (!line) continue;
+            try {
+              const data = JSON.parse(line);
+              if (data.type === 'progress' && onProgress) {
+                onProgress(data.current, data.total);
+              } else if (data.type === 'complete') {
+                onProgress?.(0, { type: 'complete' });
+              }
+            } catch (e) {
+              console.warn('Failed to parse line:', line);
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    }
+  },
+
+  async refreshEPG(
+    url: string, 
+    interval: number, 
+    force: boolean = false,
+    onProgress?: ProgressCallback
+  ): Promise<void> {
+    const response = await fetch(
+      `${API_URL}/epg/refresh?url=${encodeURIComponent(url)}&interval=${interval}&force=${force}`, 
+      { method: 'POST' }
+    );
+    
+    if (!response.ok) {
+      throw new Error(`Failed to refresh EPG: ${response.statusText}`);
+    }
+
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (reader) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (!line) continue;
+            try {
+              const data = JSON.parse(line);
+              if (data.type === 'progress' && onProgress) {
+                onProgress(data.current, data.total);
+              } else if (data.type === 'complete') {
+                onProgress?.(0, { type: 'complete' });
+              }
+            } catch (e) {
+              console.warn('Failed to parse line:', line);
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
     }
   },
 
@@ -103,5 +192,27 @@ export const channelService = {
     if (!response.ok) {
       throw new Error(`HTTP error! status: ${response.status}`);
     }
+  },
+
+  async saveSettings(settings: Settings): Promise<void> {
+    const response = await fetch(`${API_URL}/settings/save`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify(settings),
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to save settings: ${response.statusText}`);
+    }
+  },
+
+  async getSettings(): Promise<Settings> {
+    const response = await fetch(`${API_URL}/settings`);
+    if (!response.ok) {
+      throw new Error(`Failed to load settings: ${response.statusText}`);
+    }
+    return response.json();
   },
 }; 

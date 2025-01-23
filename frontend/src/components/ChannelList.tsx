@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef } from 'react';
+import React, { useState, useCallback, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
 import {
   Box,
   ListItemButton,
@@ -12,7 +12,6 @@ import {
   Tab,
   InputAdornment,
   CircularProgress,
-  Typography,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -26,7 +25,7 @@ import { Channel } from '../models/Channel';
 import { channelService } from '../services/channelService';
 import { ChannelGroup } from '../types/api';
 import { recentChannelsService } from '../services/recentChannelsService';
-import { FixedSizeList } from 'react-window';
+import { VariableSizeList } from 'react-window';
 import AutoSizer from 'react-virtualized-auto-sizer';
 import { useNavigate } from 'react-router-dom';
 
@@ -37,8 +36,6 @@ interface ChannelListProps {
   onChannelSelect: (channel: Channel) => void;
   onToggleFavorite: (channel: Channel) => void;
   onRefresh?: (refreshFn: (() => Promise<void>) | undefined) => void;
-  showChannelNumbers?: boolean;
-  onToggleChannelNumbers?: () => void;
   onOpenSettings?: () => void;
 }
 
@@ -56,7 +53,6 @@ interface VirtualizedChannelListProps {
   selectedChannel?: Channel;
   onChannelSelect: (channel: Channel) => void;
   onToggleFavorite: (channel: Channel) => void;
-  showChannelNumbers?: boolean;
   initialScrollOffset?: number;
   onScroll?: (scrollOffset: number) => void;
 }
@@ -73,22 +69,33 @@ const VirtualizedChannelList: React.FC<VirtualizedChannelListProps> = ({
   selectedChannel,
   onChannelSelect,
   onToggleFavorite,
-  showChannelNumbers,
   initialScrollOffset = 0,
   onScroll,
 }) => {
-  const listRef = useRef<FixedSizeList>(null);
+  const listRef = useRef<VariableSizeList>(null);
+  const [expandedItems, setExpandedItems] = useState<Record<number, boolean>>({});
+  const rowRefs = useRef<Record<number, HTMLDivElement>>({});
   const navigate = useNavigate();
-
-  // Restore scroll position when items change
-  useEffect(() => {
-    if (listRef.current && initialScrollOffset > 0) {
-      listRef.current.scrollTo(initialScrollOffset);
-    }
-  }, [initialScrollOffset, items]);
 
   const handleScroll = ({ scrollOffset }: { scrollOffset: number }) => {
     onScroll?.(scrollOffset);
+  };
+
+  const getItemSize = (index: number) => {
+    const item = items[index];
+    if (!item) return 56;
+    if ('count' in item) return 56; // Group header height
+    
+    // Only expand if text is actually overflowing
+    const rowElement = rowRefs.current[index];
+    if (rowElement && expandedItems[index]) {
+      return rowElement.scrollHeight;
+    }
+    return 56; // Default height
+  };
+
+  const checkIfNeedsExpansion = (element: HTMLDivElement): boolean => {
+    return element.scrollHeight > element.clientHeight;
   };
 
   const Row = ({ index, style }: { index: number; style: React.CSSProperties }) => {
@@ -114,12 +121,38 @@ const VirtualizedChannelList: React.FC<VirtualizedChannelListProps> = ({
     // Channel item
     return (
       <ListItemButton
+        ref={(el) => {
+          if (el) rowRefs.current[index] = el;
+        }}
         onClick={() => {
           onChannelSelect(item);
           navigate(`/channel/${item.guide_id}`);
         }}
-        selected={item.channel_number === selectedChannel?.channel_number}
+        sx={{
+          transition: 'background-color 0s !important',
+          height: 'auto',
+          '&:hover': {
+            transition: 'background-color 0s !important',
+          }
+        }}
         style={style}
+        onMouseEnter={(e) => {
+          const element = e.currentTarget;
+          if (checkIfNeedsExpansion(element)) {
+            setExpandedItems(prev => {
+              const newState = { ...prev, [index]: true };
+              listRef.current?.resetAfterIndex(index);
+              return newState;
+            });
+          }
+        }}
+        onMouseLeave={() => {
+          setExpandedItems(prev => {
+            const newState = { ...prev, [index]: false };
+            listRef.current?.resetAfterIndex(index);
+            return newState;
+          });
+        }}
       >
         <IconButton
           size="small"
@@ -141,14 +174,21 @@ const VirtualizedChannelList: React.FC<VirtualizedChannelListProps> = ({
             >
               {item.name[0]}
             </Avatar>
-            {showChannelNumbers && (
-              <Typography variant="caption" sx={{ mt: 0.5 }}>
-                {item.channel_number}
-              </Typography>
-            )}
           </Box>
         </ListItemIcon>
-        <ListItemText primary={item.name} />
+        <ListItemText 
+          primary={item.name}
+          sx={{
+            '& .MuiTypography-root': {
+              display: '-webkit-box',
+              WebkitLineClamp: expandedItems[index] ? 'unset' : 2,
+              WebkitBoxOrient: 'vertical',
+              overflow: 'hidden',
+              lineHeight: '1.2em',
+              transition: 'all 0.3s ease',
+            }
+          }}
+        />
       </ListItemButton>
     );
   };
@@ -156,17 +196,17 @@ const VirtualizedChannelList: React.FC<VirtualizedChannelListProps> = ({
   return (
     <AutoSizer>
       {({ height, width }: AutoSizerProps) => (
-        <FixedSizeList
+        <VariableSizeList
           ref={listRef}
           height={height}
           width={width}
           itemCount={items.length}
-          itemSize={56}
+          itemSize={getItemSize}
           initialScrollOffset={initialScrollOffset}
           onScroll={handleScroll}
         >
           {Row}
-        </FixedSizeList>
+        </VariableSizeList>
       )}
     </AutoSizer>
   );
@@ -184,15 +224,13 @@ const debounce = <T extends (...args: any[]) => any>(
   };
 };
 
-export const ChannelList: React.FC<ChannelListProps> = ({
+export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelListProps>(({
   selectedChannel,
   onChannelSelect,
   onToggleFavorite,
   onRefresh,
-  showChannelNumbers = false,
-  onToggleChannelNumbers,
   onOpenSettings,
-}) => {
+}, ref) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [activeTab, setActiveTab] = useState<TabValue>('all');
   const [initialLoading, setLoading] = useState(true);
@@ -215,8 +253,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     if (debouncedSearchTerm) {
       const search = debouncedSearchTerm.toLowerCase();
       filtered = filtered.filter(c => 
-        c.name.toLowerCase().includes(search) ||
-        c.channel_number.toString().includes(search)
+        c.name.toLowerCase().includes(search)
       );
     }
 
@@ -233,8 +270,7 @@ export const ChannelList: React.FC<ChannelListProps> = ({
         // Flatten all channels from groupChannels
         const allChannels = Object.values(groupChannels).flat();
         return allChannels.filter(c => 
-          c.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase()) ||
-          c.channel_number.toString().includes(debouncedSearchTerm)
+          c.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
         );
       }
       return filteredChannels;
@@ -650,6 +686,17 @@ export const ChannelList: React.FC<ChannelListProps> = ({
     }, 300);
   };
 
+  // Expose refresh method via ref
+  useImperativeHandle(ref, () => ({
+    refresh: async () => {
+      if (activeTab === 'all') {
+        await loadGroups(true);
+      } else if (activeTab === 'favorites') {
+        await loadChannels(false);
+      }
+    }
+  }));
+
   return (
     <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       <Box sx={{ p: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
@@ -706,7 +753,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
             selectedChannel={selectedChannel}
             onChannelSelect={handleChannelSelect}
             onToggleFavorite={handleToggleFavorite}
-            showChannelNumbers={showChannelNumbers}
             initialScrollOffset={tabStates[activeTab].scrollPosition}
             onScroll={handleScroll}
           />
@@ -714,6 +760,6 @@ export const ChannelList: React.FC<ChannelListProps> = ({
       </Box>
     </Paper>
   );
-}; 
+});
 
 export type { ChannelListProps }; 
