@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, CircularProgress, Typography, Box } from '@mui/material';
+import { Dialog, DialogContent, CircularProgress, Typography, Box, LinearProgress } from '@mui/material';
 
 interface ProgressData {
   current: number;
@@ -8,22 +8,43 @@ interface ProgressData {
 
 interface LoadingPopupProps {
   m3uProgress: ProgressData | null;
+  epgProgress: ProgressData | null;
 }
 
-export const LoadingPopup = ({ m3uProgress }: LoadingPopupProps) => {
+export const LoadingPopup = ({ m3uProgress, epgProgress }: LoadingPopupProps) => {
+  const isLoading = m3uProgress !== null || epgProgress !== null;
+  
   return (
-    <Dialog open={m3uProgress !== null} maxWidth="xs" fullWidth>
+    <Dialog open={isLoading} maxWidth="sm" fullWidth>
       <DialogContent>
-        <Box sx={{ textAlign: 'center', py: 2 }}>
-          {m3uProgress && (
-            <Box>
-              <Typography variant="body1" gutterBottom>
-                {m3uProgress.message || `Updating M3U: ${Math.round((m3uProgress.current / m3uProgress.total) * 100)}%`}
+        {m3uProgress && (
+          <>
+            <Typography>Loading M3U Playlist...</Typography>
+            <LinearProgress 
+              variant="determinate" 
+              value={(m3uProgress.current / m3uProgress.total) * 100} 
+            />
+            {m3uProgress.message && (
+              <Typography variant="caption" color="textSecondary">
+                {m3uProgress.message}
               </Typography>
-              <CircularProgress variant="determinate" value={(m3uProgress.current / m3uProgress.total) * 100} />
-            </Box>
-          )}
-        </Box>
+            )}
+          </>
+        )}
+        {epgProgress && (
+          <>
+            <Typography>Loading EPG Data...</Typography>
+            <LinearProgress 
+              variant="determinate" 
+              value={(epgProgress.current / epgProgress.total) * 100} 
+            />
+            {epgProgress.message && (
+              <Typography variant="caption" color="textSecondary">
+                {epgProgress.message}
+              </Typography>
+            )}
+          </>
+        )}
       </DialogContent>
     </Dialog>
   );

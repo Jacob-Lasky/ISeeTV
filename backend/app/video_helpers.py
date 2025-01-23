@@ -1,8 +1,9 @@
-import subprocess
-from fastapi import HTTPException
+import threading
 import logging
 import sys
 import os
+import requests
+import subprocess
 
 logging.basicConfig(
     level=logging.INFO,
@@ -13,76 +14,106 @@ logging.basicConfig(
 logger = logging.getLogger(__name__)
 
 
-async def get_video_codec(url: str) -> str:
-    logger.info(f"Determining video codec for {url}")
-    try:
-        result = subprocess.run(
-            [
-                "ffprobe",
-                # "-headers",
-                # "User-Agent: Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/58.0.3029.110 Safari/537.36",
-                "-i",
-                url,
-                "-show_streams",
-                "-select_streams",
-                "v",
-                "-show_entries",
-                "stream=codec_name",
-                "-of",
-                "csv=p=0",
-                "-loglevel",
-                "error",
-            ],
-            stdout=subprocess.PIPE,
-            stderr=subprocess.PIPE,
-            text=True,
-            check=True,
-        )
-        return result.stdout.strip()
-    except subprocess.CalledProcessError as e:
-        # Log the error and raise an HTTP exception
-        logger.error(f"FFprobe failed: {e.stderr}")
-        raise HTTPException(status_code=500, detail="Failed to analyze video codec.")
+def dict_to_ffmpeg_command(params: dict) -> list:
+    command = ["ffmpeg"]
+    # Add all parameters except output
+    for key, value in params.items():
+        if key != "output":
+            command.append(key)
+            if value is not None:
+                command.append(value)
+    # Add output file last
+    if "output" in params:
+        command.append(params["output"])
+    return command
 
 
-def transcode_audio_only(stream_url: str, channel_dir: str, guide_id: str):
-    output_m3u8 = os.path.join(channel_dir, "output.m3u8")
-    segment_pattern = os.path.join(channel_dir, "segment%06d.ts")
+class StreamMonitor:
+    def __init__(self, process: subprocess.Popen):
+        self.process = process
+        self.stop_flag = False
+        self._thread = None
+        self.logger = logging.getLogger(__name__)
 
+    def start(self):
+        self._thread = threading.Thread(target=self._monitor)
+        self._thread.daemon = True
+        self._thread.start()
+
+    def stop(self):
+        self.stop_flag = True
+        if self.process:
+            try:
+                self.process.terminate()
+                self.process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                self.process.kill()
+                self.process.wait()
+
+    def _monitor(self):
+        while not self.stop_flag:
+            if self.process.poll() is not None:
+                self.logger.error(
+                    f"FFmpeg process ended with code {self.process.returncode}"
+                )
+                break
+
+            line = self.process.stderr.readline()
+            if line:
+                line = line.strip()
+                if line:
+                    self.logger.debug(f"FFmpeg: {line}")
+
+            if self.stop_flag:
+                break
+
+
+async def process_video(
+    stream_url: str, output_dir: str, m3u8_name: str, guide_id: str
+) -> tuple:
+    output_m3u8 = os.path.join(output_dir, m3u8_name)
+
+    # Get correct stream url
+    response = requests.get(stream_url, allow_redirects=True)
+    redirected_url = response.url
+
+    ffmpeg_params = {
+        "-y": None,  # Overwrite output files
+        "-i": redirected_url,
+        # Video settings
+        "-c:v": "copy",  # Use stream copy for video
+        "-c:a": "aac",  # Convert audio to AAC
+        "-ar": "44100",  # Audio sample rate
+        "-ac": "2",  # Stereo audio
+        "-b:a": "128k",  # Audio bitrate
+        # HLS settings
+        "-f": "hls",
+        "-hls_time": "4",
+        "-hls_list_size": "0",
+        "-hls_flags": "append_list+omit_endlist",
+        "-hls_segment_filename": os.path.join(output_dir, "stream_%06d.ts"),
+        "-hls_base_url": f"/segments/{guide_id}/",
+        "-hls_segment_type": "mpegts",
+        # Stream settings
+        "-reconnect": "1",
+        "-reconnect_streamed": "1",
+        "-reconnect_delay_max": "10",
+        # Output file
+        "output": output_m3u8,
+    }
+
+    command_list = dict_to_ffmpeg_command(ffmpeg_params)
+
+    # Create process with full stderr logging
     process = subprocess.Popen(
-        [
-            "ffmpeg",
-            "-reconnect", "1",
-            "-reconnect_streamed", "1", 
-            "-reconnect_delay_max", "10",
-            "-i", stream_url,
-            "-c:v", "copy",
-            "-c:a", "aac",
-            "-ar", "44100",
-            "-b:a", "128k",
-            "-ac", "2",
-            "-f", "hls",
-            "-hls_time", "4",
-            "-hls_list_size", "0",
-            "-hls_flags", "append_list",
-            "-hls_segment_filename", segment_pattern,
-            "-hls_base_url", f"/segments/{guide_id}/",
-            "-timeout", "10",
-            output_m3u8,
-        ],
+        command_list,
         stdout=subprocess.PIPE,
         stderr=subprocess.PIPE,
+        universal_newlines=True,  # This helps with reading the output
     )
 
-    return process, output_m3u8
+    # Create and start monitor
+    monitor = StreamMonitor(process)
+    monitor.start()
 
-
-def transcode_video(url: str, gpu_available: bool):
-    if gpu_available:
-        logger.debug("GPU detected. Using GPU for transcoding.")
-        raise NotImplementedError("GPU transcoding is not implemented yet.")
-        # return transcode_with_gpu(url)
-    else:
-        logger.debug("No GPU detected. Using CPU for transcoding.")
-        raise NotImplementedError("CPU transcoding is not implemented yet.")
-        # return transcode_to_h264(url)
+    return process, monitor

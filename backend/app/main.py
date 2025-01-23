@@ -1,6 +1,6 @@
 from app.services.epg_service import EPGService
 from fastapi import FastAPI, Depends, HTTPException, Request
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, RedirectResponse
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
@@ -15,7 +15,7 @@ from .services.epg_service import EPGService
 from sqlalchemy import func
 from fastapi.responses import StreamingResponse
 import requests
-from .video_helpers import get_video_codec, transcode_video, transcode_audio_only
+from .video_helpers import process_video
 from .database import get_db, AsyncSessionLocal
 import time
 import subprocess
@@ -33,6 +33,10 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import update
 from sqlalchemy import insert
 import asyncio
+from urllib.parse import urlparse
+import ffmpeg_streaming
+from ffmpeg_streaming import Formats
+
 
 logging.basicConfig(
     level=logging.INFO,
@@ -69,25 +73,6 @@ class ChannelBase(BaseModel):
     last_watched: Optional[datetime.datetime] = None
 
 
-# In-memory cache for channel codecs
-codec_cache = {}
-
-
-async def get_codec(guide_id: str, channel_url: str):
-    # Check cache
-    if guide_id in codec_cache:
-        return codec_cache[guide_id]
-    else:
-        # clear the cache
-        clear_cache()
-
-    # Fetch and cache codec
-    codec = await get_video_codec(channel_url)
-    logger.info(f"Cached codec for channel {guide_id}: {codec}")
-    codec_cache[guide_id] = codec
-    return codec
-
-
 # gpu availability cache
 gpu_availability_cache = {}
 
@@ -106,12 +91,6 @@ async def is_gpu_available(guide_id: str):
             return is_gpu_available
         except FileNotFoundError:
             return False
-
-
-def clear_cache():
-    global codec_cache
-    codec_cache = {}
-    logger.info("Cleared codec cache")
 
 
 def save_config(config: dict):
@@ -480,179 +459,86 @@ async def get_channel_groups(db: AsyncSession = Depends(get_db)):
 # Temporary directories for streaming
 STREAM_RESOURCES: Dict[str, Tuple[str, subprocess.Popen]] = {}
 
-# Keep track of mounted directories
-mounted_directories = {}
-
 # Mount a single static files directory for all segments
-SEGMENTS_DIR = "/tmp/iseetv_segments"
-# remove existing segments directory
-if os.path.exists(SEGMENTS_DIR):
-    shutil.rmtree(SEGMENTS_DIR)
+SEGMENTS_DIR = os.path.join(os.environ["DATA_DIRECTORY"], "segments")
+logger.info(f"SEGMENTS_DIR: {SEGMENTS_DIR}")
 os.makedirs(SEGMENTS_DIR, exist_ok=True)
 app.mount("/segments", StaticFiles(directory=SEGMENTS_DIR), name="segments")
 
-async def monitor_ffmpeg_process(guide_id: str, process: subprocess.Popen, stream_url: str):
-    """Monitor FFmpeg process and restart if it fails"""
-    # TODO: make these dynamic
-    SEGMENT_DURATION = 4  # Duration of each segment in seconds
-    TIMEOUT_MULTIPLIER = 1.5  # How many times the segment duration to wait before restart
-    TIMEOUT_THRESHOLD = SEGMENT_DURATION * TIMEOUT_MULTIPLIER  # 8 seconds in this case
-
-    while True:
-        try:
-            return_code = process.poll()
-
-            if guide_id not in STREAM_RESOURCES:
-                logger.warning(f"FFmpeg process for {guide_id} not found in STREAM_RESOURCES")
-                return
-
-            channel_dir, _ = STREAM_RESOURCES[guide_id]
-
-            if return_code is not None:  # Process has terminated
-                logger.warning(f"FFmpeg process for {guide_id} terminated with code {return_code}")
-
-                # Capture stderr output for debugging
-                stderr_output = process.stderr.read()
-
-                if stderr_output:
-                    logger.warning(f"FFmpeg stderr output: {stderr_output.decode('utf-8', errors='ignore')}")
-
-                if guide_id in STREAM_RESOURCES:
-                    # Start a new process
-                    new_process, _ = transcode_audio_only(stream_url, channel_dir, guide_id)
-                    STREAM_RESOURCES[guide_id] = (channel_dir, new_process)
-                    logger.info(f"Restarted FFmpeg process for {guide_id}")
-                    # Update the process we're monitoring
-                    process = new_process
-                else:
-                    logger.warning(f"Channel {guide_id} no longer in stream_resources")
-                    return
-            else:
-                # get the most recent .ts file modified time
-                most_recent_segment = max(os.path.getmtime(os.path.join(channel_dir, f)) for f in os.listdir(channel_dir) if f.endswith(".ts"))
-                time_since_last_segment = time.time() - most_recent_segment
-                logger.info(f"Time since last segment: {round(time_since_last_segment, 1):.1f} seconds")
-                if time_since_last_segment > TIMEOUT_THRESHOLD:
-                    logger.warning(f"FFmpeg process for {guide_id} is not producing segments")
-                    # restart the process
-                    new_process, _ = transcode_audio_only(stream_url, channel_dir, guide_id)
-                    STREAM_RESOURCES[guide_id] = (channel_dir, new_process)
-                    process = new_process
-                else:
-                    logger.debug(f"FFmpeg process for {guide_id} is producing segments")
-                    await asyncio.sleep(SEGMENT_DURATION)  # Check every X seconds
-
-        except Exception as e:
-            logger.error(f"Error monitoring FFmpeg process: {e}")
-        await asyncio.sleep(SEGMENT_DURATION)  # Check every X seconds
-
 
 @app.get("/stream/{guide_id}")
-async def stream_channel(guide_id: str, db: AsyncSession = Depends(get_db)):
-    # Fetch the channel from the database using async syntax
+async def stream_channel(
+    guide_id: str,
+    db: AsyncSession = Depends(get_db),
+    timeout: int = 10,
+):
     result = await db.execute(
         select(models.Channel).where(models.Channel.guide_id == guide_id)
     )
     channel = result.scalar_one_or_none()
-
     if not channel:
         raise HTTPException(status_code=404, detail="Channel not found")
 
-    # Construct the m3u8 URL
     stream_url = f"{channel.url}.m3u8"
+    m3u8_name = "stream.m3u8"
+    # Create channel-specific directory
+    channel_dir = os.path.join(SEGMENTS_DIR, guide_id)
+    os.makedirs(channel_dir, exist_ok=True)
 
-    # Create temp directory for this channel if it doesn't exist
-    if guide_id not in STREAM_RESOURCES:
-        # Create channel-specific directory inside the segments directory
-        channel_dir = os.path.join(SEGMENTS_DIR, guide_id)
-        os.makedirs(channel_dir, exist_ok=True)
+    output_m3u8 = os.path.join(channel_dir, m3u8_name)
+
+    if not os.path.exists(output_m3u8):
         logger.info(f"Created channel directory: {channel_dir}")
 
-        # Start FFmpeg process
-        process, output_m3u8 = transcode_audio_only(stream_url, channel_dir, guide_id)
-
-        # Wait for the .m3u8 manifest to be ready
-        timeout = 10
-        start_time = time.time()
-        manifest_ready = False
-
-        while not manifest_ready and time.time() - start_time < timeout:
-            if os.path.exists(output_m3u8):
-                # Check if at least one segment exists
-                segments = [f for f in os.listdir(channel_dir) if f.endswith(".ts")]
-                if segments:
-                    manifest_ready = True
-                    break
-            time.sleep(0.5)
-
-        if not manifest_ready:
-            # Clean up if manifest isn't ready
-            if process.poll() is None:
-                process.terminate()
-                try:
-                    process.wait(timeout=5)
-                except subprocess.TimeoutExpired:
-                    process.kill()
-            if os.path.exists(channel_dir):
-                shutil.rmtree(channel_dir)
-            raise HTTPException(
-                status_code=500,
-                detail="Failed to generate HLS manifest and segments.",
-            )
-
-        # Only store the resources after we know they're ready
-        STREAM_RESOURCES[guide_id] = (channel_dir, process)
-        logger.info(
-            f"Started FFmpeg process for channel {guide_id} with PID {process.pid}"
+        # Start the video processing
+        ffmpeg_process, monitor = await process_video(
+            stream_url, channel_dir, m3u8_name, guide_id
         )
+        STREAM_RESOURCES[guide_id] = {
+            "dir": channel_dir,
+            "ffmpeg_process": ffmpeg_process,
+            "monitor": monitor,
+        }
+        logger.info(f"Started video processing for channel {guide_id}")
 
-        # Only after the new channel is ready, clean up other channels
+        # Clean up other channels
         for existing_channel in list(STREAM_RESOURCES.keys()):
             if existing_channel != guide_id:
-                logger.info(
-                    f"Cleaning up existing channel {existing_channel} before switching"
-                )
+                logger.info(f"Cleaning up existing channel {existing_channel}")
                 cleanup_channel_resources(existing_channel)
 
-        # Start the monitoring task
-        asyncio.create_task(monitor_ffmpeg_process(guide_id, process, stream_url))
-
-    channel_dir, _ = STREAM_RESOURCES[guide_id]
-    output_m3u8 = os.path.join(channel_dir, "output.m3u8")
-
-    # Verify the file exists before returning
-    if not os.path.exists(output_m3u8):
-        # If file doesn't exist, clean up and raise error
-        cleanup_channel_resources(guide_id)
-        raise HTTPException(
-            status_code=500,
-            detail="M3U8 file not found. Channel may have been cleaned up.",
-        )
+        # Wait for the manifest to be ready
+        x = 0
+        while True:
+            logger.info(
+                f"Waiting for manifest creation for channel {guide_id}{'.' * ((x%3) + 1)}"
+            )
+            if os.path.exists(output_m3u8):
+                break
+            else:
+                await asyncio.sleep(1)
+                x += 1
+                if x > timeout:
+                    raise TimeoutError(
+                        f"Manifest creation timedout for channel {guide_id}"
+                    )
 
     return FileResponse(output_m3u8, media_type="application/vnd.apple.mpegurl")
 
 
-def update_base_url(m3u8_path: str, mount_path: str):
-    """Update the base URL in the m3u8 file to match the mount path"""
-    if os.path.exists(m3u8_path):
-        with open(m3u8_path, "r") as f:
-            content = f.read()
-
-        # Update the base URL
-        content = content.replace("/segments/", f"{mount_path}/")
-
-        with open(m3u8_path, "w") as f:
-            f.write(content)
+def remove_channel_directory(channel_dir: str):
+    if os.path.exists(channel_dir):
+        logger.info(f"Removing channel directory: {channel_dir}")
+        shutil.rmtree(channel_dir, ignore_errors=True)
+    else:
+        logger.warning(f"Channel directory {channel_dir} does not exist")
 
 
 @app.get("/stream/cleanup")
 def cleanup_all_channel_resources():
     """Clean up resources for all channels."""
-    for guide_id in list(STREAM_RESOURCES.keys()):
-        cleanup_channel_resources(guide_id)
     for guide_id in os.listdir(SEGMENTS_DIR):
-        logger.info(f"Cleaning up channel {guide_id}")
-        shutil.rmtree(os.path.join(SEGMENTS_DIR, guide_id))
+        cleanup_channel_resources(guide_id)
     return {"message": "Cleaned up resources for all channels"}
 
 
@@ -660,54 +546,33 @@ def cleanup_all_channel_resources():
 def cleanup_channel_resources(guide_id: str):
     """Clean up resources for a specific channel."""
     if guide_id in STREAM_RESOURCES:
-        channel_dir, process = STREAM_RESOURCES.pop(guide_id)
+        logger.info(f"Cleaning up resources for channel {guide_id}")
+        channel_dir = STREAM_RESOURCES[guide_id]["dir"]
+        ffmpeg_process = STREAM_RESOURCES[guide_id]["ffmpeg_process"]
+        monitor = STREAM_RESOURCES[guide_id]["monitor"]
 
-        # Terminate the FFmpeg process gracefully
-        if process.poll() is None:
-            logger.info(f"Terminating FFmpeg process for channel {guide_id}")
-            process.terminate()
-            try:
-                process.wait(timeout=5)
-            except subprocess.TimeoutExpired:
-                logger.warning(
-                    f"FFmpeg process for channel {guide_id} didn't terminate gracefully, killing it"
-                )
-                process.kill()
-
+        STREAM_RESOURCES.pop(guide_id)
         # Remove the channel directory
-        if os.path.exists(channel_dir):
-            logger.info(f"Removing channel directory: {channel_dir}")
-            shutil.rmtree(channel_dir, ignore_errors=True)
+        remove_channel_directory(channel_dir)
+
+        # Stop the ffmpeg process
+        monitor.stop()
 
         return {"message": f"Cleaned up resources for channel {guide_id}"}
 
     return {"message": f"No resources found for channel {guide_id}"}
 
 
-# used by hls.js
-@app.get("/hls/{segment_path:path}")
-async def get_hls_segment(segment_path: str):
-    # Proxy the segment requests to the external HLS server
-    segment_url = f"https://medcoreplatplus.xyz:443/hls/{segment_path}"
-    logger.debug(f"Fetching HLS segment from {segment_url}")
-    response = requests.get(segment_url, stream=True)
-
-    if response.status_code == 200:
-        return StreamingResponse(
-            response.iter_content(chunk_size=1024), media_type="video/MP2T"
-        )
-    raise HTTPException(
-        status_code=response.status_code, detail="Failed to fetch segment"
-    )
-
-
-@app.on_event("shutdown")
-def cleanup_temp_dirs():
-    # Clean up all channels and the segments directory
-    for guide_id in list(STREAM_RESOURCES.keys()):
-        cleanup_channel_resources(guide_id)
-    if os.path.exists(SEGMENTS_DIR):
-        shutil.rmtree(SEGMENTS_DIR)
+# serve the .ts files from the /app/data/segments/{guide_id} directory
+@app.get("/segments/{guide_id}/{segment_path:path}")
+async def get_hls_segment(guide_id: str, segment_path: str):
+    file_path = os.path.join(SEGMENTS_DIR, guide_id, segment_path)
+    headers = {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+    }
+    return FileResponse(file_path, media_type="video/MP2T", headers=headers)
 
 
 @app.post("/settings/save")
@@ -752,3 +617,11 @@ async def get_settings():
     except Exception as e:
         logger.error(f"Failed to load settings: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.on_event("shutdown")
+def cleanup_temp_dirs():
+    # Clean up all channels and the segments directory
+    cleanup_all_channel_resources()
+    if os.path.exists(SEGMENTS_DIR):
+        shutil.rmtree(SEGMENTS_DIR)

@@ -22,7 +22,6 @@ RUN poetry config virtualenvs.create false
 
 # Copy dependency files first
 COPY backend/pyproject.toml backend/poetry.lock ./
-COPY backend/python-ffmpeg-video-streaming/ ./python-ffmpeg-video-streaming
 RUN poetry install --no-root
 
 # Install frontend dependencies

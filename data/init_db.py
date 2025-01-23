@@ -13,6 +13,13 @@ try:
     conn = sqlite3.connect("/app/data/sql_app.db")
     cursor = conn.cursor()
 
+    # # For development purposes, drop existing tables if they exist
+    # logger.info("Dropping existing tables...")
+    # cursor.execute("DROP TABLE IF EXISTS channels")
+    # cursor.execute("DROP TABLE IF EXISTS channel_streams")
+    # cursor.execute("DROP TABLE IF EXISTS epg_channels")
+    # cursor.execute("DROP TABLE IF EXISTS programs")
+
     logger.info("Creating channels table...")
     cursor.execute(
         """CREATE TABLE IF NOT EXISTS channels (
