@@ -31,10 +31,20 @@ jobs:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python .scripts/update_readme.py
 
-      - name: Commit and push changes
+      - name: Generate Access Token
+        id: generate_token
+        uses: tibdex/github-app-token@v1
+        with:
+          app_id: ${{ secrets.GITHUB_APP_ID }}
+          private_key: ${{ secrets.ISEETV_PRIVATE_KEY }}
+      
+      - name: Push Changes and Commit
+        env:
+          PAT: ${{ steps.generate_token.outputs.token }}
         run: |
           git config --global user.name "github-actions[bot]"
           git config --global user.email "github-actions[bot]@users.noreply.github.com"
+          git remote set-url origin https://x-access-token:${PAT}@github.com/${{ github.repository }}.git
           git add README.md
           git commit -m "Update README due to label change on issue ${GITHUB_EVENT_ISSUE_NUMBER}"
           git push
