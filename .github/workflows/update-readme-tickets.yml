@@ -6,6 +6,9 @@ on:
       - labeled
       - unlabeled
 
+permissions:
+  contents: write
+
 jobs:
   update-readme:
     if: github.event.label.name == 'inprogress'
