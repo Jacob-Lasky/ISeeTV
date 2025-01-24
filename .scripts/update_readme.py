@@ -2,7 +2,7 @@ import requests
 import os
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
-REPO = "username/repo"  # Replace with your actual repo (e.g., "Jacob-Lasky/ISeeTV")
+REPO = "Jacob-Lasky/ISeeTV"
 
 headers = {
     "Authorization": f"Bearer {GITHUB_TOKEN}",
@@ -40,7 +40,7 @@ def update_readme(issues):
         milestone = issue.get("milestone", {}).get(
             "title", "None"
         )  # Get milestone title or 'None'
-        title = f"[{issue['title']}]({issue['html_url']})"  # Hyperlink the title
+        title = f"[{issue['title']}]({issue['html_url']})"
         table.append(f"| {title} | {milestone} |\n")
 
     # Replace content between markers
