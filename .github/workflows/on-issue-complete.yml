@@ -1,5 +1,7 @@
 # This workflow is triggered when an issue is closed
 # It will remove the "inprogress" label from the issue
+name: Issue Closed
+run-name: ${{ github.event.issue.title }} was closed
 on:
   issues:
     types:
@@ -17,4 +19,4 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
-          gh issue edit ${GITHUB_EVENT_PATH} --remove-label inprogress
+          gh issue edit ${{ github.event.issue.number }} --remove-label inprogress
