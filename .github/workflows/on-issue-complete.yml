@@ -1,0 +1,20 @@
+# This workflow is triggered when an issue is closed
+# It will remove the "inprogress" label from the issue
+on:
+  issues:
+    types:
+      - closed
+
+jobs:
+  remove-inprogress-label:
+    runs-on: ubuntu-latest
+    steps:
+      # Checkout the repository to set up the environment
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      # Use GitHub CLI to remove the "inprogress" label
+      - name: Remove inprogress label
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          gh issue edit ${GITHUB_EVENT_PATH} --remove-label inprogress
