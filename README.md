@@ -7,10 +7,6 @@ The ISeeTV project seeks to build a docker-based IPTV client for desktop and mob
 - Easy to deploy
 - Easy to contribute
 
-## In-Progress issues
-<!-- START TICKETS -->
-<!-- END TICKETS -->
-
 ## Planned Features:
 ### v1.0.0
 <table style="width: 100%; border-collapse: collapse; text-align: center;">
@@ -95,6 +91,10 @@ The ISeeTV project seeks to build a docker-based IPTV client for desktop and mob
     </tr>
   </tbody>
 </table>
+
+## In-Progress issues
+<!-- START TICKETS -->
+<!-- END TICKETS -->
 
 ## UI:
 ![image](https://github.com/user-attachments/assets/30fffa09-fbca-45a5-a6ef-4c3c6ff2907b)
