@@ -60,13 +60,16 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
 
           const proxyUrl = `${API_URL}/stream/${channel.guide_id}`;
           const hls = new Hls({
+            // API reference: https://github.com/video-dev/hls.js/blob/master/docs/API.md
             maxBufferLength: Infinity,  // the maximum number of seconds to buffer
-            maxMaxBufferLength: Infinity,  // allow up to 120 seconds
+            maxMaxBufferLength: Infinity,
+            backBufferLength: 120, // allow up to 120 seconds
+            frontBufferFlushThreshold: 60, // in-memory buffer flush threshold in seconds
             manifestLoadingMaxRetry: 10,
             manifestLoadingRetryDelay: 500,  // retry every X milliseconds
             levelLoadingMaxRetry: 5,  // Retry level loading X times
             enableWorker: true,
-            liveDurationInfinity: true,  // Indicates it's a live stream
+            liveDurationInfinity: false,  // Indicates it's a live stream, but cannot go forward in the stream if we've ever paused
           });
 
           hlsRef.current = hls;

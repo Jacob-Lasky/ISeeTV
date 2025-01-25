@@ -1,24 +1,21 @@
 import sqlite3
+import os
 import logging
 
-# Configure logging
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s: %(asctime)s - %(message)s",
+logger = logging.getLogger("ISeeTV-InitDB")
+logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
+logger.setFormatter(
+    logging.Formatter("%(name)s | %(levelname)s: %(asctime)s - %(message)s")
 )
-logger = logging.getLogger(__name__)
 
 try:
+    # # for development purposes, delete the  entire database
+    # logger.warning("Deleting database...")
+    # os.remove("/app/data/sql_app.db")
+
     logger.info("Connecting to database...")
     conn = sqlite3.connect("/app/data/sql_app.db")
     cursor = conn.cursor()
-
-    # # For development purposes, drop existing tables if they exist
-    # logger.info("Dropping existing tables...")
-    # cursor.execute("DROP TABLE IF EXISTS channels")
-    # cursor.execute("DROP TABLE IF EXISTS channel_streams")
-    # cursor.execute("DROP TABLE IF EXISTS epg_channels")
-    # cursor.execute("DROP TABLE IF EXISTS programs")
 
     logger.info("Creating channels table...")
     cursor.execute(

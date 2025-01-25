@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 from app import models, database
 from typing import Optional, Dict, Tuple
 from pydantic import BaseModel
-import logging
+from app.common.logger import Logger
 import sys
 import datetime
 from .services.m3u_service import M3UService
@@ -38,13 +38,12 @@ import ffmpeg_streaming
 from ffmpeg_streaming import Formats
 
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s: %(asctime)s - %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
+logger = Logger(
+    name="ISeeTV-Backend",
+    verbose=os.environ.get("VERBOSE", "false"),
+    log_level=os.environ.get("LOG_LEVEL", "INFO"),
+    color="YELLOW",
 )
-
-logger = logging.getLogger(__name__)
 
 DATA_DIRECTORY = os.environ.get("DATA_DIRECTORY")
 CONFIG_FILE = os.path.join(DATA_DIRECTORY, "config.json")
@@ -470,7 +469,7 @@ app.mount("/segments", StaticFiles(directory=SEGMENTS_DIR), name="segments")
 async def stream_channel(
     guide_id: str,
     db: AsyncSession = Depends(get_db),
-    timeout: int = 10,
+    timeout: int = 30,
 ):
     result = await db.execute(
         select(models.Channel).where(models.Channel.guide_id == guide_id)
@@ -508,12 +507,20 @@ async def stream_channel(
                 cleanup_channel_resources(existing_channel)
 
         # Wait for the manifest to be ready
+        # However, if the channel directory is deleted, this indicates that the stream was stopped
         x = 0
         while True:
             logger.info(
                 f"Waiting for manifest creation for channel {guide_id}{'.' * ((x%3) + 1)}"
             )
-            if os.path.exists(output_m3u8):
+            if not os.path.exists(channel_dir):
+                msg = "Channel directory not found, likely the stream was manually stopped"
+                logger.info(msg)
+                raise HTTPException(
+                    status_code=404,
+                    detail=msg,
+                )
+            elif os.path.exists(output_m3u8):
                 break
             else:
                 await asyncio.sleep(1)

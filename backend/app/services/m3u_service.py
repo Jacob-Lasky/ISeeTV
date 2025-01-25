@@ -4,20 +4,19 @@ import re
 import hashlib
 import sys
 import os
-import logging
+from app.common.logger import Logger
 from pathlib import Path
 from datetime import datetime
 import math
 from ..common.download_helper import stream_download
 from ..common.utils import generate_channel_id
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s: %(asctime)s - %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
+logger = Logger(
+    "ISeeTV-M3UService",
+    os.environ.get("VERBOSE", "false"),
+    os.environ.get("LOG_LEVEL", "INFO"),
+    color="GREEN",
 )
-
-logger = logging.getLogger(__name__)
 
 
 class M3UService:

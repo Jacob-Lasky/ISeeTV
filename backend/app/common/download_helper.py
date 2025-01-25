@@ -1,8 +1,13 @@
 import aiohttp
-import logging
 import os
+from app.common.logger import Logger
 
-logger = logging.getLogger(__name__)
+logger = Logger(
+    "ISeeTV-DownloadHelper",
+    os.environ.get("VERBOSE", "false"),
+    os.environ.get("LOG_LEVEL", "INFO"),
+    color="LIGHT_BLUE",
+)
 
 
 async def stream_download(url: str, expected_size: int, output_file: str):

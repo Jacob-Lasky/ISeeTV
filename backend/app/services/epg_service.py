@@ -1,4 +1,4 @@
-import logging
+from app.common.logger import Logger
 import sys
 import os
 from pathlib import Path
@@ -11,13 +11,12 @@ from typing import Tuple, List, Dict
 import re
 import hashlib
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s: %(asctime)s - %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
+logger = Logger(
+    "ISeeTV-EPGService",
+    os.environ.get("VERBOSE", "false"),
+    os.environ.get("LOG_LEVEL", "INFO"),
+    color="LIGHT_GREEN",
 )
-
-logger = logging.getLogger(__name__)
 
 
 class EPGService:

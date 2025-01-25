@@ -1,17 +1,16 @@
 import threading
-import logging
+from app.common.logger import Logger
 import sys
 import os
 import requests
 import subprocess
 
-logging.basicConfig(
-    level=logging.INFO,
-    format="%(levelname)s: %(asctime)s - %(message)s",
-    handlers=[logging.StreamHandler(sys.stdout)],
+logger = Logger(
+    "ISeeTV-VideoHelpers",
+    os.environ.get("VERBOSE", "false"),
+    os.environ.get("LOG_LEVEL", "INFO"),
+    color="LIGHT_BLUE",
 )
-
-logger = logging.getLogger(__name__)
 
 
 def dict_to_ffmpeg_command(params: dict) -> list:
@@ -33,14 +32,21 @@ class StreamMonitor:
         self.process = process
         self.stop_flag = False
         self._thread = None
-        self.logger = logging.getLogger(__name__)
+        self.logger = Logger(
+            "ISeeTV-StreamMonitor",
+            os.environ.get("VERBOSE", "false"),
+            os.environ.get("LOG_LEVEL", "INFO"),
+            color="BLUE",
+        )
 
     def start(self):
+        self.logger.info("Starting stream monitor")
         self._thread = threading.Thread(target=self._monitor)
         self._thread.daemon = True
         self._thread.start()
 
     def stop(self):
+        self.logger.info("Stopping stream monitor")
         self.stop_flag = True
         if self.process:
             try:
@@ -103,6 +109,7 @@ async def process_video(
     }
 
     command_list = dict_to_ffmpeg_command(ffmpeg_params)
+    logger.debug(f"FFmpeg command: {command_list}")
 
     # Create process with full stderr logging
     process = subprocess.Popen(
