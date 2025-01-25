@@ -1,37 +1,45 @@
 name: Update README on Label Change
+
 on:
   issues:
     types:
       - labeled
       - unlabeled
+
 permissions:
   contents: write
   pull-requests: write
+
 jobs:
   update-readme:
     if: github.event.label.name == 'inprogress'
     runs-on: ubuntu-latest
+
     steps:
       - name: Checkout repository
         uses: actions/checkout@v3
+        
       - name: Generate Temporary Access Token
         id: get_workflow_token
         uses: peter-murray/workflow-application-token-action@v4
         with:
           application_id: ${{ secrets.ISEETV_APP_ID }}
           application_private_key: ${{ secrets.ISEETV_PRIVATE_KEY }}
+
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
           python-version: "3.10"
+
       - name: Install dependencies
         run: pip install requests
+
       - name: Run README update script
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python .scripts/update_readme.py
       
-      - name: Create Pull Request
+      - name: Create and Merge Pull Request
         env:
           GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
         run: |
@@ -73,6 +81,9 @@ jobs:
             -d '{
               "merge_method": "merge"
             }'
-
-      - name: Delete branch
-        run: git branch -D $branch_name
+            
+          # Delete the branch after merge
+          # Wait a moment to ensure merge is complete
+          sleep 5
+          git push origin --delete $branch_name
+          
