@@ -22,7 +22,7 @@ jobs:
         id: get_workflow_token
         uses: peter-murray/workflow-application-token-action@v4
         with:
-          application_id: ${{ secrets.GITHUB_APP_ID }}
+          application_id: ${{ secrets.ISEETV_APP_ID }}
           application_private_key: ${{ secrets.ISEETV_PRIVATE_KEY }}
 
       - name: Set up Python
