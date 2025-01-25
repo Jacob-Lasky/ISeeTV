@@ -15,10 +15,17 @@ import {
   IconButton,
   CircularProgress,
   Box,
+  Typography,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import { Settings } from '../models/Settings';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { channelService } from '../services/channelService';
+import HelpIcon from '@mui/icons-material/Help';
+import Link from '@mui/material/Link';
+import GitHubIcon from '@mui/icons-material/GitHub';
+import RedditIcon from '@mui/icons-material/Reddit';
 
 interface SettingsModalProps {
   open: boolean;
@@ -45,6 +52,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     updateOnStart: true,
     theme: 'dark'
   });
+
+  const [activeTab, setActiveTab] = useState(0);
 
   useEffect(() => {
     if (settings) {
@@ -131,6 +140,13 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     }
   };
 
+  // Add tab panel component
+  const TabPanel: React.FC<{ children: React.ReactNode; value: number; index: number }> = ({ children, value, index }) => (
+    <Box sx={{ display: value === index ? 'block' : 'none', py: 2 }}>
+      {children}
+    </Box>
+  );
+
   return (
     <Dialog 
       open={open} 
@@ -139,103 +155,135 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       fullWidth
       disableEscapeKeyDown={!formState.m3uUrl}
     >
-      <DialogTitle>
-        {!formState.m3uUrl ? 'Initial Setup Required' : 'Settings'}
-      </DialogTitle>
       <DialogContent>
-        <Stack spacing={3} sx={{ mt: 2 }}>
-          {!formState.m3uUrl && (
-            <Box sx={{ mb: 2 }}>
-              Please enter an M3U URL to get started.
-            </Box>
-          )}
-          {/* M3U URL with Refresh Icon */}
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <TextField
-              label="M3U URL"
-              required
-              fullWidth
-              value={formState.m3uUrl}
-              onChange={(e) => setFormState({ ...formState, m3uUrl: e.target.value })}
-              error={!formState.m3uUrl}
-              helperText={!formState.m3uUrl ? "M3U URL is required" : ""}
-            />
-            <TextField
-              label="Update Interval (hours)"
-              type="number"
-              sx={{ ml: 1, width: '300px' }}
-              value={formState.m3uUpdateInterval}
-              onChange={(e) => setFormState({ ...formState, m3uUpdateInterval: Number(e.target.value) })}
-            />
-            <IconButton
-              onClick={handleM3uRefreshClick}
-              edge="end"
-              sx={{ ml: 1 }}
-              title="Force M3U Refresh"
-            >
-              {loading ? <CircularProgress size={24} /> : <RefreshIcon />}
-            </IconButton>
-          </Box>
-          
-          {/* EPG URL with Refresh Icon */}
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <TextField
-              label="EPG URL (Optional)"
-              fullWidth
-              value={formState.epgUrl}
-              onChange={(e) => setFormState({ ...formState, epgUrl: e.target.value })}
-            />
-            <TextField
-              label="Update Interval (hours)"
-              type="number"
-              sx={{ ml: 1, width: '300px' }}
-              value={formState.epgUpdateInterval}
-              onChange={(e) => setFormState({ ...formState, epgUpdateInterval: Number(e.target.value) })}
-            />
-            <IconButton
-              onClick={handleEpgRefreshClick}
-              edge="end"
-              sx={{ ml: 1 }}
-              title="Force EPG Refresh"
-            >
-              <RefreshIcon />
-            </IconButton>
-          </Box>
-          
-          <FormControlLabel
-            control={
-              <Switch
-                checked={formState.updateOnStart}
-                onChange={(e) => setFormState({ ...formState, updateOnStart: e.target.checked })}
+        <Tabs 
+          value={activeTab} 
+          onChange={(_, newValue) => setActiveTab(newValue)}
+          sx={{ borderBottom: 1, borderColor: 'divider', mb: 2 }}
+        >
+          <Tab label="Settings" />
+          <Tab label="Help" />
+        </Tabs>
+
+        <TabPanel value={activeTab} index={0}>
+          <Stack spacing={3}>
+            {!formState.m3uUrl && (
+              <Box sx={{ mb: 2 }}>
+                Please enter an M3U URL to get started.
+              </Box>
+            )}
+            {/* M3U URL with Refresh Icon */}
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <TextField
+                label="M3U URL"
+                required
+                fullWidth
+                value={formState.m3uUrl}
+                onChange={(e) => setFormState({ ...formState, m3uUrl: e.target.value })}
+                error={!formState.m3uUrl}
+                helperText={!formState.m3uUrl ? "M3U URL is required" : ""}
               />
-            }
-            label="Update on App Start"
-          />
-          
-          <FormControl fullWidth>
-            <InputLabel>Theme</InputLabel>
-            <Select
-              value={formState.theme}
-              onChange={(e) => {
-                const newTheme = e.target.value as 'light' | 'dark' | 'system';
-                setFormState({ ...formState, theme: newTheme });
-              }}
+              <TextField
+                label="Update Interval (hours)"
+                type="number"
+                sx={{ ml: 1, width: '300px' }}
+                value={formState.m3uUpdateInterval}
+                onChange={(e) => setFormState({ ...formState, m3uUpdateInterval: Number(e.target.value) })}
+              />
+              <IconButton
+                onClick={handleM3uRefreshClick}
+                edge="end"
+                sx={{ ml: 1 }}
+                title="Force M3U Refresh"
+              >
+                {loading ? <CircularProgress size={24} /> : <RefreshIcon />}
+              </IconButton>
+            </Box>
+            
+            {/* EPG URL with Refresh Icon */}
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <TextField
+                label="EPG URL (Optional)"
+                fullWidth
+                value={formState.epgUrl}
+                onChange={(e) => setFormState({ ...formState, epgUrl: e.target.value })}
+              />
+              <TextField
+                label="Update Interval (hours)"
+                type="number"
+                sx={{ ml: 1, width: '300px' }}
+                value={formState.epgUpdateInterval}
+                onChange={(e) => setFormState({ ...formState, epgUpdateInterval: Number(e.target.value) })}
+              />
+              <IconButton
+                onClick={handleEpgRefreshClick}
+                edge="end"
+                sx={{ ml: 1 }}
+                title="Force EPG Refresh"
+              >
+                <RefreshIcon />
+              </IconButton>
+            </Box>
+            
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formState.updateOnStart}
+                  onChange={(e) => setFormState({ ...formState, updateOnStart: e.target.checked })}
+                />
+              }
+              label="Update on App Start"
+            />
+            
+            <FormControl fullWidth>
+              <InputLabel>Theme</InputLabel>
+              <Select
+                value={formState.theme}
+                onChange={(e) => {
+                  const newTheme = e.target.value as 'light' | 'dark' | 'system';
+                  setFormState({ ...formState, theme: newTheme });
+                }}
+              >
+                <MenuItem value="light">Light</MenuItem>
+                <MenuItem value="dark">Dark</MenuItem>
+                <MenuItem value="system">System</MenuItem>
+              </Select>
+            </FormControl>
+            
+            <Button 
+              variant="contained" 
+              onClick={handleSave}
+              fullWidth
+              disabled={!formState.m3uUrl}
             >
-              <MenuItem value="light">Light</MenuItem>
-              <MenuItem value="dark">Dark</MenuItem>
-              <MenuItem value="system">System</MenuItem>
-            </Select>
-          </FormControl>
-          
-          <Button 
-            variant="contained" 
-            onClick={handleSave}
-            fullWidth
-            disabled={!formState.m3uUrl}
-          >
-            Save Settings
-          </Button>
-        </Stack>
+              Save Settings
+            </Button>
+          </Stack>
+        </TabPanel>
+
+        <TabPanel value={activeTab} index={1}>
+          <Stack spacing={3}>
+            <Typography variant="h6" gutterBottom>
+              Community & Support
+            </Typography>
+            <Link 
+              href="https://github.com/Jacob-Lasky/iseetv" 
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+            >
+              <GitHubIcon /> GitHub Project Page
+            </Link>
+            <Link 
+              href="https://reddit.com/r/iseetv" 
+              target="_blank"
+              rel="noopener noreferrer"
+              sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
+            >
+              <RedditIcon /> ISeeTV Subreddit
+            </Link>
+          </Stack>
+        </TabPanel>
       </DialogContent>
     </Dialog>
   );
