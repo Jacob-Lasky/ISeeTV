@@ -64,8 +64,8 @@ jobs:
             -H "Accept: application/vnd.github.v3+json" \
             https://api.github.com/repos/${{ github.repository }}/pulls \
             -d '{
-              "title": "Update README for issue #${{ github.event.issue.number }}",
-              "body": "Automated README update due to label change on issue #${{ github.event.issue.number }}",
+              "title": "Update README for 'inprogress' tickets",
+              "body": "Automated README update due to label change on issue",
               "head": "'$branch_name'",
               "base": "master"
             }')
