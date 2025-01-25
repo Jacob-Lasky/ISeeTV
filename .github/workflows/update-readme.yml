@@ -5,6 +5,7 @@ on:
     types:
       - labeled
       - unlabeled
+      - closed
 
 permissions:
   contents: write
@@ -12,7 +13,7 @@ permissions:
 
 jobs:
   update-readme:
-    if: github.event.label.name == 'inprogress'
+    if: github.event.label.name == 'inprogress' || github.event.action == 'closed'
     runs-on: ubuntu-latest
 
     steps:
