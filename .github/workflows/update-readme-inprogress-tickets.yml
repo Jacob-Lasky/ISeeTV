@@ -37,7 +37,7 @@ jobs:
       - name: Run README update script
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        run: python .scripts/update_readme.py
+        run: python .scripts/update_readme_inprogress_tickets.py
       
       - name: Create and Merge Pull Request
         env:
