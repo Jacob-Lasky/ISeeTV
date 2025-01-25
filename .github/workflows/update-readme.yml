@@ -39,7 +39,6 @@ jobs:
         run: python .scripts/update_readme.py
 
       - name: Create and Merge Pull Request
-        uses: cli/cli@v2
         env:
           GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
         run: |
@@ -59,3 +58,6 @@ jobs:
           gh auth login --with-token <<< "${{ steps.get_workflow_token.outputs.token }}"
           pr_url=$(gh pr create --title "Update README" --body "Automated README update" --base master --head $branch_name)
           gh pr merge --auto --merge "$pr_url"
+
+      - name: Delete branch
+        run: git branch -D $branch_name
