@@ -8,6 +8,7 @@ on:
 
 permissions:
   contents: write
+  pull-requests: write
 
 jobs:
   update-readme:
@@ -37,27 +38,39 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python .scripts/update_readme.py
-
-      - name: Create and Merge Pull Request
+      
+      - name: Create Pull Request
         env:
           GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
         run: |
+          # Create a new branch
+          branch_name="readme-update-issue-${{ github.event.issue.number }}"
+          git checkout -b $branch_name
+          
+          # Configure git
           git config --global user.name "ReadmeUpdater"
           git config --global user.email "ReadmeUpdater@users.noreply.github.com"
           
-          # Create new branch
-          branch_name="readme-update-${GITHUB_SHA::8}"
-          git checkout -b $branch_name
-          
           # Commit changes
           git add README.md
-          git commit -m "Update README due to 'inprogress' label change"
+          git commit -m "Update README due to label change on issue #${{ github.event.issue.number }}"
+          
+          # Push the new branch
           git push origin $branch_name
           
-          # Create and merge PR using GitHub CLI
+          # Create PR using GitHub CLI
           gh auth login --with-token <<< "${{ steps.get_workflow_token.outputs.token }}"
-          pr_url=$(gh pr create --title "Update README" --body "Automated README update" --base master --head $branch_name)
-          gh pr merge --auto --merge "$pr_url"
+          gh pr create \
+            --title "Update README for issue #${{ github.event.issue.number }}" \
+            --body "Automated README update due to label change on issue #${{ github.event.issue.number }}" \
+            --base master \
+            --head $branch_name
+            
+          # Wait a moment for PR checks to start
+          sleep 10
+          
+          # Auto-merge the PR if all checks pass
+          gh pr merge $branch_name --auto --merge
 
       - name: Delete branch
         run: git branch -D $branch_name
