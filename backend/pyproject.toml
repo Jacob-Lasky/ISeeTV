@@ -19,6 +19,47 @@ syncpg = "^1.1.3"
 watchgod = "^0.8.2"
 python-ffmpeg-video-streaming = "^0.1.16"
 
+[tool.poetry.group.dev.dependencies]
+ruff = "^0.9.3"
+mypy = "^1.14.1"
+black = "^24.10.0"
+types-requests = "^2.32.0.20241016"
+
+[tool.black]
+line-length = 88
+target-version = ['py311']
+include = '\.pyi?$'
+
+[tool.ruff]
+line-length = 88
+lint.select = ["E", "F", "I", "UP"]
+lint.ignore = ["E501"]
+
+[tool.ruff.lint.isort]
+force-single-line = true
+order-by-type = true
+
+[tool.ruff.lint.per-file-ignores]
+"__init__.py" = ["F401"]
+
+[tool.ruff.lint.pydocstyle]
+convention = "google"
+
+[tool.mypy]
+python_version = "3.11"
+disallow_untyped_defs = true
+check_untyped_defs = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+strict_optional = true
+exclude = ["dev.py", "_dev.py"]
+
+[tool.poetry.scripts]
+lint = "poetry run ruff check ."
+format = "poetry run black ."
+typecheck = "poetry run mypy ."
+
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

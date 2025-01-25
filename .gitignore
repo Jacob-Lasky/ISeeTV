@@ -37,3 +37,5 @@ data/epg_content.xml
 
 # Deveopment
 backend/dev.py
+.ruff_cache/
+.mypy_cache/

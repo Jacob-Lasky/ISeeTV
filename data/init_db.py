@@ -1,12 +1,14 @@
-import sqlite3
-import os
 import logging
+import os
+import sqlite3
 
+logging.basicConfig(
+    format="%(name)s | %(levelname)s: %(asctime)s - %(message)s",
+    datefmt="%Y-%m-%d %H:%M:%S",
+)
 logger = logging.getLogger("ISeeTV-InitDB")
 logger.setLevel(os.environ.get("LOG_LEVEL", "INFO"))
-logger.setFormatter(
-    logging.Formatter("%(name)s | %(levelname)s: %(asctime)s - %(message)s")
-)
+
 
 try:
     # # for development purposes, delete the  entire database

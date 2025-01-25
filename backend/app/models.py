@@ -1,6 +1,14 @@
-from sqlalchemy import Column, Integer, String, DateTime, Boolean, func, ForeignKey
-from app.database import Base
 import datetime
+
+from sqlalchemy import Boolean
+from sqlalchemy import Column
+from sqlalchemy import DateTime
+from sqlalchemy import ForeignKey
+from sqlalchemy import Integer
+from sqlalchemy import String
+from sqlalchemy import func
+
+from app.database import Base
 
 
 class Channel(Base):

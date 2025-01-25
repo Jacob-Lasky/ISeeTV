@@ -1,15 +1,17 @@
-from typing import List
-from ..models import Channel
-import re
 import hashlib
-import sys
-import os
-from app.common.logger import Logger
-from pathlib import Path
-from datetime import datetime
 import math
-from ..common.download_helper import stream_download
-from ..common.utils import generate_channel_id
+import os
+import re
+from collections.abc import AsyncGenerator
+from datetime import datetime
+from pathlib import Path
+from typing import Any
+from typing import TypedDict
+
+from app.common.download_helper import ProgressDict
+from app.common.download_helper import stream_download
+from app.common.logger import Logger
+from app.common.utils import generate_channel_id
 
 logger = Logger(
     "ISeeTV-M3UService",
@@ -19,8 +21,18 @@ logger = Logger(
 )
 
 
+class ChannelDict(TypedDict):
+    guide_id: str
+    name: str
+    url: str
+    group: str
+    logo: str | None
+    is_missing: bool
+    is_favorite: bool
+
+
 class M3UService:
-    def __init__(self, config: dict):
+    def __init__(self, config: dict[str, Any]) -> None:
         self.update_interval = config.get("m3u_update_interval", 24)
         self.last_updated = config.get(
             "m3u_last_updated", datetime(1970, 1, 1).strftime("%Y-%m-%dT%H:%M:%S.%f")
@@ -29,13 +41,13 @@ class M3UService:
         self.url = config.get("m3u_url", "")
         self.content_length = config.get("m3u_content_length", 0)
 
-    def calculate_hours_since_update(self):
+    def calculate_hours_since_update(self) -> float:
         if not self.last_updated:
             return -math.inf
         last_updated = datetime.strptime(self.last_updated, "%Y-%m-%dT%H:%M:%S.%f")
         return (datetime.now() - last_updated).total_seconds() / 3600
 
-    async def download(self, url: str):
+    async def download(self, url: str) -> AsyncGenerator[ProgressDict, None]:
         """Download M3U file from URL and save to disk"""
         logger.info(f"Downloading M3U from {url}")
 
@@ -57,10 +69,12 @@ class M3UService:
         self.last_updated = datetime.now().isoformat()
         self.content_length = os.path.getsize(m3u_file)
 
-    async def read_and_parse(self, file_path: str) -> List[Channel]:
+    async def read_and_parse(
+        self, file_path: str
+    ) -> tuple[list[ChannelDict], set[str]]:
         """Read M3U file from disk and parse into channels"""
         try:
-            with open(file_path, "r", encoding="utf-8") as file:
+            with open(file_path, encoding="utf-8") as file:
                 content = file.read()
 
             channels = self.parse_m3u(content)
@@ -71,7 +85,7 @@ class M3UService:
 
             # Set is_missing=0 for all channels in the update
             for channel in channels:
-                channel["is_missing"] = 0
+                channel["is_missing"] = False
 
             return channels, new_guide_ids
 
@@ -89,11 +103,11 @@ class M3UService:
         """Sanitize name to remove special characters to be used in url"""
         return re.sub(r"[^a-zA-Z0-9]+", "-", name)
 
-    def parse_m3u(self, content: str) -> List[Channel]:
+    def parse_m3u(self, content: str) -> list[ChannelDict]:
         """Parse M3U content into channel objects"""
         lines = content.split("\n")
-        channels = []
-        current_channel = None
+        channels: list[ChannelDict] = []
+        current_channel: ChannelDict | None = None
 
         for line in lines:
             line = line.strip()
@@ -113,6 +127,9 @@ class M3UService:
                         "name": name,
                         "group": attrs.get("group-title", "Uncategorized"),
                         "logo": attrs.get("tvg-logo"),
+                        "url": "",  # Will be set when we get the URL line
+                        "is_missing": False,
+                        "is_favorite": False,
                     }
 
             elif line.startswith("http"):

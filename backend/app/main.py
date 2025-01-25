@@ -1,42 +1,41 @@
-from app.services.epg_service import EPGService
-from fastapi import FastAPI, Depends, HTTPException, Request
-from fastapi.responses import FileResponse, RedirectResponse
-from fastapi.staticfiles import StaticFiles
-from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy.orm import Session
-from app import models, database
-from typing import Optional, Dict, Tuple
-from pydantic import BaseModel
-from app.common.logger import Logger
-import sys
-import datetime
-from .services.m3u_service import M3UService
-from .services.epg_service import EPGService
-from sqlalchemy import func
-from fastapi.responses import StreamingResponse
-import requests
-from .video_helpers import process_video
-from .database import get_db, AsyncSessionLocal
-import time
-import subprocess
-import os
-import tempfile
-import shutil
-import time
-import signal
-from starlette.staticfiles import StaticFiles
-from starlette.routing import Mount
-import json
-from sqlalchemy.future import select
-from sqlalchemy import delete
-from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import update
-from sqlalchemy import insert
+# Standard library imports
 import asyncio
-from urllib.parse import urlparse
-import ffmpeg_streaming
-from ffmpeg_streaming import Formats
+import datetime
+import json
+import os
+import shutil
+import subprocess
+from collections.abc import AsyncGenerator
+from typing import Any
+from typing import Optional
 
+# Third-party imports
+from fastapi import Depends
+from fastapi import FastAPI
+from fastapi import HTTPException
+from fastapi import Request
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse
+from fastapi.responses import StreamingResponse
+from fastapi.staticfiles import StaticFiles
+from pydantic import BaseModel
+from sqlalchemy import delete
+from sqlalchemy import func
+from sqlalchemy import insert
+from sqlalchemy import select
+from sqlalchemy import update
+from sqlalchemy.ext.asyncio import AsyncSession
+
+# Local imports
+from app import models
+from app.common.logger import Logger
+
+from .database import AsyncSessionLocal
+from .database import get_db
+from .services.epg_service import EPGService
+from .services.m3u_service import M3UService
+from .video_helpers import process_video
 
 logger = Logger(
     name="ISeeTV-Backend",
@@ -45,7 +44,7 @@ logger = Logger(
     color="YELLOW",
 )
 
-DATA_DIRECTORY = os.environ.get("DATA_DIRECTORY")
+DATA_DIRECTORY = os.environ.get("DATA_DIRECTORY", "/app/data")
 CONFIG_FILE = os.path.join(DATA_DIRECTORY, "config.json")
 
 
@@ -72,18 +71,31 @@ class ChannelBase(BaseModel):
     last_watched: Optional[datetime.datetime] = None
 
 
+class ChannelResponse(BaseModel):
+    guide_id: str
+    name: str
+    url: str
+    group: str
+    logo: Optional[str] = None
+    is_favorite: bool = False
+    last_watched: Optional[datetime.datetime] = None
+    created_at: Optional[datetime.datetime] = None
+    is_missing: bool = False
+
+    class Config:
+        from_attributes = True
+
+
 # gpu availability cache
-gpu_availability_cache = {}
+gpu_availability_cache: dict[str, bool] = {}
 
 
-async def is_gpu_available(guide_id: str):
+async def is_gpu_available(guide_id: str) -> bool:
     if guide_id in gpu_availability_cache:
         return gpu_availability_cache[guide_id]
     else:
         try:
-            result = subprocess.run(
-                ["nvidia-smi"], stdout=subprocess.PIPE, stderr=subprocess.PIPE
-            )
+            result = subprocess.run(["nvidia-smi"], capture_output=True)
             is_gpu_available = result.returncode == 0
             logger.info(f"GPU availability: {is_gpu_available}")
             gpu_availability_cache[guide_id] = is_gpu_available
@@ -92,15 +104,15 @@ async def is_gpu_available(guide_id: str):
             return False
 
 
-def save_config(config: dict):
+def save_config(config: dict[str, Any]) -> None:
     # first, sort the keys
     config = {k: v for k, v in sorted(config.items(), key=lambda item: item[0])}
     with open(CONFIG_FILE, "w") as f:
         json.dump(config, f, indent=4)
-        logger.info(f"Updated config.json")
+        logger.info("Updated config.json")
 
 
-def check_config_file():
+def check_config_file() -> None:
     # if the config file doesn't exist, create it
     if not os.path.exists(CONFIG_FILE):
         logger.info("Creating default config.json")
@@ -116,14 +128,15 @@ def check_config_file():
         )
 
 
-def load_config():
+def load_config() -> dict[str, Any]:
     check_config_file()
-    with open(CONFIG_FILE, "r") as f:
-        return json.load(f)
+    with open(CONFIG_FILE) as f:
+        config: dict[str, Any] = json.load(f)
+        return config
 
 
 @app.on_event("startup")
-async def startup_event():
+async def startup_event() -> None:
     logger.info("ISeeTV backend starting up...")
     check_config_file()
     config = load_config()
@@ -142,16 +155,15 @@ async def startup_event():
                 raise HTTPException(status_code=500, detail=str(e))
 
 
-# redirect to docs
 @app.get("/")
-async def redirect_to_docs():
+async def redirect_to_docs() -> RedirectResponse:
     return RedirectResponse(url="/docs")
 
 
 @app.post("/m3u/refresh")
 async def refresh_m3u(
     url: str, interval: int, force: bool = False, db: AsyncSession = Depends(get_db)
-):
+) -> StreamingResponse:
     logger.info("Checking if M3U needs to be refreshed")
     try:
         m3u_service = M3UService(config=load_config())
@@ -162,7 +174,7 @@ async def refresh_m3u(
         if needs_refresh:
             logger.info(f"Starting M3U refresh from {url}")
 
-            async def m3u_progress_stream():
+            async def m3u_progress_stream() -> AsyncGenerator[bytes, None]:
                 # First download the M3U and get the file path
                 async for progress in m3u_service.download(url):
                     yield json.dumps(progress).encode() + b"\n"
@@ -182,7 +194,7 @@ async def refresh_m3u(
                 # Get existing favorites
                 result = await db.execute(
                     select(models.Channel.guide_id, models.Channel.is_favorite).where(
-                        models.Channel.is_favorite == True
+                        models.Channel.is_favorite
                     )
                 )
                 favorites = {row.guide_id: row.is_favorite for row in result}
@@ -221,14 +233,14 @@ async def refresh_m3u(
                 ).encode() + b"\n"
 
             return StreamingResponse(
-                m3u_progress_stream(), media_type="application/json"
+                m3u_progress_stream(), media_type="text/event-stream"
             )
         else:
             logger.info("M3U does not need to be refreshed")
             # Send completion signal even when no update is needed
             return StreamingResponse(
                 iter([json.dumps({"type": "complete"}).encode() + b"\n"]),
-                media_type="application/json",
+                media_type="text/event-stream",
             )
 
     except Exception as e:
@@ -239,7 +251,7 @@ async def refresh_m3u(
 @app.post("/epg/refresh")
 async def refresh_epg(
     url: str, interval: int, force: bool = False, db: AsyncSession = Depends(get_db)
-):
+) -> StreamingResponse:
     logger.info("Checking if EPG needs to be refreshed")
     try:
         epg_service = EPGService(load_config())
@@ -248,7 +260,7 @@ async def refresh_epg(
         if needs_refresh:
             logger.info(f"Starting EPG refresh from {url}")
 
-            async def epg_progress_stream():
+            async def epg_progress_stream() -> AsyncGenerator[bytes, None]:
                 # Download EPG
                 async for progress in epg_service.download(url):
                     # Check if progress is a tuple or dict
@@ -270,7 +282,7 @@ async def refresh_epg(
                 channels, programs = await epg_service.read_and_parse(epg_service.file)
 
                 # Clear existing EPG data
-                logger.info(f"Clearing existing EPG data")
+                logger.info("Clearing existing EPG data")
                 yield json.dumps(
                     {
                         "type": "progress",
@@ -284,7 +296,7 @@ async def refresh_epg(
                 await db.execute(delete(models.Program))
 
                 # Insert new data
-                logger.info(f"Inserting new EPG data")
+                logger.info("Inserting new EPG data")
                 yield json.dumps(
                     {
                         "type": "progress",
@@ -310,7 +322,7 @@ async def refresh_epg(
                         ).encode() + b"\n"
                     await db.execute(insert(models.Program).values(**program))
 
-                logger.info(f"Committing changes")
+                logger.info("Committing changes")
                 yield json.dumps(
                     {
                         "type": "progress",
@@ -334,13 +346,13 @@ async def refresh_epg(
                 yield json.dumps({"type": "complete"}).encode() + b"\n"
 
             return StreamingResponse(
-                epg_progress_stream(), media_type="application/json"
+                epg_progress_stream(), media_type="text/event-stream"
             )
         else:
             logger.info("EPG does not need to be refreshed")
             return StreamingResponse(
                 iter([json.dumps({"type": "complete"}).encode() + b"\n"]),
-                media_type="application/json",
+                media_type="text/event-stream",
             )
 
     except Exception as e:
@@ -356,7 +368,7 @@ async def get_channels(
     search: Optional[str] = None,
     favorites_only: bool = False,
     db: AsyncSession = Depends(get_db),
-):
+) -> dict[str, Any]:
     logger.debug(
         f"Getting channels with skip={skip}, limit={limit}, group={group}, search={search}, favorites_only={favorites_only}"
     )
@@ -389,14 +401,26 @@ async def get_channels(
         result = await db.execute(query)
         channels = result.scalars().all()
 
-        return {"items": channels, "total": total, "skip": skip, "limit": limit}
+        # Convert SQLAlchemy models to Pydantic models
+        channel_responses = [
+            ChannelResponse.model_validate(channel) for channel in channels
+        ]
+
+        return {
+            "items": channel_responses,
+            "total": total,
+            "skip": skip,
+            "limit": limit,
+        }
     except Exception as e:
         logger.error(f"Error getting channels: {str(e)}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.put("/channels/{guide_id}/favorite")
-async def toggle_favorite(guide_id: str, db: AsyncSession = Depends(get_db)):
+async def toggle_favorite(
+    guide_id: str, db: AsyncSession = Depends(get_db)
+) -> ChannelResponse:
     """Toggle favorite status for a channel"""
     logger.info(f"Toggling favorite status for channel {guide_id}")
 
@@ -411,7 +435,7 @@ async def toggle_favorite(guide_id: str, db: AsyncSession = Depends(get_db)):
             raise HTTPException(status_code=404, detail="Channel not found")
 
         # Toggle the favorite status
-        channel.is_favorite = not channel.is_favorite
+        channel.is_favorite = not channel.is_favorite  # type: ignore[assignment]
 
         logger.info(
             f"Channel {guide_id} is now {'a favorite' if channel.is_favorite else 'not a favorite'}"
@@ -419,7 +443,7 @@ async def toggle_favorite(guide_id: str, db: AsyncSession = Depends(get_db)):
 
         # Commit the change
         await db.commit()
-        return channel
+        return ChannelResponse.model_validate(channel)
     except Exception as e:
         logger.error(f"Failed to update favorite status: {str(e)}")
         raise HTTPException(status_code=500, detail="Failed to update favorite status")
@@ -429,7 +453,9 @@ m3u_service = M3UService(config=load_config())
 
 
 @app.get("/channels/groups")
-async def get_channel_groups(db: AsyncSession = Depends(get_db)):
+async def get_channel_groups(
+    db: AsyncSession = Depends(get_db),
+) -> list[dict[str, Any]]:
     """Get all groups and their channel counts"""
     logger.info("Getting channel groups")
     try:
@@ -456,10 +482,10 @@ async def get_channel_groups(db: AsyncSession = Depends(get_db)):
 
 
 # Temporary directories for streaming
-STREAM_RESOURCES: Dict[str, Tuple[str, subprocess.Popen]] = {}
+STREAM_RESOURCES: dict[str, dict[str, Any]] = {}
 
 # Mount a single static files directory for all segments
-SEGMENTS_DIR = os.path.join(os.environ["DATA_DIRECTORY"], "segments")
+SEGMENTS_DIR = os.path.join(DATA_DIRECTORY, "segments")
 logger.info(f"SEGMENTS_DIR: {SEGMENTS_DIR}")
 os.makedirs(SEGMENTS_DIR, exist_ok=True)
 app.mount("/segments", StaticFiles(directory=SEGMENTS_DIR), name="segments")
@@ -470,7 +496,7 @@ async def stream_channel(
     guide_id: str,
     db: AsyncSession = Depends(get_db),
     timeout: int = 30,
-):
+) -> FileResponse:
     result = await db.execute(
         select(models.Channel).where(models.Channel.guide_id == guide_id)
     )
@@ -533,7 +559,7 @@ async def stream_channel(
     return FileResponse(output_m3u8, media_type="application/vnd.apple.mpegurl")
 
 
-def remove_channel_directory(channel_dir: str):
+def remove_channel_directory(channel_dir: str) -> None:
     if os.path.exists(channel_dir):
         logger.info(f"Removing channel directory: {channel_dir}")
         shutil.rmtree(channel_dir, ignore_errors=True)
@@ -542,7 +568,7 @@ def remove_channel_directory(channel_dir: str):
 
 
 @app.get("/stream/cleanup")
-def cleanup_all_channel_resources():
+def cleanup_all_channel_resources() -> dict[str, str]:
     """Clean up resources for all channels."""
     for guide_id in os.listdir(SEGMENTS_DIR):
         cleanup_channel_resources(guide_id)
@@ -550,12 +576,11 @@ def cleanup_all_channel_resources():
 
 
 @app.get("/stream/{guide_id}/cleanup")
-def cleanup_channel_resources(guide_id: str):
+def cleanup_channel_resources(guide_id: str) -> dict[str, str]:
     """Clean up resources for a specific channel."""
     if guide_id in STREAM_RESOURCES:
         logger.info(f"Cleaning up resources for channel {guide_id}")
         channel_dir = STREAM_RESOURCES[guide_id]["dir"]
-        ffmpeg_process = STREAM_RESOURCES[guide_id]["ffmpeg_process"]
         monitor = STREAM_RESOURCES[guide_id]["monitor"]
 
         STREAM_RESOURCES.pop(guide_id)
@@ -570,9 +595,8 @@ def cleanup_channel_resources(guide_id: str):
     return {"message": f"No resources found for channel {guide_id}"}
 
 
-# serve the .ts files from the /app/data/segments/{guide_id} directory
 @app.get("/segments/{guide_id}/{segment_path:path}")
-async def get_hls_segment(guide_id: str, segment_path: str):
+async def get_hls_segment(guide_id: str, segment_path: str) -> FileResponse:
     file_path = os.path.join(SEGMENTS_DIR, guide_id, segment_path)
     headers = {
         "Cache-Control": "no-cache, no-store, must-revalidate",
@@ -583,7 +607,7 @@ async def get_hls_segment(guide_id: str, segment_path: str):
 
 
 @app.post("/settings/save")
-async def save_settings(request: Request):
+async def save_settings(request: Request) -> dict[str, Any]:
     """Save settings to config file"""
     logger.info("Saving settings")
     try:
@@ -608,7 +632,7 @@ async def save_settings(request: Request):
 
 
 @app.get("/settings")
-async def get_settings():
+async def get_settings() -> dict[str, Any]:
     """Get settings from config file"""
     logger.debug("Getting settings")
     try:
@@ -627,7 +651,7 @@ async def get_settings():
 
 
 @app.on_event("shutdown")
-def cleanup_temp_dirs():
+def cleanup_temp_dirs() -> None:
     # Clean up all channels and the segments directory
     cleanup_all_channel_resources()
     if os.path.exists(SEGMENTS_DIR):

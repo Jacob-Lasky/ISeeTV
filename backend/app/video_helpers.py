@@ -1,9 +1,12 @@
-import threading
-from app.common.logger import Logger
-import sys
 import os
-import requests
 import subprocess
+import threading
+from typing import Any
+from typing import Optional
+
+import requests
+
+from app.common.logger import Logger
 
 logger = Logger(
     "ISeeTV-VideoHelpers",
@@ -13,7 +16,7 @@ logger = Logger(
 )
 
 
-def dict_to_ffmpeg_command(params: dict) -> list:
+def dict_to_ffmpeg_command(params: dict[str, Optional[str]]) -> list[str]:
     command = ["ffmpeg"]
     # Add all parameters except output
     for key, value in params.items():
@@ -22,16 +25,16 @@ def dict_to_ffmpeg_command(params: dict) -> list:
             if value is not None:
                 command.append(value)
     # Add output file last
-    if "output" in params:
+    if "output" in params and params["output"] is not None:
         command.append(params["output"])
     return command
 
 
 class StreamMonitor:
-    def __init__(self, process: subprocess.Popen):
+    def __init__(self, process: subprocess.Popen[Any]) -> None:
         self.process = process
         self.stop_flag = False
-        self._thread = None
+        self._thread: Optional[threading.Thread] = None
         self.logger = Logger(
             "ISeeTV-StreamMonitor",
             os.environ.get("VERBOSE", "false"),
@@ -39,13 +42,13 @@ class StreamMonitor:
             color="BLUE",
         )
 
-    def start(self):
+    def start(self) -> None:
         self.logger.info("Starting stream monitor")
         self._thread = threading.Thread(target=self._monitor)
         self._thread.daemon = True
         self._thread.start()
 
-    def stop(self):
+    def stop(self) -> None:
         self.logger.info("Stopping stream monitor")
         self.stop_flag = True
         if self.process:
@@ -56,7 +59,7 @@ class StreamMonitor:
                 self.process.kill()
                 self.process.wait()
 
-    def _monitor(self):
+    def _monitor(self) -> None:
         while not self.stop_flag:
             if self.process.poll() is not None:
                 self.logger.error(
@@ -64,11 +67,12 @@ class StreamMonitor:
                 )
                 break
 
-            line = self.process.stderr.readline()
-            if line:
-                line = line.strip()
+            if self.process.stderr:  # Check if stderr exists
+                line = self.process.stderr.readline()
                 if line:
-                    self.logger.debug(f"FFmpeg: {line}")
+                    line_str = line.strip()
+                    if line_str:
+                        self.logger.debug(f"FFmpeg: {line_str}")
 
             if self.stop_flag:
                 break
@@ -76,14 +80,14 @@ class StreamMonitor:
 
 async def process_video(
     stream_url: str, output_dir: str, m3u8_name: str, guide_id: str
-) -> tuple:
+) -> tuple[subprocess.Popen[Any], StreamMonitor]:
     output_m3u8 = os.path.join(output_dir, m3u8_name)
 
     # Get correct stream url
     response = requests.get(stream_url, allow_redirects=True)
     redirected_url = response.url
 
-    ffmpeg_params = {
+    ffmpeg_params: dict[str, Optional[str]] = {
         "-y": None,  # Overwrite output files
         "-i": redirected_url,
         # Video settings

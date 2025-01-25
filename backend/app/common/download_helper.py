@@ -1,5 +1,10 @@
-import aiohttp
 import os
+from collections.abc import AsyncGenerator
+from typing import Literal
+from typing import TypedDict
+
+import aiohttp
+
 from app.common.logger import Logger
 
 logger = Logger(
@@ -10,7 +15,15 @@ logger = Logger(
 )
 
 
-async def stream_download(url: str, expected_size: int, output_file: str):
+class ProgressDict(TypedDict):
+    type: Literal["progress"]
+    current: int
+    total: int
+
+
+async def stream_download(
+    url: str, expected_size: int, output_file: str
+) -> AsyncGenerator[ProgressDict, None]:
     """
     Download a file and stream progress updates.
 
@@ -23,7 +36,7 @@ async def stream_download(url: str, expected_size: int, output_file: str):
         Progress updates as dicts with current and total bytes
     """
     try:
-        content = []
+        content: list[bytes] = []
         total_bytes = 0
         chunk_count = 0
 

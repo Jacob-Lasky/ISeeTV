@@ -1,6 +1,7 @@
-import os
-import sys
 import logging
+import sys
+from typing import Literal
+from typing import Optional
 
 
 class ColorFormatter(logging.Formatter):
@@ -17,7 +18,7 @@ class ColorFormatter(logging.Formatter):
     START = "\x1b["
     END = "\x1b[0m"
 
-    def __init__(self, fmt, color, log_level):
+    def __init__(self, fmt: str, color: str, log_level: str) -> None:
         super().__init__()
         self.fmt = fmt
         self.color = self.COLORS[color]
@@ -28,7 +29,7 @@ class ColorFormatter(logging.Formatter):
         else:
             self.color = self.START + self.color + self.fmt + self.END
 
-    def format(self, record):
+    def format(self, record: logging.LogRecord) -> str:
         formatter = logging.Formatter(self.color, datefmt="%Y-%m-%d %H:%M:%S")
         return formatter.format(record)
 
@@ -39,12 +40,14 @@ class Logger:
     def __init__(
         self,
         name: str,
-        verbose: bool,
+        verbose: str,  # Changed from bool to str since we're getting it from env
         log_level: str,
-        color: str = "GREY",
-    ):
+        color: Literal[
+            "GREY", "YELLOW", "RED", "LIGHT_GREEN", "GREEN", "LIGHT_BLUE", "BLUE"
+        ] = "GREY",
+    ) -> None:
         self.logger = logging.getLogger(name)
-        self.verbose = verbose.lower() == "true"
+        self.verbose = verbose.lower() == "true"  # Convert string to bool
         self.log_level = log_level.upper()
         self.name = name
 
@@ -58,23 +61,23 @@ class Logger:
         self.logger.setLevel(log_level)
         self.logger.addHandler(handler)
 
-    def message_format(self):
+    def message_format(self) -> str:
         if self.verbose:
             return "%(name)s | %(levelname)s: %(asctime)s - %(filename)s:%(module)s:%(lineno)d - %(message)s"
         else:
             return "%(name)s | %(levelname)s: %(asctime)s - %(message)s"
 
-    def debug(self, message: str):
+    def debug(self, message: str) -> None:
         self.logger.debug(message)
 
-    def info(self, message: str):
+    def info(self, message: str) -> None:
         self.logger.info(message)
 
-    def warning(self, message: str):
+    def warning(self, message: str) -> None:
         self.logger.warning(message)
 
-    def error(self, message: str):
-        self.logger.error(message)
+    def error(self, message: str, exc_info: Optional[bool] = None) -> None:
+        self.logger.error(message, exc_info=exc_info)
 
-    def critical(self, message: str):
+    def critical(self, message: str) -> None:
         self.logger.critical(message)
