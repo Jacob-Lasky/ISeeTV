@@ -1,5 +1,3 @@
-# This workflow is triggered when an issue is closed
-# It will remove the "inprogress" label from the issue
 name: Issue Closed
 run-name: ${{ github.event.issue.title }} was closed
 on:

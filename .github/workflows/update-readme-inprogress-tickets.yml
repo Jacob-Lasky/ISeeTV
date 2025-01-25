@@ -1,5 +1,4 @@
 name: Update README on Label Change
-
 on:
   issues:
     types:
