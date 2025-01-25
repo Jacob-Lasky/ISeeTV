@@ -39,6 +39,7 @@ jobs:
         run: python .scripts/update_readme.py
 
       - name: Create and Merge Pull Request
+        uses: cli/cli@v2
         env:
           GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
         run: |
@@ -51,7 +52,7 @@ jobs:
           
           # Commit changes
           git add README.md
-          git commit -m "Update README due to label change on issue #${{ github.event.issue.number }}"
+          git commit -m "Update README due to 'inprogress' label change"
           git push origin $branch_name
           
           # Create and merge PR using GitHub CLI
