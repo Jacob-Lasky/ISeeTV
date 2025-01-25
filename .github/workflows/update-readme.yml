@@ -37,13 +37,24 @@ jobs:
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: python .scripts/update_readme.py
-      
-      - name: Push Changes and Commit
+
+      - name: Create and Merge Pull Request
         env:
           GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
         run: |
           git config --global user.name "ReadmeUpdater"
           git config --global user.email "ReadmeUpdater@users.noreply.github.com"
+          
+          # Create new branch
+          branch_name="readme-update-${GITHUB_SHA::8}"
+          git checkout -b $branch_name
+          
+          # Commit changes
           git add README.md
           git commit -m "Update README due to label change on issue #${{ github.event.issue.number }}"
-          git push origin master
+          git push origin $branch_name
+          
+          # Create and merge PR using GitHub CLI
+          gh auth login --with-token <<< "${{ steps.get_workflow_token.outputs.token }}"
+          pr_url=$(gh pr create --title "Update README" --body "Automated README update" --base master --head $branch_name)
+          gh pr merge --auto --merge "$pr_url"
