@@ -1,0 +1,76 @@
+name: Update README Milestones
+on:
+  milestone:
+    types: [created, edited, deleted, closed]
+permissions:
+  contents: write
+  pull-requests: write
+jobs:
+  update-readme:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+      - name: Generate Temporary Access Token
+        id: get_workflow_token
+        uses: peter-murray/workflow-application-token-action@v4
+        with:
+          application_id: ${{ secrets.ISEETV_APP_ID }}
+          application_private_key: ${{ secrets.ISEETV_PRIVATE_KEY }}
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+      - name: Install dependencies
+        run: pip install requests
+      - name: Run README update script
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python .scripts/update_readme_milestones.py
+      
+      - name: Create and Merge Pull Request
+        env:
+          GITHUB_TOKEN: ${{ steps.get_workflow_token.outputs.token }}
+        run: |
+          # Create a new branch
+          branch_name="readme-milestone-update-$(date +%s)"
+          git checkout -b $branch_name
+          
+          # Configure git
+          git config --global user.name "ReadmeUpdater"
+          git config --global user.email "ReadmeUpdater@users.noreply.github.com"
+          
+          # Commit changes
+          git add README.md
+          git commit -m "Update README milestone progress table"
+          
+          # Push the new branch
+          git push origin $branch_name
+          
+          # Create PR using GitHub REST API
+          pr_response=$(curl -X POST \
+            -H "Authorization: token ${{ steps.get_workflow_token.outputs.token }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/pulls \
+            -d '{
+              "title": "Update README milestone progress table",
+              "body": "Automated update of the milestone progress table",
+              "head": "'$branch_name'",
+              "base": "master"
+            }')
+          
+          # Get the PR number from the response
+          pr_number=$(echo $pr_response | jq -r .number)
+          
+          # Enable auto-merge
+          curl -X PUT \
+            -H "Authorization: token ${{ steps.get_workflow_token.outputs.token }}" \
+            -H "Accept: application/vnd.github.v3+json" \
+            https://api.github.com/repos/${{ github.repository }}/pulls/$pr_number/merge \
+            -d '{
+              "merge_method": "merge"
+            }'
+            
+          # Delete the branch after merge
+          sleep 5
+          git push origin --delete $branch_name
