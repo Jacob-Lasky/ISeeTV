@@ -22,7 +22,7 @@ logger = Logger(
 
 
 class ChannelDict(TypedDict):
-    guide_id: str
+    channel_id: str
     name: str
     url: str
     group: str
@@ -79,15 +79,15 @@ class M3UService:
 
             channels = self.parse_m3u(content)
 
-            # Get list of guide_ids from parsed channels
-            new_guide_ids = {channel["guide_id"] for channel in channels}
-            logger.info(f"Found {len(new_guide_ids)} channels in the M3U")
+            # Get list of channel_ids from parsed channels
+            new_channel_ids = {channel["channel_id"] for channel in channels}
+            logger.info(f"Found {len(new_channel_ids)} channels in the M3U")
 
             # Set is_missing=0 for all channels in the update
             for channel in channels:
                 channel["is_missing"] = False
 
-            return channels, new_guide_ids
+            return channels, new_channel_ids
 
         except Exception as e:
             logger.error(f"Failed to read and parse M3U: {str(e)}")
@@ -118,17 +118,21 @@ class M3UService:
                 if len(info) == 2:
                     attrs = self._parse_attributes(info[0])
                     name = attrs.get("tvg-name", "")
-                    guide_id = generate_channel_id(attrs.get("tvg-id", None), name)
-                    
-                    current_channel = {
-                        "guide_id": guide_id,
-                        "name": name,
-                        "group": attrs.get("group-title", "Uncategorized"),
-                        "logo": attrs.get("tvg-logo"),
-                        "url": "",  # Will be set when we get the URL line
-                        "is_missing": False,
-                        "is_favorite": False,
-                    }
+                    # channel_id = generate_channel_id(attrs.get("tvg-id", None), name)
+                    channel_id = attrs.get("tvg-id", None)
+
+                    if channel_id:
+                        current_channel = {
+                            "channel_id": channel_id,
+                            "name": name,
+                            "group": attrs.get("group-title", "Uncategorized"),
+                            "logo": attrs.get("tvg-logo"),
+                            "url": "",  # Will be set when we get the URL line
+                            "is_missing": False,
+                            "is_favorite": False,
+                        }
+                    else:
+                        logger.warning(f"No channel_id found for channel: {name}")
 
             elif line.startswith("http"):
                 if current_channel:

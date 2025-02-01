@@ -30,8 +30,9 @@ import { channelService } from '../services/channelService';
 import { useNavigate } from 'react-router-dom';
 import debounce from 'lodash/debounce';
 import { format } from 'date-fns';
-import { Epg, Layout, useEpg, useProgram, ProgramBox, ProgramContent, ProgramFlex, ProgramStack, ProgramTitle, ProgramText, ChannelBox, ChannelLogo } from 'planby';
+import { Epg, Layout, useEpg, useProgram, ProgramBox, ProgramContent, ProgramFlex, ProgramStack, ProgramTitle, ProgramText, ChannelBox, ChannelLogo, ProgramImage } from 'planby';
 import { useTheme } from '@mui/material/styles';
+import { getStartTime, generateTimeSlots } from '../utils/dateUtils';
 
 // Move all helper functions and interfaces to the top
 const ITEMS_PER_PAGE = 250;
@@ -39,33 +40,6 @@ const ITEM_HEIGHT = 56;
 const TIME_BLOCK_WIDTH = 150;
 const HEADER_HEIGHT = 48;
 const PREFETCH_THRESHOLD = 0.8; // Start loading when user scrolls to 80% of the list
-
-// Helper function to get the most recent half hour
-const getStartTime = () => {
-  const now = new Date();
-  const minutes = now.getMinutes();
-  const roundedMinutes = minutes >= 30 ? 30 : 0;
-  
-  now.setMinutes(roundedMinutes);
-  now.setSeconds(0);
-  now.setMilliseconds(0);
-  
-  return now;
-};
-
-// Helper function to generate time slots
-const generateTimeSlots = (startTime: Date, hours: number = 4) => {
-  const slots: Date[] = [];
-  const totalSlots = hours * 2; // 2 slots per hour (30 min each)
-  
-  for (let i = 0; i < totalSlots; i++) {
-    const time = new Date(startTime);
-    time.setMinutes(time.getMinutes() + (i * 30));
-    slots.push(time);
-  }
-  
-  return slots;
-};
 
 // Add type for tab values
 type TabValue = 'all' | 'favorites' | 'recent';
@@ -76,23 +50,38 @@ interface Program {
   title: string;
   start: Date;
   end: Date;
-  duration: number; // in minutes
+  duration: number;
+  description: string;
+  category: string;
 }
 
 // Update interfaces to match Planby's expected format
 interface PlanbyProgram {
   id: string;
   title: string;
-  since: string;  // ISO string
-  till: string;   // ISO string
   channelUuid: string;
-  image?: string;
+  image: string;
+  since: string;    // ISO string
+  till: string;     // ISO string
+  description: string;
+  category: string;
+  isLive?: boolean;
+  position?: {      // optional position data
+    top: number;
+    height: number;
+    width: number;
+    left: number;
+  };
 }
 
 interface PlanbyChannel {
-  uuid: string;
-  logo?: string;
+  uuid: string;  // unique identifier
+  logo: string;  // required by Planby
   name: string;
+  position?: {   // optional position data
+    top: number;
+    height: number;
+  };
 }
 
 interface ChannelListProps {
@@ -101,6 +90,7 @@ interface ChannelListProps {
   onToggleFavorite: (channel: Channel) => void;
   onRefresh?: (refreshFn: (() => Promise<void>) | undefined) => void;
   onOpenSettings?: () => void;
+  onChannelsChange: (channels: Channel[]) => void;
   programs?: Record<string, Program[]>;
   channelListOpen: boolean;
 }
@@ -150,6 +140,7 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   onToggleFavorite,
   onRefresh,
   onOpenSettings,
+  onChannelsChange,
   programs = {},
   channelListOpen,
 }, ref) => {
@@ -229,7 +220,9 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
         recentOnly: activeTab === 'recent'
       });
 
-      setChannels(prev => reset ? response.items : [...prev, ...response.items]);
+      const newChannels = reset ? response.items : [...channels, ...response.items];
+      setChannels(newChannels);
+      onChannelsChange(newChannels);
       setHasMore(response.items.length === ITEMS_PER_PAGE);
       setPage(prev => reset ? 1 : prev + 1);
     } catch (error) {
@@ -238,10 +231,10 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
       if (isPrefetch) {
         setPrefetching(false);
       } else {
-      setLoading(false);
+        setLoading(false);
       }
     }
-  }, [page, searchTerm, activeTab]);
+  }, [page, searchTerm, activeTab, channels, onChannelsChange]);
 
   // Create a stable debounced scroll handler
   const debouncedScroll = useMemo(
@@ -328,30 +321,65 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
     return (diffMinutes / 30) * TIME_BLOCK_WIDTH;
   }, [timeSlots]);
 
-  // Convert channels and programs to Planby format
+  // Convert channels to Planby format
   const planbyChannels = useMemo<PlanbyChannel[]>(() => 
-    channels.map(channel => ({
+    channels.map((channel, index) => ({
       uuid: channel.channel_id,
       name: channel.name,
-      logo: channel.logo,
+      logo: channel.logo || 'https://via.placeholder.com/150',  // Provide default logo
+      position: {
+        top: index * 70,  // matches itemHeight in useEpg config
+        height: 70
+      }
     })), [channels]
   );
 
+  // Convert programs to Planby format
   const planbyPrograms = useMemo<PlanbyProgram[]>(() => {
     const allPrograms: PlanbyProgram[] = [];
+    const now = new Date();
+    const startTime = getStartTime();
+
     Object.entries(programs).forEach(([channelId, channelPrograms]) => {
+      const channelIndex = channels.findIndex(c => c.channel_id === channelId);
+      if (channelIndex === -1) return;
+
       channelPrograms.forEach(program => {
+        const startDate = program.start instanceof Date ? program.start : new Date(program.start);
+        const endDate = program.end instanceof Date ? program.end : new Date(program.end);
+        
+        // Calculate position data
+        const durationMs = endDate.getTime() - startDate.getTime();
+        const durationMinutes = durationMs / (1000 * 60);
+        const width = (durationMinutes / 30) * TIME_BLOCK_WIDTH;
+        const left = ((startDate.getTime() - startTime.getTime()) / (1000 * 60 * 30)) * TIME_BLOCK_WIDTH;
+
         allPrograms.push({
           id: program.id,
           title: program.title,
-          since: program.start.toISOString(),
-          till: program.end.toISOString(),
+          since: startDate.toISOString(),
+          till: endDate.toISOString(),
           channelUuid: channelId,
+          image: 'https://via.placeholder.com/150',
+          description: program.description || 'No description available',
+          category: program.category || 'Uncategorized',
+          isLive: startDate <= now && endDate >= now,
+          position: {
+            top: channelIndex * 70,
+            height: 70,
+            width,
+            left
+          }
         });
       });
     });
     return allPrograms;
-  }, [programs]);
+  }, [programs, channels]);
+
+  // Add console logs before useEpg
+  console.log('Planby Channels:', planbyChannels);
+  console.log('Planby Programs:', planbyPrograms);
+  console.log('Start Date:', getStartTime().toISOString());
 
   // Initialize Planby EPG
   const { getEpgProps, getLayoutProps } = useEpg({
@@ -363,41 +391,45 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
     itemHeight: 70,
     sidebarWidth: 300,
     theme: planbyTheme,
+    isBaseTimeFormat: true,
+    isSidebar: true,
+    isTimeline: true,
+    dayWidth: 7200,  // 24 hours * 300px per hour
   });
 
   // Custom Program component using Material-UI
   const ProgramItem = ({ program, ...rest }: any) => {
-    const { styles, formatTime, isLive } = useProgram({ program, ...rest });
+    const { styles, formatTime, isLive, isMinWidth } = useProgram({ program, ...rest });
 
     const { data } = program;
-    const { title, since, till } = data;
+    const { image, title, since, till, description, category } = data;
 
     const sinceTime = formatTime(since);
     const tillTime = formatTime(till);
 
     return (
       <ProgramBox width={styles.width} style={styles.position}>
-        <Card 
-          sx={{ 
-            height: '100%',
-            bgcolor: isLive ? 'action.selected' : 'background.paper',
-            borderRadius: 0,
-            '&:hover': {
-              bgcolor: 'action.hover',
-            }
-          }}
-        >
-          <CardContent sx={{ p: 1, '&:last-child': { pb: 1 } }}>
-            <Stack spacing={0.5}>
-              <Typography variant="subtitle2" noWrap>
-                {title}
-              </Typography>
-              <Typography variant="caption" color="text.secondary">
+        <ProgramContent width={styles.width} isLive={isLive}>
+          <ProgramFlex>
+            {isLive && isMinWidth && <ProgramImage src={image} alt="Preview" />}
+            <ProgramStack>
+              <ProgramTitle>{title}</ProgramTitle>
+              <ProgramText>
                 {sinceTime} - {tillTime}
-              </Typography>
-            </Stack>
-          </CardContent>
-        </Card>
+              </ProgramText>
+              {category && (
+                <ProgramText>
+                  {category}
+                </ProgramText>
+              )}
+              {description && isMinWidth && (
+                <ProgramText>
+                  {description}
+                </ProgramText>
+              )}
+            </ProgramStack>
+          </ProgramFlex>
+        </ProgramContent>
       </ProgramBox>
     );
   };
@@ -502,6 +534,8 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
           flexGrow: 1, 
           overflow: 'hidden',
           bgcolor: 'background.default',
+          minHeight: 400,
+          position: 'relative',
         }}
       >
         <Epg {...getEpgProps()}>

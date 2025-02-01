@@ -11,6 +11,7 @@ import type { Settings } from './models/Settings';
 import MenuIcon from '@mui/icons-material/Menu';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import { LoadingPopup } from './components/LoadingPopup';
+import { getStartTime } from './utils/dateUtils';
 
 
 // Interface for progress data state
@@ -193,12 +194,16 @@ export default function App() {
           const endTime = new Date(startTime);
           endTime.setHours(endTime.getHours() + 4);
 
+          console.log('Fetching programs for channels:', visibleChannels);
           const guideIds = visibleChannels.map(c => c.channel_id);
           const programData = await channelService.getPrograms(guideIds, startTime, endTime);
+          console.log('Fetched Program Data:', programData);
           setPrograms(programData);
         } catch (error) {
           console.error('Failed to fetch programs:', error);
         }
+      } else {
+        console.log('No visible channels to fetch programs for');
       }
     };
 

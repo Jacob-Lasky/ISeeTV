@@ -1,30 +1,20 @@
 # Standard library imports
 import asyncio
-import datetime
 import json
 import os
 import shutil
 import subprocess
 from collections.abc import AsyncGenerator
-from typing import Any
-from typing import Optional
+from datetime import datetime  # Import datetime class directly
+from typing import Any, Optional, List, Dict
 
 # Third-party imports
-from fastapi import Depends
-from fastapi import FastAPI
-from fastapi import HTTPException
-from fastapi import Request
+from fastapi import Depends, FastAPI, HTTPException, Request, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
-from fastapi.responses import RedirectResponse
-from fastapi.responses import StreamingResponse
+from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from sqlalchemy import delete
-from sqlalchemy import func
-from sqlalchemy import insert
-from sqlalchemy import select
-from sqlalchemy import update
+from sqlalchemy import delete, func, insert, select, update, and_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Local imports
@@ -68,7 +58,7 @@ class ChannelBase(BaseModel):
     group: str
     logo: Optional[str] = None
     is_favorite: bool = False
-    last_watched: Optional[datetime.datetime] = None
+    last_watched: Optional[datetime] = None
 
 
 class ChannelResponse(BaseModel):
@@ -78,8 +68,8 @@ class ChannelResponse(BaseModel):
     group: str
     logo: Optional[str] = None
     is_favorite: bool = False
-    last_watched: Optional[datetime.datetime] = None
-    created_at: Optional[datetime.datetime] = None
+    last_watched: Optional[datetime] = None
+    created_at: Optional[datetime] = None
     is_missing: bool = False
 
     class Config:
@@ -389,7 +379,7 @@ async def get_channels(
         if recent_only:
             config = load_config()
             recent_days = config.get("recent_days", 3)
-            recent_cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=recent_days)
+            recent_cutoff = datetime.now(timezone.utc) - timedelta(days=recent_days)
             
             # Add debug logging for recent filter
             logger.debug(f"Filtering for channels watched since: {recent_cutoff}")
@@ -738,7 +728,7 @@ async def update_last_watched(
         stmt = (
             update(models.Channel)
             .where(models.Channel.channel_id == channel_id)
-            .values(last_watched=datetime.datetime.now(datetime.timezone.utc))
+            .values(last_watched=datetime.now(timezone.utc))
         )
         await db.execute(stmt)
         await db.commit()
@@ -746,3 +736,81 @@ async def update_last_watched(
     except Exception as e:
         logger.error(f"Failed to update last watched: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+# Add new model for program response
+class ProgramResponse(BaseModel):
+    id: str
+    title: str
+    start: datetime
+    end: datetime
+    duration: int
+    description: Optional[str] = None
+    category: Optional[str] = None
+
+    class Config:
+        from_attributes = True
+        arbitrary_types_allowed = True
+
+
+@app.get("/programs")
+async def get_programs(
+    channel_ids: str,
+    start: str = Query(..., description="ISO format datetime"),
+    end: str = Query(..., description="ISO format datetime"),
+    db: AsyncSession = Depends(get_db)
+) -> Dict[str, List[ProgramResponse]]:
+    """Get programs for specified channels in a time range"""
+    try:
+        # Convert string dates to datetime objects with explicit UTC timezone
+        start_dt = datetime.fromisoformat(start.replace('Z', '+00:00'))
+        end_dt = datetime.fromisoformat(end.replace('Z', '+00:00'))
+        
+        logger.debug(f"Fetching programs between {start_dt} and {end_dt}")
+        
+        # Split channel_ids string into list
+        channel_id_list = channel_ids.split(',')
+        
+        # Query programs for these channels in the time range
+        stmt = (
+            select(models.Program)
+            .where(
+                and_(
+                    models.Program.channel_id.in_(channel_id_list),
+                    models.Program.start_time >= start_dt,
+                    models.Program.end_time <= end_dt
+                )
+            )
+            .order_by(models.Program.start_time)
+        )
+        
+        result = await db.execute(stmt)
+        programs = result.scalars().all()
+        
+        # Group programs by channel_id and ensure timezone info is preserved
+        programs_by_channel: Dict[str, List[ProgramResponse]] = {}
+        for program in programs:
+            if program.channel_id not in programs_by_channel:
+                programs_by_channel[program.channel_id] = []
+                
+            programs_by_channel[program.channel_id].append(
+                ProgramResponse(
+                    id=str(program.id),
+                    title=program.title,
+                    start=program.start_time,
+                    end=program.end_time,
+                    duration=int((program.end_time - program.start_time).total_seconds() / 60),
+                    description=program.description,
+                    category=program.category
+                )
+            )
+        
+        logger.debug(f"Found {sum(len(progs) for progs in programs_by_channel.values())} programs")
+        return programs_by_channel
+        
+    except Exception as e:
+        logger.error(f"Failed to fetch programs: {str(e)}")
+        raise HTTPException(
+            status_code=500,
+            detail=f"Failed to fetch programs: {str(e)}"
+        )

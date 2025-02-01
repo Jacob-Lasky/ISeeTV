@@ -31,6 +31,9 @@ interface Program {
   duration: number;
 }
 
+// Add batch size constant
+const PROGRAM_BATCH_SIZE = 50;  // Adjust this number based on your server limits
+
 export const channelService = {
   async getChannels(
     skip: number = 0,
@@ -283,33 +286,41 @@ export const channelService = {
   },
 
   async getPrograms(
-    guideIds: string[], 
+    channelIds: string[], 
     start: Date, 
     end: Date
   ): Promise<Record<string, Program[]>> {
-    const searchParams = new URLSearchParams({
-      start: start.toISOString(),
-      end: end.toISOString(),
-      channel_ids: guideIds.join(','),
-    });
-
-    const response = await fetch(`${API_URL}/programs?${searchParams}`);
-    if (!response.ok) {
-      throw new Error(`Failed to fetch programs: ${response.statusText}`);
+    // Split channelIds into smaller batches
+    const batches = [];
+    for (let i = 0; i < channelIds.length; i += PROGRAM_BATCH_SIZE) {
+      batches.push(channelIds.slice(i, i + PROGRAM_BATCH_SIZE));
     }
 
-    const data = await response.json();
-    
-    // Convert dates from strings to Date objects
-    return Object.fromEntries(
-      Object.entries(data).map(([guideId, programs]) => [
-        guideId,
-        (programs as any[]).map(p => ({
-          ...p,
-          start: new Date(p.start),
-          end: new Date(p.end),
-        }))
-      ])
-    );
+    try {
+      // Fetch programs for each batch and combine results
+      const results = await Promise.all(
+        batches.map(async (batchIds) => {
+          const searchParams = new URLSearchParams({
+            start: start.toISOString(),
+            end: end.toISOString(),
+            channel_ids: batchIds.join(','),
+          });
+
+          const response = await fetch(`${API_URL}/programs?${searchParams}`);
+          if (!response.ok) {
+            console.warn(`Failed to fetch programs for batch: ${response.statusText}`);
+            return {};
+          }
+
+          return await response.json();
+        })
+      );
+
+      // Combine all batch results into a single object
+      return results.reduce((acc, result) => ({ ...acc, ...result }), {});
+    } catch (error) {
+      console.error('Failed to fetch programs:', error);
+      throw new Error(`Failed to fetch programs: ${error}`);
+    }
   },
 }; 

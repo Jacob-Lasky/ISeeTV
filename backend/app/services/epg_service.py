@@ -93,7 +93,6 @@ class EPGService:
                 display_name_elem = channel.find("display-name")
                 if display_name_elem is not None and display_name_elem.text:
                     display_name = display_name_elem.text
-                    channel_id = generate_channel_id(channel_id, display_name)
 
                     if channel_id not in channel_ids:
                         channel_ids.add(channel_id)
@@ -111,20 +110,7 @@ class EPGService:
                             }
                         )
                     else:
-                        # Additional display names for same channel
-                        icon_elem = channel.find("icon")
-                        channels.append(
-                            {
-                                "channel_id": channel_id,
-                                "display_name": display_name,
-                                "icon": (
-                                    icon_elem.get("src")
-                                    if icon_elem is not None
-                                    else None
-                                ),
-                                "is_primary": False,
-                            }
-                        )
+                        logger.warning(f"Duplicate channel ID: {channel_id} | Display Name: {display_name}")
 
             # Parse programs
             programs: list[EPGProgramDict] = []
