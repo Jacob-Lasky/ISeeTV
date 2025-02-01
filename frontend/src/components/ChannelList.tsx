@@ -31,6 +31,7 @@ interface ChannelListProps {
   onToggleFavorite: (channel: Channel) => void;
   onRefresh?: (refreshFn: (() => Promise<void>) | undefined) => void;
   onOpenSettings?: () => void;
+  onChannelsChange: (channels: Channel[]) => void;
 }
 
 const ITEMS_PER_PAGE = 250
@@ -78,6 +79,7 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   onToggleFavorite,
   onRefresh,
   onOpenSettings,
+  onChannelsChange,
 }, ref) => {
   // Add activeTab state
   const [activeTab, setActiveTab] = useState<TabValue>('all');
@@ -194,6 +196,12 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
       onRefresh(refresh);
     }
   }, [onRefresh, refresh]);
+
+  useEffect(() => {
+    if (onChannelsChange) {
+      onChannelsChange(channels);
+    }
+  }, [channels, onChannelsChange]);
 
   return (
     <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>

@@ -11,6 +11,7 @@ import type { Settings } from './models/Settings';
 import MenuIcon from '@mui/icons-material/Menu';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import { LoadingPopup } from './components/LoadingPopup';
+import { EPG } from './components/EPG';
 
 
 // Interface for progress data state
@@ -35,7 +36,9 @@ export default function App() {
   const [channelListOpen, setChannelListOpen] = useState(true);
   const [m3uProgress, setM3uProgress] = useState<ProgressData | null>(null);
   const [epgProgress, setEpgProgress] = useState<ProgressData | null>(null);
+  const [epgOpen, setEpgOpen] = useState(false);
   const channelListRef = useRef<{ refresh: () => Promise<void> }>(null);
+  const [visibleChannels, setVisibleChannels] = useState<Channel[]>([]);
   
   useEffect(() => {
     const checkSettings = async () => {
@@ -177,6 +180,11 @@ export default function App() {
     }
   };
 
+  // Update channel list toggle to preserve EPG state
+  const handleChannelListToggle = () => {
+    setChannelListOpen(prev => !prev); // Simply toggle the channel list state
+  };
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -207,19 +215,23 @@ export default function App() {
               onToggleFavorite={handleToggleFavorite}
               selectedChannel={selectedChannel}
               onOpenSettings={() => setSettingsOpen(true)}
+              onChannelsChange={setVisibleChannels}
             />
           </Box>
 
           <Box sx={{ 
-            flexGrow: 1,
-            ml: channelListOpen ? '300px' : 0,
-            transition: theme.transitions.create('margin', {
+            position: 'absolute',
+            left: channelListOpen ? (epgOpen ? '900px' : '300px') : 0, // 300px (channel list) + 600px (EPG) when open
+            right: 0,  // Keep right edge fixed
+            top: 0,
+            bottom: 0,
+            transition: theme.transitions.create('left', {
               easing: theme.transitions.easing.sharp,
               duration: theme.transitions.duration.enteringScreen,
             })
           }}>
             <IconButton
-              onClick={() => setChannelListOpen(!channelListOpen)}
+              onClick={handleChannelListToggle}
               sx={{
                 position: 'fixed',
                 left: channelListOpen ? 300 : 0,
@@ -258,6 +270,13 @@ export default function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Box>
+
+          <EPG 
+            open={epgOpen}
+            onToggle={() => setEpgOpen(!epgOpen)}
+            channelListOpen={channelListOpen}
+            channels={visibleChannels}
+          />
         </Box>
         <SettingsModal 
           open={settingsOpen} 
