@@ -117,11 +117,9 @@ class M3UService:
                 info = line[8:].split(",", 1)
                 if len(info) == 2:
                     attrs = self._parse_attributes(info[0])
-
                     name = attrs.get("tvg-name", "")
-
                     guide_id = generate_channel_id(attrs.get("tvg-id", None), name)
-
+                    
                     current_channel = {
                         "guide_id": guide_id,
                         "name": name,
@@ -146,14 +144,6 @@ class M3UService:
                 continue
             else:
                 logger.warning(f"Unprocessed line: {line}")
-
-            if any(
-                guide_id in existing_guide_ids["guide_id"]
-                for existing_guide_ids in channels
-            ):
-                logger.debug(f"{guide_id} - already exists, renaming")
-                guide_id += self._sanitize_name(attrs.get("tvg-id", ""))
-                logger.debug(f"--- New guide_id: {guide_id}")
 
         return channels
 

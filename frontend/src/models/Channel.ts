@@ -7,4 +7,11 @@ export interface Channel {
   isFavorite?: boolean;
   lastWatched?: Date;
   is_missing: boolean;
+}
+
+export interface ChannelResponse {
+  items: Channel[];
+  total: number;
+  skip: number;
+  limit: number;
 } 

@@ -18,6 +18,7 @@ import {
   Typography,
   Tabs,
   Tab,
+  Alert,
 } from '@mui/material';
 import { Settings } from '../models/Settings';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -62,6 +63,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   }, [settings]);
 
   const [loading, setLoading] = useState(false);
+
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
 
   const handleM3uRefreshClick = async () => {
     setLoading(true);
@@ -137,6 +141,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       console.error('Failed to save settings:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleHardReset = async () => {
+    if (!window.confirm('Are you sure you want to perform a hard reset? This will delete all channels and reload them from the M3U.')) {
+      return;
+    }
+    
+    setIsResetting(true);
+    setResetError(null);
+    try {
+      await channelService.hardReset();
+    } catch (error) {
+      setResetError(error instanceof Error ? error.message : 'Failed to reset channels');
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -282,6 +302,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             >
               <RedditIcon /> ISeeTV Subreddit
             </Link>
+
+            <Box sx={{ mt: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                Hard Reset
+              </Typography>
+              <Typography paragraph>
+                If you're experiencing issues, you can perform a hard reset which will delete all channels
+                and reload them from your M3U file.
+              </Typography>
+              {resetError && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {resetError}
+                </Alert>
+              )}
+              <Button
+                variant="contained"
+                color="error"
+                onClick={handleHardReset}
+                disabled={isResetting}
+                startIcon={isResetting ? <CircularProgress size={20} /> : null}
+              >
+                {isResetting ? 'Resetting...' : 'Hard Reset Channels'}
+              </Button>
+            </Box>
           </Stack>
         </TabPanel>
       </DialogContent>

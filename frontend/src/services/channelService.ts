@@ -7,6 +7,8 @@ interface GetChannelsParams {
   search?: string;
   group?: string;
   favoritesOnly?: boolean;
+  windowStart?: number;
+  windowSize?: number;
 } 
 
 interface GetChannelsResponse {
@@ -32,10 +34,16 @@ export const channelService = {
       ...(params.search && { search: params.search }),
       ...(params.group && { group: params.group }),
       ...(params.favoritesOnly && { favorites_only: 'true' }),
+      ...(params.windowStart !== undefined && { window_start: params.windowStart.toString() }),
+      ...(params.windowSize !== undefined && { window_size: params.windowSize.toString() }),
     });
+
+    console.log('Fetching channels with params:', Object.fromEntries(searchParams.entries()));
 
     const response = await fetch(`${API_URL}/channels?${searchParams}`);
     if (!response.ok) {
+      const errorText = await response.text();
+      console.error('Channel fetch error:', errorText);
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const data = await response.json();
@@ -214,5 +222,43 @@ export const channelService = {
       throw new Error(`Failed to load settings: ${response.statusText}`);
     }
     return response.json();
+  },
+
+  async hardReset(): Promise<void> {
+    const response = await fetch(`${API_URL}/channels/hard-reset`, {
+      method: 'POST',
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to hard reset channels: ${response.statusText}`);
+    }
+
+    // Handle the streaming response
+    const reader = response.body?.getReader();
+    const decoder = new TextDecoder();
+
+    if (reader) {
+      try {
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const chunk = decoder.decode(value);
+          const lines = chunk.split('\n');
+
+          for (const line of lines) {
+            if (!line) continue;
+            try {
+              const data = JSON.parse(line);
+              console.log('Hard reset progress:', data);
+            } catch (e) {
+              console.warn('Failed to parse line:', line);
+            }
+          }
+        }
+      } finally {
+        reader.releaseLock();
+      }
+    }
   },
 }; 

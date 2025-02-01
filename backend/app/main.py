@@ -367,14 +367,16 @@ async def get_channels(
     group: Optional[str] = None,
     search: Optional[str] = None,
     favorites_only: bool = False,
+    window_start: Optional[int] = None,
+    window_size: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
-    logger.debug(
-        f"Getting channels with skip={skip}, limit={limit}, group={group}, search={search}, favorites_only={favorites_only}"
-    )
     try:
-        # Build the base query
-        query = select(models.Channel)
+        # Build the base query with distinct on guide_id
+        query = (
+            select(models.Channel)
+            .order_by(models.Channel.guide_id)  # Required for distinct on
+        )
 
         # Apply filters
         if group:
@@ -384,33 +386,38 @@ async def get_channels(
         if favorites_only:
             query = query.where(models.Channel.is_favorite)
 
-        # order by channel name
-        query = query.order_by(models.Channel.name)
+        # Final query with proper ordering
+        final_query = (
+            select(models.Channel)
+            .order_by(models.Channel.group, models.Channel.name)
+        )
 
-        # Get total count
+        # Get total count from the distinct subquery
         count_result = await db.execute(
             select(func.count()).select_from(query.subquery())
         )
         total = count_result.scalar()
 
-        # Apply pagination if no group specified
-        if not group:
-            query = query.offset(skip).limit(limit)
+        # Apply pagination
+        if window_start is not None and window_size is not None:
+            final_query = final_query.offset(window_start).limit(window_size)
+        else:
+            final_query = final_query.offset(skip).limit(limit)
 
         # Execute the query
-        result = await db.execute(query)
+        result = await db.execute(final_query)
         channels = result.scalars().all()
 
-        # Convert SQLAlchemy models to Pydantic models
-        channel_responses = [
-            ChannelResponse.model_validate(channel) for channel in channels
-        ]
+        # Add debug logging
+        guide_ids = [channel.guide_id for channel in channels]
+        if len(guide_ids) != len(set(guide_ids)):
+            logger.warning(f"Found duplicate guide_ids in response: {[gid for gid in guide_ids if guide_ids.count(gid) > 1]}")
 
         return {
-            "items": channel_responses,
+            "items": [ChannelResponse.model_validate(channel) for channel in channels],
             "total": total,
-            "skip": skip,
-            "limit": limit,
+            "skip": window_start if window_start is not None else skip,
+            "limit": window_size if window_size is not None else limit,
         }
     except Exception as e:
         logger.error(f"Error getting channels: {str(e)}", exc_info=True)
@@ -656,3 +663,52 @@ def cleanup_temp_dirs() -> None:
     cleanup_all_channel_resources()
     if os.path.exists(SEGMENTS_DIR):
         shutil.rmtree(SEGMENTS_DIR)
+
+
+@app.post("/channels/hard-reset")
+async def hard_reset_channels(db: AsyncSession = Depends(get_db)) -> StreamingResponse:
+    """Drop all channels and recreate from M3U"""
+    try:
+        # Delete all channels
+        await db.execute(delete(models.Channel))
+        await db.commit()
+        
+        # Get M3U URL from config
+        config = load_config()
+        if not config.get("m3u_url"):
+            raise HTTPException(status_code=400, detail="No M3U URL configured")
+            
+        # Refresh M3U to recreate channels
+        m3u_service = M3UService(config=config)
+
+        async def event_stream():
+            yield json.dumps({"type": "progress", "message": "Deleting channels..."}).encode() + b"\n"
+            
+            # Start M3U refresh
+            async for progress in m3u_service.download(config["m3u_url"]):
+                yield json.dumps(progress).encode() + b"\n"
+
+            # Process the M3U file
+            channels, new_guide_ids = await m3u_service.read_and_parse(m3u_service.file)
+
+            # Insert channels
+            for channel in channels:
+                stmt = (
+                    insert(models.Channel)
+                    .prefix_with("OR REPLACE")
+                    .values(**channel)
+                )
+                await db.execute(stmt)
+            
+            await db.commit()
+
+            yield json.dumps({"type": "complete", "message": "Hard reset complete"}).encode() + b"\n"
+
+        return StreamingResponse(
+            event_stream(),
+            media_type="text/event-stream"
+        )
+
+    except Exception as e:
+        logger.error(f"Failed to hard reset channels: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
