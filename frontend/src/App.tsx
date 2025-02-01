@@ -29,6 +29,21 @@ interface ProgressMessage {
   message?: string;
 }
 
+const HOURS_TO_DISPLAY = 13; // 1 hour back + 12 hours forward
+
+// Update the default settings
+const defaultSettings: Settings = {
+  m3uUrl: '',
+  epgUrl: '',
+  epgUpdateInterval: 24,
+  m3uUpdateInterval: 24,
+  updateOnStart: true,
+  theme: 'dark',
+  recentDays: 3,
+  guideHours: 13,
+  guideUtcOffset: 0  // Default to UTC
+};
+
 export default function App() {
   const [selectedChannel, setSelectedChannel] = useState<Channel | undefined>();
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -192,18 +207,28 @@ export default function App() {
         try {
           const startTime = getStartTime();
           const endTime = new Date(startTime);
-          endTime.setHours(endTime.getHours() + 4);
+          endTime.setUTCHours(endTime.getUTCHours() + HOURS_TO_DISPLAY);
 
-          console.log('Fetching programs for channels:', visibleChannels);
+          console.log('Fetching programs with window:', {
+            start: startTime.toISOString(),
+            end: endTime.toISOString(),
+            hours: HOURS_TO_DISPLAY,
+            channelCount: visibleChannels.length
+          });
+
           const guideIds = visibleChannels.map(c => c.channel_id);
           const programData = await channelService.getPrograms(guideIds, startTime, endTime);
-          console.log('Fetched Program Data:', programData);
+          
+          console.log('Fetched programs:', {
+            channelCount: Object.keys(programData).length,
+            programCount: Object.values(programData).flat().length,
+            timeWindow: `${startTime.toISOString()} to ${endTime.toISOString()}`
+          });
+          
           setPrograms(programData);
         } catch (error) {
           console.error('Failed to fetch programs:', error);
         }
-      } else {
-        console.log('No visible channels to fetch programs for');
       }
     };
 
@@ -245,6 +270,8 @@ export default function App() {
               onChannelsChange={setVisibleChannels}
               programs={programs}
               channelListOpen={channelListOpen}
+              guideHours={settings?.guideHours || 13}
+              guideUtcOffset={settings?.guideUtcOffset || 0}
             />
           </Box>
 
@@ -303,14 +330,7 @@ export default function App() {
         <SettingsModal 
           open={settingsOpen} 
           onClose={() => setSettingsOpen(false)}
-          settings={settings ?? {
-            m3uUrl: '',
-            epgUrl: '',
-            epgUpdateInterval: 24,
-            m3uUpdateInterval: 24,
-            updateOnStart: true,
-            theme: 'dark'
-          }}
+          settings={settings ?? defaultSettings}
           onSave={handleSaveSettings}
           onM3uProgress={handleM3uProgress}
           onEpgProgress={handleEpgProgress}

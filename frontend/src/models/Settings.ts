@@ -6,4 +6,6 @@ export interface Settings {
   updateOnStart: boolean;
   theme: 'light' | 'dark' | 'system';
   recentDays: number;
+  guideHours: number;
+  guideUtcOffset: number;
 } 

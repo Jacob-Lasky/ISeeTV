@@ -32,7 +32,7 @@ import debounce from 'lodash/debounce';
 import { format } from 'date-fns';
 import { Epg, Layout, useEpg, useProgram, ProgramBox, ProgramContent, ProgramFlex, ProgramStack, ProgramTitle, ProgramText, ChannelBox, ChannelLogo, ProgramImage } from 'planby';
 import { useTheme } from '@mui/material/styles';
-import { getStartTime, generateTimeSlots } from '../utils/dateUtils';
+import { getStartTime, generateTimeSlots, formatTimeWithOffset } from '../utils/dateUtils';
 
 // Move all helper functions and interfaces to the top
 const ITEMS_PER_PAGE = 250;
@@ -40,6 +40,9 @@ const ITEM_HEIGHT = 56;
 const TIME_BLOCK_WIDTH = 150;
 const HEADER_HEIGHT = 48;
 const PREFETCH_THRESHOLD = 0.8; // Start loading when user scrolls to 80% of the list
+const HOURS_TO_DISPLAY = 13; // 1 hour before + 12 hours after
+const HOURS_BACK = 1; // Show 1 hour before current time
+const HOUR_WIDTH = TIME_BLOCK_WIDTH * 2; // Width per hour (2 blocks of 30 minutes)
 
 // Add type for tab values
 type TabValue = 'all' | 'favorites' | 'recent';
@@ -93,6 +96,7 @@ interface ChannelListProps {
   onChannelsChange: (channels: Channel[]) => void;
   programs?: Record<string, Program[]>;
   channelListOpen: boolean;
+  guideUtcOffset: number;
 }
 
 // Styles for group headers
@@ -143,6 +147,7 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   onChannelsChange,
   programs = {},
   channelListOpen,
+  guideUtcOffset,
 }, ref) => {
   const [activeTab, setActiveTab] = useState<TabValue>('all');
   const [searchTerm, setSearchTerm] = useState('');
@@ -154,7 +159,7 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const [epgExpanded, setEpgExpanded] = useState(false);
-  const timeSlots = useMemo(() => generateTimeSlots(getStartTime()), []);
+  const timeSlots = useMemo(() => generateTimeSlots(getStartTime(guideUtcOffset)), []);
   const theme = useTheme();
 
   // Move planbyTheme inside the component to access theme
@@ -338,7 +343,7 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   const planbyPrograms = useMemo<PlanbyProgram[]>(() => {
     const allPrograms: PlanbyProgram[] = [];
     const now = new Date();
-    const startTime = getStartTime();
+    const startTime = getStartTime(guideUtcOffset);
 
     Object.entries(programs).forEach(([channelId, channelPrograms]) => {
       const channelIndex = channels.findIndex(c => c.channel_id === channelId);
@@ -376,16 +381,39 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
     return allPrograms;
   }, [programs, channels]);
 
+  // Add this right after planbyPrograms is created
+  console.log('Sample program:', {
+    raw: Object.values(programs)[0]?.[0],  // Original program data
+    transformed: planbyPrograms[0],         // Planby formatted program
+    timeWindow: {
+      start: getStartTime(guideUtcOffset).toISOString(),
+      end: new Date(getStartTime(guideUtcOffset).getTime() + HOURS_TO_DISPLAY * 60 * 60 * 1000).toISOString()
+    }
+  });
+
   // Add console logs before useEpg
   console.log('Planby Channels:', planbyChannels);
   console.log('Planby Programs:', planbyPrograms);
-  console.log('Start Date:', getStartTime().toISOString());
+  console.log('Start Date:', getStartTime(guideUtcOffset).toISOString());
+
+  // Add this before useEpg initialization
+  const startTime = getStartTime(guideUtcOffset);
+  const endTime = new Date(startTime);
+  endTime.setUTCHours(endTime.getUTCHours() + HOURS_TO_DISPLAY);
+
+  console.log('EPG Time Window:', {
+    start: startTime.toISOString(),
+    end: endTime.toISOString(),
+    totalHours: HOURS_TO_DISPLAY,
+    dayWidth: HOURS_TO_DISPLAY * HOUR_WIDTH,
+    programs: planbyPrograms.length
+  });
 
   // Initialize Planby EPG
   const { getEpgProps, getLayoutProps } = useEpg({
     channels: planbyChannels,
     epg: planbyPrograms,
-    startDate: getStartTime().toISOString(),
+    startDate: getStartTime(guideUtcOffset).toISOString(),
     width: channelListOpen ? epgExpanded ? 1200 : 300 : 0,
     height: containerRef.current?.clientHeight || 800,
     itemHeight: 70,
@@ -394,7 +422,9 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
     isBaseTimeFormat: true,
     isSidebar: true,
     isTimeline: true,
-    dayWidth: 7200,  // 24 hours * 300px per hour
+    dayWidth: HOURS_TO_DISPLAY * HOUR_WIDTH,
+    startDate: startTime.toISOString(),
+    endDate: endTime.toISOString(),
   });
 
   // Custom Program component using Material-UI
@@ -404,8 +434,8 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
     const { data } = program;
     const { image, title, since, till, description, category } = data;
 
-    const sinceTime = formatTime(since);
-    const tillTime = formatTime(till);
+    const sinceTime = formatTimeWithOffset(new Date(since), guideUtcOffset);
+    const tillTime = formatTimeWithOffset(new Date(till), guideUtcOffset);
 
     return (
       <ProgramBox width={styles.width} style={styles.position}>
@@ -468,6 +498,34 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
       </ChannelBox>
     );
   };
+
+  // Add a useEffect to fetch programs
+  useEffect(() => {
+    const fetchProgramData = async () => {
+      if (channels.length > 0) {
+        const startTime = getStartTime(guideUtcOffset);
+        const endTime = new Date(startTime);
+        endTime.setUTCHours(endTime.getUTCHours() + HOURS_TO_DISPLAY);
+
+        console.log('Fetching program data for window:', {
+          start: startTime.toISOString(),
+          end: endTime.toISOString(),
+          hours: HOURS_TO_DISPLAY
+        });
+
+        const programData = await channelService.getPrograms(
+          channels.map(c => c.channel_id),
+          startTime,
+          endTime
+        );
+
+        // Update programs state or however you're managing program data
+        onChannelsChange(channels); // This might need to be adjusted based on your app structure
+      }
+    };
+
+    fetchProgramData();
+  }, [channels, HOURS_TO_DISPLAY]);
 
   return (
     <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>

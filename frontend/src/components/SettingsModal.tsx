@@ -19,6 +19,8 @@ import {
   Tabs,
   Tab,
   Alert,
+  DialogActions,
+  FormHelperText,
 } from '@mui/material';
 import { Settings } from '../models/Settings';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -52,7 +54,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     epgUpdateInterval: 24,
     updateOnStart: true,
     theme: 'dark',
-    recentDays: 3
+    recentDays: 3,
+    guideHours: settings.guideHours || 13,
+    guideUtcOffset: settings.guideUtcOffset || 0,
   });
 
   const [activeTab, setActiveTab] = useState(0);
@@ -137,7 +141,12 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         );
       }
 
-      onSave(formState);
+      const updatedSettings: Settings = {
+        ...formState,
+        guideHours: Number(formState.guideHours),
+        guideUtcOffset: formState.guideUtcOffset,
+      };
+      await onSave(updatedSettings);
     } catch (error) {
       console.error('Failed to save settings:', error);
     } finally {
@@ -172,10 +181,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     <Dialog 
       open={open} 
       onClose={formState.m3uUrl ? onClose : undefined}
-      maxWidth="sm" 
+      maxWidth="md" 
       fullWidth
       disableEscapeKeyDown={!formState.m3uUrl}
     >
+      <DialogTitle>Settings</DialogTitle>
       <DialogContent>
         <Tabs 
           value={activeTab} 
@@ -271,21 +281,52 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </Select>
             </FormControl>
             
-            <TextField
-              label="Recent Days"
-              type="number"
-              value={formState.recentDays}
-              onChange={(e) => setFormState({
-                ...formState,
-                recentDays: Math.max(1, Math.min(30, Number(e.target.value)))
-              })}
-              inputProps={{
-                min: 1,
-                max: 30,
-                step: 1
-              }}
-              helperText="Number of days to show in Recent tab (1-30)"
-            />
+            <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+              <TextField
+                label="Recent Days"
+                type="number"
+                value={formState.recentDays}
+                onChange={(e) => setFormState({
+                  ...formState,
+                  recentDays: Math.max(1, Math.min(30, Number(e.target.value)))
+                })}
+                inputProps={{
+                  min: 1,
+                  max: 30,
+                  step: 1
+                }}
+                fullWidth
+                helperText="Days to show in Recent tab"
+              />
+              <TextField
+                label="Guide Hours"
+                type="number"
+                value={formState.guideHours}
+                onChange={(e) => setFormState({ 
+                  ...formState, 
+                  guideHours: Math.max(1, Math.min(48, Number(e.target.value))) 
+                })}
+                inputProps={{ min: 1, max: 48 }}
+                fullWidth
+                helperText="Hours to display in guide"
+              />
+              <TextField
+                label="UTC Offset"
+                type="number"
+                value={formState.guideUtcOffset}
+                onChange={(e) => setFormState({ 
+                  ...formState, 
+                  guideUtcOffset: Math.max(-12, Math.min(14, Number(e.target.value))) 
+                })}
+                inputProps={{ 
+                  min: -12, 
+                  max: 14,
+                  step: 1
+                }}
+                fullWidth
+                helperText="Your timezone offset from UTC"
+              />
+            </Box>
             
             <Button 
               variant="contained" 

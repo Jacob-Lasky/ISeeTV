@@ -290,37 +290,51 @@ export const channelService = {
     start: Date, 
     end: Date
   ): Promise<Record<string, Program[]>> {
+    // Add debug logging
+    console.log('Fetching programs with time window:', {
+        start: start.toISOString(),
+        end: end.toISOString(),
+        channelCount: channelIds.length
+    });
+
     // Split channelIds into smaller batches
     const batches = [];
     for (let i = 0; i < channelIds.length; i += PROGRAM_BATCH_SIZE) {
-      batches.push(channelIds.slice(i, i + PROGRAM_BATCH_SIZE));
+        batches.push(channelIds.slice(i, i + PROGRAM_BATCH_SIZE));
     }
 
     try {
-      // Fetch programs for each batch and combine results
-      const results = await Promise.all(
-        batches.map(async (batchIds) => {
-          const searchParams = new URLSearchParams({
-            start: start.toISOString(),
-            end: end.toISOString(),
-            channel_ids: batchIds.join(','),
-          });
+        // Fetch programs for each batch and combine results
+        const results = await Promise.all(
+            batches.map(async (batchIds) => {
+                const searchParams = new URLSearchParams({
+                    start: start.toISOString(),
+                    end: end.toISOString(),
+                    channel_ids: batchIds.join(','),
+                });
 
-          const response = await fetch(`${API_URL}/programs?${searchParams}`);
-          if (!response.ok) {
-            console.warn(`Failed to fetch programs for batch: ${response.statusText}`);
-            return {};
-          }
+                const response = await fetch(`${API_URL}/programs?${searchParams}`);
+                if (!response.ok) {
+                    console.warn(`Failed to fetch programs for batch: ${response.statusText}`);
+                    return {};
+                }
 
-          return await response.json();
-        })
-      );
+                const data = await response.json();
+                console.log(`Received programs for batch:`, {
+                    channelCount: batchIds.length,
+                    programCount: Object.values(data).flat().length
+                });
+                return data;
+            })
+        );
 
-      // Combine all batch results into a single object
-      return results.reduce((acc, result) => ({ ...acc, ...result }), {});
+        // Combine all batch results into a single object
+        const combinedResults = results.reduce((acc, result) => ({ ...acc, ...result }), {});
+        console.log('Total programs fetched:', Object.values(combinedResults).flat().length);
+        return combinedResults;
     } catch (error) {
-      console.error('Failed to fetch programs:', error);
-      throw new Error(`Failed to fetch programs: ${error}`);
+        console.error('Failed to fetch programs:', error);
+        throw new Error(`Failed to fetch programs: ${error}`);
     }
   },
 }; 
