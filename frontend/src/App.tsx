@@ -223,8 +223,9 @@ export default function App() {
             bottom: 0,
             width: 'auto',
             minWidth: 300,
+            maxWidth: channelListOpen ? '80vw' : 0,
             transform: channelListOpen ? 'none' : 'translateX(-100%)',
-            transition: theme.transitions.create('transform', {
+            transition: theme.transitions.create(['transform', 'max-width'], {
               easing: theme.transitions.easing.sharp,
               duration: theme.transitions.duration.enteringScreen,
             }),

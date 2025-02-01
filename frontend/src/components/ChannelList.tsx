@@ -13,6 +13,9 @@ import {
   Typography,
   Tabs,
   Tab,
+  Card,
+  CardContent,
+  Stack,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -27,6 +30,8 @@ import { channelService } from '../services/channelService';
 import { useNavigate } from 'react-router-dom';
 import debounce from 'lodash/debounce';
 import { format } from 'date-fns';
+import { Epg, Layout, useEpg, useProgram, ProgramBox, ProgramContent, ProgramFlex, ProgramStack, ProgramTitle, ProgramText, ChannelBox, ChannelLogo } from 'planby';
+import { useTheme } from '@mui/material/styles';
 
 // Move all helper functions and interfaces to the top
 const ITEMS_PER_PAGE = 250;
@@ -72,6 +77,22 @@ interface Program {
   start: Date;
   end: Date;
   duration: number; // in minutes
+}
+
+// Update interfaces to match Planby's expected format
+interface PlanbyProgram {
+  id: string;
+  title: string;
+  since: string;  // ISO string
+  till: string;   // ISO string
+  channelUuid: string;
+  image?: string;
+}
+
+interface PlanbyChannel {
+  uuid: string;
+  logo?: string;
+  name: string;
 }
 
 interface ChannelListProps {
@@ -143,6 +164,52 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   const navigate = useNavigate();
   const [epgExpanded, setEpgExpanded] = useState(false);
   const timeSlots = useMemo(() => generateTimeSlots(getStartTime()), []);
+  const theme = useTheme();
+
+  // Move planbyTheme inside the component to access theme
+  const planbyTheme = useMemo(() => ({
+    primary: {
+      600: theme.palette.mode === 'dark' ? '#171923' : '#f5f5f5',
+      900: theme.palette.mode === 'dark' ? '#1f1f1f' : '#ffffff',
+    },
+    grey: { 
+      300: theme.palette.mode === 'dark' ? '#d1d1d1' : '#757575' 
+    },
+    white: theme.palette.mode === 'dark' ? '#fff' : '#000',
+    green: {
+      300: theme.palette.primary.main, // Use MUI primary color
+    },
+    loader: {
+      teal: theme.palette.primary.light,
+      purple: theme.palette.primary.main,
+      pink: theme.palette.primary.dark,
+      bg: theme.palette.mode === 'dark' ? '#171923db' : '#f5f5f5db',
+    },
+    scrollbar: {
+      border: theme.palette.divider,
+      thumb: {
+        bg: theme.palette.mode === 'dark' ? '#e1e1e1' : '#757575',
+      },
+    },
+    gradient: {
+      blue: {
+        300: theme.palette.primary.light,
+        600: theme.palette.primary.main,
+        900: theme.palette.primary.dark,
+      },
+    },
+    text: {
+      grey: {
+        300: theme.palette.text.primary,
+        500: theme.palette.text.secondary,
+      },
+    },
+    timeline: {
+      divider: {
+        bg: theme.palette.divider,
+      },
+    },
+  }), [theme]);
 
   // Modify loadChannels to handle tab filters
   const loadChannels = useCallback(async (reset: boolean = false, isPrefetch: boolean = false) => {
@@ -261,14 +328,117 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
     return (diffMinutes / 30) * TIME_BLOCK_WIDTH;
   }, [timeSlots]);
 
+  // Convert channels and programs to Planby format
+  const planbyChannels = useMemo<PlanbyChannel[]>(() => 
+    channels.map(channel => ({
+      uuid: channel.guide_id,
+      name: channel.name,
+      logo: channel.logo,
+    })), [channels]
+  );
+
+  const planbyPrograms = useMemo<PlanbyProgram[]>(() => {
+    const allPrograms: PlanbyProgram[] = [];
+    Object.entries(programs).forEach(([channelId, channelPrograms]) => {
+      channelPrograms.forEach(program => {
+        allPrograms.push({
+          id: program.id,
+          title: program.title,
+          since: program.start.toISOString(),
+          till: program.end.toISOString(),
+          channelUuid: channelId,
+        });
+      });
+    });
+    return allPrograms;
+  }, [programs]);
+
+  // Initialize Planby EPG
+  const { getEpgProps, getLayoutProps } = useEpg({
+    channels: planbyChannels,
+    epg: planbyPrograms,
+    startDate: getStartTime().toISOString(),
+    width: channelListOpen ? epgExpanded ? 1200 : 300 : 0,
+    height: containerRef.current?.clientHeight || 800,
+    itemHeight: 70,
+    sidebarWidth: 300,
+    theme: planbyTheme,
+  });
+
+  // Custom Program component using Material-UI
+  const ProgramItem = ({ program, ...rest }: any) => {
+    const { styles, formatTime, isLive } = useProgram({ program, ...rest });
+
+    const { data } = program;
+    const { title, since, till } = data;
+
+    const sinceTime = formatTime(since);
+    const tillTime = formatTime(till);
+
+    return (
+      <ProgramBox width={styles.width} style={styles.position}>
+        <Card 
+          sx={{ 
+            height: '100%',
+            bgcolor: isLive ? 'action.selected' : 'background.paper',
+            borderRadius: 0,
+            '&:hover': {
+              bgcolor: 'action.hover',
+            }
+          }}
+        >
+          <CardContent sx={{ p: 1, '&:last-child': { pb: 1 } }}>
+            <Stack spacing={0.5}>
+              <Typography variant="subtitle2" noWrap>
+                {title}
+              </Typography>
+              <Typography variant="caption" color="text.secondary">
+                {sinceTime} - {tillTime}
+              </Typography>
+            </Stack>
+          </CardContent>
+        </Card>
+      </ProgramBox>
+    );
+  };
+
+  // Custom Channel component using Material-UI
+  const ChannelItem = ({ channel }: { channel: any }) => {
+    const { position, logo, name } = channel;
+    return (
+      <ChannelBox {...position}>
+        <Card sx={{ 
+          height: '100%', 
+          width: '100%',
+          display: 'flex',
+          alignItems: 'center',
+          borderRadius: 0,
+          bgcolor: 'background.paper',
+        }}>
+          <CardContent sx={{ 
+            p: 1, 
+            '&:last-child': { pb: 1 },
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+          }}>
+            <Avatar
+              src={logo}
+              alt={name}
+              variant="square"
+              sx={{ width: 32, height: 32 }}
+            />
+            <Typography noWrap>
+              {name}
+            </Typography>
+          </CardContent>
+        </Card>
+      </ChannelBox>
+    );
+  };
+
   return (
-    <Paper elevation={3} sx={{ 
-      height: '100%', 
-      display: 'flex', 
-      flexDirection: 'column',
-      position: 'relative',
-      width: 300, // Keep the container at fixed width
-    }}>
+    <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Fixed width header section */}
       <Box sx={{ 
         width: 300,
@@ -325,178 +495,34 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
         </Box>
       </Box>
 
-      {/* Expandable channels section */}
-      <Box
-        ref={containerRef}
-        onScroll={handleScroll}
-        sx={{
-          flexGrow: 1,
-          overflow: 'auto',
+      {/* Update EPG section */}
+      <Box 
+        ref={containerRef} 
+        sx={{ 
+          flexGrow: 1, 
+          overflow: 'hidden',
           bgcolor: 'background.default',
-          position: 'relative',
-          width: channelListOpen && epgExpanded ? `${300 + (timeSlots.length * TIME_BLOCK_WIDTH)}px` : '300px',
-          transition: theme => theme.transitions.create('width', {
-            easing: theme.transitions.easing.sharp,
-            duration: theme.transitions.duration.enteringScreen,
-          }),
         }}
       >
-        {/* Time header - highest z-index */}
-        <Box sx={{
-          position: 'sticky',
-          top: 0,
-          zIndex: 2,
-          display: 'flex',
-          bgcolor: 'background.paper',
-          borderBottom: 1,
-          borderColor: 'divider',
-          height: HEADER_HEIGHT,
-        }}>
-          {/* Empty space for channel info width */}
-          <Box sx={{ width: 300, flexShrink: 0 }} />
-          
-          {/* Time slots */}
-          <Box sx={{ 
-            display: channelListOpen && epgExpanded ? 'flex' : 'none',
-            height: HEADER_HEIGHT,
-          }}>
-            {timeSlots.map((time, index) => (
-              <Box
-                key={time.getTime()}
-                sx={{
-                  width: TIME_BLOCK_WIDTH,
-                  borderLeft: 1,
-                  borderColor: 'divider',
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  typography: 'body2',
-                }}
-              >
-                {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
-              </Box>
-            ))}
-          </Box>
-        </Box>
-
-        {/* Channel groups */}
-        {channels.map((channel, index) => {
-          const showHeader = index === 0 || channels[index - 1].group !== channel.group;
-
-          return (
-            <React.Fragment key={`${channel.guide_id}-${index}`}>
-              {showHeader && (
-                <Box sx={{
-                  ...headerStyles.container,
-                  width: channelListOpen && epgExpanded ? `${300 + (timeSlots.length * TIME_BLOCK_WIDTH)}px` : '300px',
-                  bgcolor: 'background.default',
-                  backdropFilter: 'blur(8px)',
-                }}>
-                  <Box sx={headerStyles.groupSection}>
-                    <Typography sx={headerStyles.text}>
-                      {channel.group}
-                    </Typography>
-                  </Box>
-                </Box>
-              )}
-              <Box sx={{ 
-                display: 'flex',
-                transition: theme => theme.transitions.create('width', {
-                  easing: theme.transitions.easing.sharp,
-                  duration: theme.transitions.duration.enteringScreen,
-                }),
-                width: channelListOpen && epgExpanded ? `${300 + (timeSlots.length * TIME_BLOCK_WIDTH)}px` : '300px',
-              }}>
-                <ListItemButton
-                  selected={selectedChannel?.guide_id === channel.guide_id}
-                  onClick={async () => {
-                    onChannelSelect(channel);
-                    navigate(`/channel/${channel.guide_id}`);
-                    try {
-                      await channelService.updateLastWatched(channel.guide_id);
-                    } catch (error) {
-                      console.error('Failed to update last watched:', error);
-                    }
-                  }}
-                  sx={{ width: 300, flexShrink: 0 }}
-                >
-                  <IconButton
-                    size="small"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onToggleFavorite(channel);
-                    }}
-                    sx={{ mr: 1 }}
-                  >
-                    {channel.isFavorite ? <StarIcon color="primary" /> : <StarBorderIcon />}
-                  </IconButton>
-                  <ListItemIcon>
-                    <Avatar
-                      src={channel.logo}
-                      alt={channel.name}
-                      variant="square"
-                      sx={{ width: 32, height: 32 }}
-                    >
-                      {channel.name[0]}
-                    </Avatar>
-                  </ListItemIcon>
-                  <ListItemText primary={channel.name} />
-                </ListItemButton>
-
-                <Box sx={{ 
-                  display: 'flex',
-                  overflow: 'hidden',
-                  opacity: channelListOpen && epgExpanded ? 1 : 0,
-                  transition: 'opacity 0.2s',
-                  position: 'relative',
-                  height: ITEM_HEIGHT,
-                }}>
-                  {programs[channel.guide_id]?.map((program) => (
-                    <Box
-                      key={program.id}
-                      sx={{
-                        position: 'absolute',
-                        left: getProgramPosition(program.start),
-                        width: getProgramWidth(program.duration),
-                        height: '100%',
-                        bgcolor: 'action.hover',
-                        borderLeft: 1,
-                        borderRight: 1,
-                        borderColor: 'divider',
-                        display: 'flex',
-                        alignItems: 'center',
-                        px: 1,
-                        overflow: 'hidden',
-                        whiteSpace: 'nowrap',
-                        textOverflow: 'ellipsis',
-                        typography: 'body2',
-                        '&:hover': {
-                          bgcolor: 'action.selected',
-                        },
-                      }}
-                      title={`${program.title}\n${format(program.start, 'HH:mm')} - ${format(program.end, 'HH:mm')}`}
-                    >
-                      {program.title}
-                    </Box>
-                  ))}
-                </Box>
-              </Box>
-            </React.Fragment>
-          );
-        })}
-        {(loading || prefetching) && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
-            <CircularProgress />
-          </Box>
-        )}
-        {!loading && !prefetching && channels.length === 0 && (
-          <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
-            <Typography color="text.secondary">
-              No channels found
-            </Typography>
-          </Box>
-        )}
+        <Epg {...getEpgProps()}>
+          <Layout
+            {...getLayoutProps()}
+            renderProgram={({ program, ...rest }) => (
+              <ProgramItem key={program.data.id} program={program} {...rest} />
+            )}
+            renderChannel={({ channel }) => (
+              <ChannelItem key={channel.uuid} channel={channel} />
+            )}
+          />
+        </Epg>
       </Box>
+
+      {/* Keep loading states */}
+      {(loading || prefetching) && (
+        <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+          <CircularProgress />
+        </Box>
+      )}
     </Paper>
   );
 });
