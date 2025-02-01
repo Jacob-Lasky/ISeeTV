@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useCallback, useEffect, useRef, forwardRef, useImperativeHandle, useMemo } from 'react';
 import {
   Box,
   ListItemButton,
@@ -42,7 +42,9 @@ const headerStyles = {
     borderColor: 'divider',
     py: 1.5,
     px: 2,
-    position: 'relative',
+    position: 'sticky',
+    top: 0,
+    zIndex: 1,
     '&::before': {
       content: '""',
       position: 'absolute',
@@ -79,7 +81,7 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  // Load channels with pagination
+  // Load channels with proper pagination
   const loadChannels = useCallback(async (reset: boolean = false) => {
     try {
       const newPage = reset ? 0 : page;
@@ -97,18 +99,28 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
       console.error('Failed to load channels:', error);
       setLoading(false);
     }
-  }, [searchTerm, page]);
+  }, [page, searchTerm]);
 
-  // Handle infinite scroll
+  // Create a stable debounced scroll handler
+  const debouncedScroll = useMemo(
+    () => debounce((element: HTMLDivElement) => {
+      const { scrollTop, clientHeight, scrollHeight } = element;
+      if (scrollHeight - scrollTop - clientHeight < 50 && !loading && hasMore) {
+        loadChannels();
+      }
+    }, 100),
+    [loading, hasMore, loadChannels]
+  );
+
+  // Handle scroll event
   const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
-    const { scrollTop, clientHeight, scrollHeight } = event.currentTarget;
-    if (scrollHeight - scrollTop - clientHeight < 50 && !loading && hasMore) {
-      loadChannels();
+    if (event.currentTarget) {
+      debouncedScroll(event.currentTarget);
     }
-  }, [loading, hasMore, loadChannels]);
+  }, [debouncedScroll]);
 
   // Handle search with debounce
-  const handleSearch = useCallback(debounce((term: string) => {
+  const handleSearch = useCallback((term: string) => {
     setSearchTerm(term);
     setLoading(true);
     setChannels([]);
@@ -117,7 +129,7 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
     if (containerRef.current) {
       containerRef.current.scrollTop = 0;
     }
-  }, 300), []);
+  }, []);
 
   // Initial load and search updates
   useEffect(() => {
@@ -178,10 +190,10 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
         }}
       >
         {channels.map((channel, index) => {
-          const showHeader = !channels[index - 1] || channels[index - 1].group !== channel.group;
+          const showHeader = index === 0 || channels[index - 1].group !== channel.group;
 
           return (
-            <React.Fragment key={channel.guide_id}>
+            <React.Fragment key={`${channel.guide_id}-${index}`}>
               {showHeader && (
                 <Box sx={headerStyles.container}>
                   <Typography sx={headerStyles.text}>

@@ -372,11 +372,8 @@ async def get_channels(
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     try:
-        # Build the base query with distinct on guide_id
-        query = (
-            select(models.Channel)
-            .order_by(models.Channel.guide_id)  # Required for distinct on
-        )
+        # Build the base query
+        query = select(models.Channel).order_by(models.Channel.group, models.Channel.name)
 
         # Apply filters
         if group:
@@ -386,13 +383,7 @@ async def get_channels(
         if favorites_only:
             query = query.where(models.Channel.is_favorite)
 
-        # Final query with proper ordering
-        final_query = (
-            select(models.Channel)
-            .order_by(models.Channel.group, models.Channel.name)
-        )
-
-        # Get total count from the distinct subquery
+        # Get total count
         count_result = await db.execute(
             select(func.count()).select_from(query.subquery())
         )
@@ -400,18 +391,20 @@ async def get_channels(
 
         # Apply pagination
         if window_start is not None and window_size is not None:
-            final_query = final_query.offset(window_start).limit(window_size)
+            query = query.offset(window_start).limit(window_size)
         else:
-            final_query = final_query.offset(skip).limit(limit)
+            query = query.offset(skip).limit(limit)
 
         # Execute the query
-        result = await db.execute(final_query)
+        result = await db.execute(query)
         channels = result.scalars().all()
 
-        # Add debug logging
-        guide_ids = [channel.guide_id for channel in channels]
-        if len(guide_ids) != len(set(guide_ids)):
-            logger.warning(f"Found duplicate guide_ids in response: {[gid for gid in guide_ids if guide_ids.count(gid) > 1]}")
+        # Debug logging
+        logger.debug(f"Query returned {len(channels)} channels")
+        if channels:
+            logger.debug(f"Groups in this page: {sorted(set(c.group for c in channels))}")
+            logger.debug(f"First channel: {channels[0].name}")
+            logger.debug(f"Last channel: {channels[-1].name}")
 
         return {
             "items": [ChannelResponse.model_validate(channel) for channel in channels],
