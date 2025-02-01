@@ -31,8 +31,9 @@ interface ChannelListProps {
   onOpenSettings?: () => void;
 }
 
-const ITEMS_PER_PAGE = 50;
+const ITEMS_PER_PAGE = 250
 const ITEM_HEIGHT = 56;
+const PREFETCH_THRESHOLD = 0.8; // Start loading when user scrolls to 80% of the list
 
 // Styles for group headers
 const headerStyles = {
@@ -75,6 +76,7 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
 }, ref) => {
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
+  const [prefetching, setPrefetching] = useState(false);  // New state for prefetching
   const [channels, setChannels] = useState<Channel[]>([]);
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
@@ -82,8 +84,14 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   const navigate = useNavigate();
 
   // Load channels with proper pagination
-  const loadChannels = useCallback(async (reset: boolean = false) => {
+  const loadChannels = useCallback(async (reset: boolean = false, isPrefetch: boolean = false) => {
     try {
+      if (isPrefetch) {
+        setPrefetching(true);
+      } else {
+        setLoading(true);
+      }
+
       const newPage = reset ? 0 : page;
       const skip = newPage * ITEMS_PER_PAGE;
       
@@ -94,10 +102,14 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
       setChannels(prev => reset ? response.items : [...prev, ...response.items]);
       setHasMore(response.items.length === ITEMS_PER_PAGE);
       setPage(prev => reset ? 1 : prev + 1);
-      setLoading(false);
     } catch (error) {
       console.error('Failed to load channels:', error);
-      setLoading(false);
+    } finally {
+      if (isPrefetch) {
+        setPrefetching(false);
+      } else {
+        setLoading(false);
+      }
     }
   }, [page, searchTerm]);
 
@@ -105,11 +117,19 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   const debouncedScroll = useMemo(
     () => debounce((element: HTMLDivElement) => {
       const { scrollTop, clientHeight, scrollHeight } = element;
+      const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
+
+      // If we're near the bottom and not already loading/prefetching
+      if (scrollPercentage > PREFETCH_THRESHOLD && !loading && !prefetching && hasMore) {
+        loadChannels(false, true);  // Start prefetching
+      }
+
+      // If we've hit the bottom and have prefetched data
       if (scrollHeight - scrollTop - clientHeight < 50 && !loading && hasMore) {
-        loadChannels();
+        loadChannels();  // Load the next page normally
       }
     }, 100),
-    [loading, hasMore, loadChannels]
+    [loading, prefetching, hasMore, loadChannels]
   );
 
   // Handle scroll event
@@ -240,12 +260,12 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
             </React.Fragment>
           );
         })}
-        {loading && (
+        {(loading || prefetching) && (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
             <CircularProgress />
           </Box>
         )}
-        {!loading && channels.length === 0 && (
+        {!loading && !prefetching && channels.length === 0 && (
           <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
             <Typography color="text.secondary">
               No channels found

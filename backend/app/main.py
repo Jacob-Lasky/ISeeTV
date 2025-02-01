@@ -363,7 +363,7 @@ async def refresh_epg(
 @app.get("/channels")
 async def get_channels(
     skip: int = 0,
-    limit: int = 100,
+    limit: int = 250,
     group: Optional[str] = None,
     search: Optional[str] = None,
     favorites_only: bool = False,
