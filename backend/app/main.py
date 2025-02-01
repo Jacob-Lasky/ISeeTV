@@ -367,11 +367,15 @@ async def get_channels(
     group: Optional[str] = None,
     search: Optional[str] = None,
     favorites_only: bool = False,
+    recent_only: bool = False,
     window_start: Optional[int] = None,
     window_size: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     try:
+        # Add debug logging
+        logger.debug(f"Getting channels with params: skip={skip}, limit={limit}, recent_only={recent_only}")
+        
         # Build the base query
         query = select(models.Channel).order_by(models.Channel.group, models.Channel.name)
 
@@ -382,6 +386,21 @@ async def get_channels(
             query = query.where(models.Channel.name.ilike(f"%{search}%"))
         if favorites_only:
             query = query.where(models.Channel.is_favorite)
+        if recent_only:
+            config = load_config()
+            recent_days = config.get("recent_days", 3)
+            recent_cutoff = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(days=recent_days)
+            
+            # Add debug logging for recent filter
+            logger.debug(f"Filtering for channels watched since: {recent_cutoff}")
+            
+            query = query.where(
+                models.Channel.last_watched.isnot(None)  # Has been watched
+            ).where(
+                models.Channel.last_watched >= recent_cutoff  # Watched recently
+            ).order_by(
+                models.Channel.last_watched.desc()  # Most recently watched first
+            )
 
         # Get total count
         count_result = await db.execute(
@@ -622,6 +641,7 @@ async def save_settings(request: Request) -> dict[str, Any]:
         config["epg_update_interval"] = data.get("epgUpdateInterval", 24)
         config["update_on_start"] = data.get("updateOnStart", True)
         config["theme"] = data.get("theme", "light")
+        config["recent_days"] = data.get("recentDays", 3)  # Add recent days setting
 
         save_config(config)
         return {"status": "success"}
@@ -644,6 +664,7 @@ async def get_settings() -> dict[str, Any]:
             "epgUpdateInterval": config.get("epg_update_interval", 24),
             "updateOnStart": config.get("update_on_start", True),
             "theme": config.get("theme", "dark"),
+            "recentDays": config.get("recent_days", 3),  # Add default of 3 days
         }
     except Exception as e:
         logger.error(f"Failed to load settings: {str(e)}")
@@ -704,4 +725,24 @@ async def hard_reset_channels(db: AsyncSession = Depends(get_db)) -> StreamingRe
 
     except Exception as e:
         logger.error(f"Failed to hard reset channels: {str(e)}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/channels/{guide_id}/watched")
+async def update_last_watched(
+    guide_id: str,
+    db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    """Update last watched time for a channel"""
+    try:
+        stmt = (
+            update(models.Channel)
+            .where(models.Channel.guide_id == guide_id)
+            .values(last_watched=datetime.datetime.now(datetime.timezone.utc))
+        )
+        await db.execute(stmt)
+        await db.commit()
+        return {"status": "success"}
+    except Exception as e:
+        logger.error(f"Failed to update last watched: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))

@@ -11,6 +11,8 @@ import {
   InputAdornment,
   CircularProgress,
   Typography,
+  Tabs,
+  Tab,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -67,6 +69,9 @@ const headerStyles = {
   }
 };
 
+// Add type for tab values
+type TabValue = 'all' | 'favorites' | 'recent';
+
 export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelListProps>(({
   selectedChannel,
   onChannelSelect,
@@ -74,6 +79,8 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   onRefresh,
   onOpenSettings,
 }, ref) => {
+  // Add activeTab state
+  const [activeTab, setActiveTab] = useState<TabValue>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [prefetching, setPrefetching] = useState(false);  // New state for prefetching
@@ -83,7 +90,7 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
 
-  // Load channels with proper pagination
+  // Modify loadChannels to handle tab filters
   const loadChannels = useCallback(async (reset: boolean = false, isPrefetch: boolean = false) => {
     try {
       if (isPrefetch) {
@@ -96,7 +103,9 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
       const skip = newPage * ITEMS_PER_PAGE;
       
       const response = await channelService.getChannels(skip, ITEMS_PER_PAGE, {
-        search: searchTerm
+        search: searchTerm,
+        favoritesOnly: activeTab === 'favorites',
+        recentOnly: activeTab === 'recent'
       });
 
       setChannels(prev => reset ? response.items : [...prev, ...response.items]);
@@ -108,10 +117,10 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
       if (isPrefetch) {
         setPrefetching(false);
       } else {
-        setLoading(false);
+      setLoading(false);
       }
     }
-  }, [page, searchTerm]);
+  }, [page, searchTerm, activeTab]);
 
   // Create a stable debounced scroll handler
   const debouncedScroll = useMemo(
@@ -151,10 +160,21 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
     }
   }, []);
 
-  // Initial load and search updates
+  // Add tab change handler
+  const handleTabChange = useCallback((_: React.SyntheticEvent, newValue: TabValue) => {
+    setActiveTab(newValue);
+    setChannels([]);
+    setHasMore(true);
+    setPage(0);
+    if (containerRef.current) {
+      containerRef.current.scrollTop = 0;
+    }
+  }, []);
+
+  // Update useEffect to reload on tab change
   useEffect(() => {
     loadChannels(true);
-  }, [searchTerm]);
+  }, [searchTerm, activeTab]);
 
   // Refresh function for parent component
   const refresh = useCallback(async () => {
@@ -199,6 +219,18 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
         )}
       </Box>
 
+      {/* Add Tabs */}
+      <Tabs
+        value={activeTab}
+        onChange={handleTabChange}
+        variant="fullWidth"
+        sx={{ borderBottom: 1, borderColor: 'divider' }}
+      >
+        <Tab label="All" value="all" />
+        <Tab label="Favorites" value="favorites" />
+        <Tab label="Recent" value="recent" />
+      </Tabs>
+
       {/* Channel List */}
       <Box
         ref={containerRef}
@@ -223,9 +255,14 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
               )}
               <ListItemButton
                 selected={selectedChannel?.guide_id === channel.guide_id}
-                onClick={() => {
+                onClick={async () => {
                   onChannelSelect(channel);
                   navigate(`/channel/${channel.guide_id}`);
+                  try {
+                    await channelService.updateLastWatched(channel.guide_id);
+                  } catch (error) {
+                    console.error('Failed to update last watched:', error);
+                  }
                 }}
                 sx={{ 
                   height: ITEM_HEIGHT,
@@ -277,4 +314,4 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   );
 });
 
-export type { ChannelListProps };
+export type { ChannelListProps }; 

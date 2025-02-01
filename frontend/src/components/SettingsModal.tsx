@@ -51,7 +51,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     epgUrl: '',
     epgUpdateInterval: 24,
     updateOnStart: true,
-    theme: 'dark'
+    theme: 'dark',
+    recentDays: 3
   });
 
   const [activeTab, setActiveTab] = useState(0);
@@ -269,6 +270,22 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 <MenuItem value="system">System</MenuItem>
               </Select>
             </FormControl>
+            
+            <TextField
+              label="Recent Days"
+              type="number"
+              value={formState.recentDays}
+              onChange={(e) => setFormState({
+                ...formState,
+                recentDays: Math.max(1, Math.min(30, Number(e.target.value)))
+              })}
+              inputProps={{
+                min: 1,
+                max: 30,
+                step: 1
+              }}
+              helperText="Number of days to show in Recent tab (1-30)"
+            />
             
             <Button 
               variant="contained" 

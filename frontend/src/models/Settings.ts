@@ -5,4 +5,5 @@ export interface Settings {
   epgUpdateInterval: number; 
   updateOnStart: boolean;
   theme: 'light' | 'dark' | 'system';
+  recentDays: number;
 } 

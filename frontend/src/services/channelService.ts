@@ -9,6 +9,7 @@ interface GetChannelsParams {
   favoritesOnly?: boolean;
   windowStart?: number;
   windowSize?: number;
+  recentOnly?: boolean;
 } 
 
 interface GetChannelsResponse {
@@ -36,6 +37,7 @@ export const channelService = {
       ...(params.favoritesOnly && { favorites_only: 'true' }),
       ...(params.windowStart !== undefined && { window_start: params.windowStart.toString() }),
       ...(params.windowSize !== undefined && { window_size: params.windowSize.toString() }),
+      ...(params.recentOnly && { recent_only: 'true' }),
     });
 
     console.log('Fetching channels with params:', Object.fromEntries(searchParams.entries()));
@@ -259,6 +261,16 @@ export const channelService = {
       } finally {
         reader.releaseLock();
       }
+    }
+  },
+
+  async updateLastWatched(guideId: string): Promise<void> {
+    const response = await fetch(`${API_URL}/channels/${guideId}/watched`, {
+      method: 'POST',
+    });
+
+    if (!response.ok) {
+      throw new Error(`Failed to update last watched: ${response.statusText}`);
     }
   },
 }; 
