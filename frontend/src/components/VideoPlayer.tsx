@@ -23,13 +23,13 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
 
   const cleanupStream = useCallback(async () => {
     try {
-      await fetch(`${API_URL}/stream/${channel.guide_id}/cleanup`, {
+      await fetch(`${API_URL}/stream/${channel.channel_id}/cleanup`, {
         method: 'GET',
       });
     } catch (error) {
       console.error('Failed to cleanup stream:', error);
     }
-  }, [channel.guide_id]);
+  }, [channel.channel_id]);
 
   React.useEffect(() => {
     return () => {
@@ -58,7 +58,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
           const video = videoRef.current;
           if (!video) return;
 
-          const proxyUrl = `${API_URL}/stream/${channel.guide_id}`;
+          const proxyUrl = `${API_URL}/stream/${channel.channel_id}`;
           const hls = new Hls({
             // API reference: https://github.com/video-dev/hls.js/blob/master/docs/API.md
             maxBufferLength: Infinity,  // the maximum number of seconds to buffer
@@ -116,7 +116,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
       clearTimeout(timeoutId);
     };
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [channel.guide_id, cleanupStream]);
+  }, [channel.channel_id, cleanupStream]);
 
   const handleBack = () => {
     navigate('/');

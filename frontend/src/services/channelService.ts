@@ -64,7 +64,7 @@ export const channelService = {
       items: data.items.map((item: any) => ({
         ...item,
         isFavorite: item.is_favorite,
-        guide_id: item.guide_id,
+        channel_id: item.channel_id,
         lastWatched: item.last_watched ? new Date(item.last_watched) : undefined,
       }))
     };
@@ -86,7 +86,7 @@ export const channelService = {
       const data = await response.json();
       return {
         ...data,
-        guide_id: data.guide_id,
+        channel_id: data.channel_id,
         isFavorite: data.is_favorite,
         lastWatched: data.last_watched ? new Date(data.last_watched) : undefined,
       };
@@ -290,7 +290,7 @@ export const channelService = {
     const searchParams = new URLSearchParams({
       start: start.toISOString(),
       end: end.toISOString(),
-      guide_ids: guideIds.join(','),
+      channel_ids: guideIds.join(','),
     });
 
     const response = await fetch(`${API_URL}/programs?${searchParams}`);

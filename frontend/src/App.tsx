@@ -140,7 +140,7 @@ export default function App() {
   };
 
   const handleToggleFavorite = async (channel: Channel) => {
-    await channelService.toggleFavorite(channel.guide_id);
+    await channelService.toggleFavorite(channel.channel_id);
   };
 
   const handleM3uProgress = (current: number, total: number | ProgressMessage) => {
@@ -193,7 +193,7 @@ export default function App() {
           const endTime = new Date(startTime);
           endTime.setHours(endTime.getHours() + 4);
 
-          const guideIds = visibleChannels.map(c => c.guide_id);
+          const guideIds = visibleChannels.map(c => c.channel_id);
           const programData = await channelService.getPrograms(guideIds, startTime, endTime);
           setPrograms(programData);
         } catch (error) {

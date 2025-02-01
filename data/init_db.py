@@ -22,7 +22,7 @@ try:
     logger.info("Creating channels table...")
     cursor.execute(
         """CREATE TABLE IF NOT EXISTS channels (
-            guide_id TEXT PRIMARY KEY,
+            channel_id TEXT PRIMARY KEY,
             name TEXT NOT NULL,
             url TEXT NOT NULL,
             "group" TEXT,
@@ -42,7 +42,7 @@ try:
             variant_name TEXT NOT NULL,
             url TEXT NOT NULL,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (channel_id) REFERENCES channels(guide_id),
+            FOREIGN KEY (channel_id) REFERENCES channels(channel_id),
             UNIQUE(channel_id, variant_name)
         )"""
     )
@@ -54,7 +54,7 @@ try:
         AFTER UPDATE ON channels
         BEGIN
             UPDATE channels SET created_at = CURRENT_TIMESTAMP
-            WHERE guide_id = NEW.guide_id;
+            WHERE channel_id = NEW.channel_id;
         END
         """
     )
@@ -77,8 +77,8 @@ try:
            ON channels("group")"""
     )
     cursor.execute(
-        """CREATE INDEX IF NOT EXISTS idx_channels_guide_id 
-           ON channels(guide_id)"""
+        """CREATE INDEX IF NOT EXISTS idx_channels_channel_id 
+           ON channels(channel_id)"""
     )
     cursor.execute(
         """CREATE INDEX IF NOT EXISTS idx_channels_name 
@@ -98,7 +98,7 @@ try:
             display_name TEXT NOT NULL,
             icon TEXT,
             is_primary INTEGER DEFAULT 0,
-            FOREIGN KEY (channel_id) REFERENCES channels(guide_id)
+            FOREIGN KEY (channel_id) REFERENCES channels(channel_id)
         )
         """
     )
@@ -114,7 +114,7 @@ try:
             description TEXT,
             category TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            FOREIGN KEY (channel_id) REFERENCES channels(guide_id)
+            FOREIGN KEY (channel_id) REFERENCES channels(channel_id)
         )
         """
     )

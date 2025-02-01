@@ -1,5 +1,5 @@
 export interface Channel {
-  guide_id: string;
+  channel_id: string;
   name: string;
   url: string;
   group: string;

@@ -331,7 +331,7 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   // Convert channels and programs to Planby format
   const planbyChannels = useMemo<PlanbyChannel[]>(() => 
     channels.map(channel => ({
-      uuid: channel.guide_id,
+      uuid: channel.channel_id,
       name: channel.name,
       logo: channel.logo,
     })), [channels]

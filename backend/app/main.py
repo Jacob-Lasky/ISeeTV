@@ -72,7 +72,7 @@ class ChannelBase(BaseModel):
 
 
 class ChannelResponse(BaseModel):
-    guide_id: str
+    channel_id: str
     name: str
     url: str
     group: str
@@ -90,15 +90,15 @@ class ChannelResponse(BaseModel):
 gpu_availability_cache: dict[str, bool] = {}
 
 
-async def is_gpu_available(guide_id: str) -> bool:
-    if guide_id in gpu_availability_cache:
-        return gpu_availability_cache[guide_id]
+async def is_gpu_available(channel_id: str) -> bool:
+    if channel_id in gpu_availability_cache:
+        return gpu_availability_cache[channel_id]
     else:
         try:
             result = subprocess.run(["nvidia-smi"], capture_output=True)
             is_gpu_available = result.returncode == 0
             logger.info(f"GPU availability: {is_gpu_available}")
-            gpu_availability_cache[guide_id] = is_gpu_available
+            gpu_availability_cache[channel_id] = is_gpu_available
             return is_gpu_available
         except FileNotFoundError:
             return False
@@ -180,29 +180,29 @@ async def refresh_m3u(
                     yield json.dumps(progress).encode() + b"\n"
 
                 # After download is complete, process the file
-                channels, new_guide_ids = await m3u_service.read_and_parse(
+                channels, new_channel_ids = await m3u_service.read_and_parse(
                     m3u_service.file
                 )
 
                 # Mark channels not in new M3U as missing
                 await db.execute(
                     update(models.Channel)
-                    .where(models.Channel.guide_id.notin_(new_guide_ids))
+                    .where(models.Channel.channel_id.notin_(new_channel_ids))
                     .values(is_missing=1)
                 )
 
                 # Get existing favorites
                 result = await db.execute(
-                    select(models.Channel.guide_id, models.Channel.is_favorite).where(
+                    select(models.Channel.channel_id, models.Channel.is_favorite).where(
                         models.Channel.is_favorite
                     )
                 )
-                favorites = {row.guide_id: row.is_favorite for row in result}
+                favorites = {row.channel_id: row.is_favorite for row in result}
 
                 # Preserve favorite status in new channel data
                 for channel in channels:
-                    if channel["guide_id"] in favorites:
-                        channel["is_favorite"] = favorites[channel["guide_id"]]
+                    if channel["channel_id"] in favorites:
+                        channel["is_favorite"] = favorites[channel["channel_id"]]
 
                 # Insert or update channels
                 for channel in channels:
@@ -228,7 +228,7 @@ async def refresh_m3u(
                 yield json.dumps(
                     {
                         "type": "complete",
-                        "message": f"Found {len(new_guide_ids)} new channels in the M3U",
+                        "message": f"Found {len(new_channel_ids)} new channels in the M3U",
                     }
                 ).encode() + b"\n"
 
@@ -436,17 +436,17 @@ async def get_channels(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.put("/channels/{guide_id}/favorite")
+@app.put("/channels/{channel_id}/favorite")
 async def toggle_favorite(
-    guide_id: str, db: AsyncSession = Depends(get_db)
+    channel_id: str, db: AsyncSession = Depends(get_db)
 ) -> ChannelResponse:
     """Toggle favorite status for a channel"""
-    logger.info(f"Toggling favorite status for channel {guide_id}")
+    logger.info(f"Toggling favorite status for channel {channel_id}")
 
     try:
         # Get the channel
         result = await db.execute(
-            select(models.Channel).where(models.Channel.guide_id == guide_id)
+            select(models.Channel).where(models.Channel.channel_id == channel_id)
         )
         channel = result.scalar_one_or_none()
 
@@ -457,7 +457,7 @@ async def toggle_favorite(
         channel.is_favorite = not channel.is_favorite  # type: ignore[assignment]
 
         logger.info(
-            f"Channel {guide_id} is now {'a favorite' if channel.is_favorite else 'not a favorite'}"
+            f"Channel {channel_id} is now {'a favorite' if channel.is_favorite else 'not a favorite'}"
         )
 
         # Commit the change
@@ -482,7 +482,7 @@ async def get_channel_groups(
         query = (
             select(
                 models.Channel.group,
-                func.count(models.Channel.guide_id).label("count"),
+                func.count(models.Channel.channel_id).label("count"),
             )
             .group_by(models.Channel.group)
             .order_by(models.Channel.group)
@@ -510,14 +510,14 @@ os.makedirs(SEGMENTS_DIR, exist_ok=True)
 app.mount("/segments", StaticFiles(directory=SEGMENTS_DIR), name="segments")
 
 
-@app.get("/stream/{guide_id}")
+@app.get("/stream/{channel_id}")
 async def stream_channel(
-    guide_id: str,
+    channel_id: str,
     db: AsyncSession = Depends(get_db),
     timeout: int = 30,
 ) -> FileResponse:
     result = await db.execute(
-        select(models.Channel).where(models.Channel.guide_id == guide_id)
+        select(models.Channel).where(models.Channel.channel_id == channel_id)
     )
     channel = result.scalar_one_or_none()
     if not channel:
@@ -526,7 +526,7 @@ async def stream_channel(
     stream_url = f"{channel.url}.m3u8"
     m3u8_name = "stream.m3u8"
     # Create channel-specific directory
-    channel_dir = os.path.join(SEGMENTS_DIR, guide_id)
+    channel_dir = os.path.join(SEGMENTS_DIR, channel_id)
     os.makedirs(channel_dir, exist_ok=True)
 
     output_m3u8 = os.path.join(channel_dir, m3u8_name)
@@ -536,18 +536,18 @@ async def stream_channel(
 
         # Start the video processing
         ffmpeg_process, monitor = await process_video(
-            stream_url, channel_dir, m3u8_name, guide_id
+            stream_url, channel_dir, m3u8_name, channel_id
         )
-        STREAM_RESOURCES[guide_id] = {
+        STREAM_RESOURCES[channel_id] = {
             "dir": channel_dir,
             "ffmpeg_process": ffmpeg_process,
             "monitor": monitor,
         }
-        logger.info(f"Started video processing for channel {guide_id}")
+        logger.info(f"Started video processing for channel {channel_id}")
 
         # Clean up other channels
         for existing_channel in list(STREAM_RESOURCES.keys()):
-            if existing_channel != guide_id:
+            if existing_channel != channel_id:
                 logger.info(f"Cleaning up existing channel {existing_channel}")
                 cleanup_channel_resources(existing_channel)
 
@@ -556,7 +556,7 @@ async def stream_channel(
         x = 0
         while True:
             logger.info(
-                f"Waiting for manifest creation for channel {guide_id}{'.' * ((x%3) + 1)}"
+                f"Waiting for manifest creation for channel {channel_id}{'.' * ((x%3) + 1)}"
             )
             if not os.path.exists(channel_dir):
                 msg = "Channel directory not found, likely the stream was manually stopped"
@@ -572,7 +572,7 @@ async def stream_channel(
                 x += 1
                 if x > timeout:
                     raise TimeoutError(
-                        f"Manifest creation timedout for channel {guide_id}"
+                        f"Manifest creation timedout for channel {channel_id}"
                     )
 
     return FileResponse(output_m3u8, media_type="application/vnd.apple.mpegurl")
@@ -589,34 +589,34 @@ def remove_channel_directory(channel_dir: str) -> None:
 @app.get("/stream/cleanup")
 def cleanup_all_channel_resources() -> dict[str, str]:
     """Clean up resources for all channels."""
-    for guide_id in os.listdir(SEGMENTS_DIR):
-        cleanup_channel_resources(guide_id)
+    for channel_id in os.listdir(SEGMENTS_DIR):
+        cleanup_channel_resources(channel_id)
     return {"message": "Cleaned up resources for all channels"}
 
 
-@app.get("/stream/{guide_id}/cleanup")
-def cleanup_channel_resources(guide_id: str) -> dict[str, str]:
+@app.get("/stream/{channel_id}/cleanup")
+def cleanup_channel_resources(channel_id: str) -> dict[str, str]:
     """Clean up resources for a specific channel."""
-    if guide_id in STREAM_RESOURCES:
-        logger.info(f"Cleaning up resources for channel {guide_id}")
-        channel_dir = STREAM_RESOURCES[guide_id]["dir"]
-        monitor = STREAM_RESOURCES[guide_id]["monitor"]
+    if channel_id in STREAM_RESOURCES:
+        logger.info(f"Cleaning up resources for channel {channel_id}")
+        channel_dir = STREAM_RESOURCES[channel_id]["dir"]
+        monitor = STREAM_RESOURCES[channel_id]["monitor"]
 
-        STREAM_RESOURCES.pop(guide_id)
+        STREAM_RESOURCES.pop(channel_id)
         # Remove the channel directory
         remove_channel_directory(channel_dir)
 
         # Stop the ffmpeg process
         monitor.stop()
 
-        return {"message": f"Cleaned up resources for channel {guide_id}"}
+        return {"message": f"Cleaned up resources for channel {channel_id}"}
 
-    return {"message": f"No resources found for channel {guide_id}"}
+    return {"message": f"No resources found for channel {channel_id}"}
 
 
-@app.get("/segments/{guide_id}/{segment_path:path}")
-async def get_hls_segment(guide_id: str, segment_path: str) -> FileResponse:
-    file_path = os.path.join(SEGMENTS_DIR, guide_id, segment_path)
+@app.get("/segments/{channel_id}/{segment_path:path}")
+async def get_hls_segment(channel_id: str, segment_path: str) -> FileResponse:
+    file_path = os.path.join(SEGMENTS_DIR, channel_id, segment_path)
     headers = {
         "Cache-Control": "no-cache, no-store, must-revalidate",
         "Pragma": "no-cache",
@@ -703,7 +703,7 @@ async def hard_reset_channels(db: AsyncSession = Depends(get_db)) -> StreamingRe
                 yield json.dumps(progress).encode() + b"\n"
 
             # Process the M3U file
-            channels, new_guide_ids = await m3u_service.read_and_parse(m3u_service.file)
+            channels, new_channel_ids = await m3u_service.read_and_parse(m3u_service.file)
 
             # Insert channels
             for channel in channels:
@@ -728,16 +728,16 @@ async def hard_reset_channels(db: AsyncSession = Depends(get_db)) -> StreamingRe
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/channels/{guide_id}/watched")
+@app.post("/channels/{channel_id}/watched")
 async def update_last_watched(
-    guide_id: str,
+    channel_id: str,
     db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """Update last watched time for a channel"""
     try:
         stmt = (
             update(models.Channel)
-            .where(models.Channel.guide_id == guide_id)
+            .where(models.Channel.channel_id == channel_id)
             .values(last_watched=datetime.datetime.now(datetime.timezone.utc))
         )
         await db.execute(stmt)

@@ -79,7 +79,7 @@ class StreamMonitor:
 
 
 async def process_video(
-    stream_url: str, output_dir: str, m3u8_name: str, guide_id: str
+    stream_url: str, output_dir: str, m3u8_name: str, channel_id: str
 ) -> tuple[subprocess.Popen[Any], StreamMonitor]:
     output_m3u8 = os.path.join(output_dir, m3u8_name)
 
@@ -102,7 +102,7 @@ async def process_video(
         "-hls_list_size": "0",
         "-hls_flags": "append_list+omit_endlist",
         "-hls_segment_filename": os.path.join(output_dir, "stream_%06d.ts"),
-        "-hls_base_url": f"/segments/{guide_id}/",
+        "-hls_base_url": f"/segments/{channel_id}/",
         "-hls_segment_type": "mpegts",
         # Stream settings
         "-reconnect": "1",
