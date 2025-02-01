@@ -19,11 +19,60 @@ import {
   Star as StarIcon,
   StarBorder as StarBorderIcon,
   Settings as SettingsIcon,
+  ChevronRight,
+  ChevronLeft,
 } from '@mui/icons-material';
 import { Channel } from '../models/Channel';
 import { channelService } from '../services/channelService';
 import { useNavigate } from 'react-router-dom';
 import debounce from 'lodash/debounce';
+import { format } from 'date-fns';
+
+// Move all helper functions and interfaces to the top
+const ITEMS_PER_PAGE = 250;
+const ITEM_HEIGHT = 56;
+const TIME_BLOCK_WIDTH = 150;
+const HEADER_HEIGHT = 48;
+const PREFETCH_THRESHOLD = 0.8; // Start loading when user scrolls to 80% of the list
+
+// Helper function to get the most recent half hour
+const getStartTime = () => {
+  const now = new Date();
+  const minutes = now.getMinutes();
+  const roundedMinutes = minutes >= 30 ? 30 : 0;
+  
+  now.setMinutes(roundedMinutes);
+  now.setSeconds(0);
+  now.setMilliseconds(0);
+  
+  return now;
+};
+
+// Helper function to generate time slots
+const generateTimeSlots = (startTime: Date, hours: number = 4) => {
+  const slots: Date[] = [];
+  const totalSlots = hours * 2; // 2 slots per hour (30 min each)
+  
+  for (let i = 0; i < totalSlots; i++) {
+    const time = new Date(startTime);
+    time.setMinutes(time.getMinutes() + (i * 30));
+    slots.push(time);
+  }
+  
+  return slots;
+};
+
+// Add type for tab values
+type TabValue = 'all' | 'favorites' | 'recent';
+
+// Add interface for program data
+interface Program {
+  id: string;
+  title: string;
+  start: Date;
+  end: Date;
+  duration: number; // in minutes
+}
 
 interface ChannelListProps {
   selectedChannel?: Channel;
@@ -31,24 +80,28 @@ interface ChannelListProps {
   onToggleFavorite: (channel: Channel) => void;
   onRefresh?: (refreshFn: (() => Promise<void>) | undefined) => void;
   onOpenSettings?: () => void;
-  onChannelsChange: (channels: Channel[]) => void;
+  programs?: Record<string, Program[]>;
+  channelListOpen: boolean;
 }
-
-const ITEMS_PER_PAGE = 250
-const ITEM_HEIGHT = 56;
-const PREFETCH_THRESHOLD = 0.8; // Start loading when user scrolls to 80% of the list
 
 // Styles for group headers
 const headerStyles = {
   container: {
+    display: 'flex',
     bgcolor: 'background.default',
     borderBottom: 1,
     borderColor: 'divider',
     py: 1.5,
-    px: 2,
     position: 'sticky',
-    top: 0,
+    top: HEADER_HEIGHT,
     zIndex: 1,
+  },
+  groupSection: {  // New style for the fixed-width group section
+    width: 300,
+    flexShrink: 0,
+    display: 'flex',
+    alignItems: 'center',
+    position: 'relative',
     '&::before': {
       content: '""',
       position: 'absolute',
@@ -63,15 +116,12 @@ const headerStyles = {
   text: {
     color: 'text.primary',
     fontWeight: 500,
-    pl: 1,
+    pl: 3,  // Increased padding to account for the indicator
     textTransform: 'uppercase',
     letterSpacing: '0.5px',
     fontSize: '0.8125rem',
   }
 };
-
-// Add type for tab values
-type TabValue = 'all' | 'favorites' | 'recent';
 
 export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelListProps>(({
   selectedChannel,
@@ -79,9 +129,9 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   onToggleFavorite,
   onRefresh,
   onOpenSettings,
-  onChannelsChange,
+  programs = {},
+  channelListOpen,
 }, ref) => {
-  // Add activeTab state
   const [activeTab, setActiveTab] = useState<TabValue>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
@@ -91,6 +141,8 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   const [page, setPage] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
+  const [epgExpanded, setEpgExpanded] = useState(false);
+  const timeSlots = useMemo(() => generateTimeSlots(getStartTime()), []);
 
   // Modify loadChannels to handle tab filters
   const loadChannels = useCallback(async (reset: boolean = false, isPrefetch: boolean = false) => {
@@ -197,111 +249,238 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
     }
   }, [onRefresh, refresh]);
 
-  useEffect(() => {
-    if (onChannelsChange) {
-      onChannelsChange(channels);
-    }
-  }, [channels, onChannelsChange]);
+  // Add helper to calculate program width
+  const getProgramWidth = useCallback((duration: number) => {
+    return (duration / 30) * TIME_BLOCK_WIDTH;
+  }, []);
+
+  // Add helper to calculate program position
+  const getProgramPosition = useCallback((start: Date) => {
+    const firstSlot = timeSlots[0];
+    const diffMinutes = (start.getTime() - firstSlot.getTime()) / (1000 * 60);
+    return (diffMinutes / 30) * TIME_BLOCK_WIDTH;
+  }, [timeSlots]);
 
   return (
-    <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      {/* Search Bar */}
-      <Box sx={{ p: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-        <TextField
-          fullWidth
-          size="small"
-          placeholder="Search channels..."
-          onChange={(e) => handleSearch(e.target.value)}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-          }}
-        />
-        {onOpenSettings && (
-          <IconButton onClick={onOpenSettings} size="small">
-            <SettingsIcon />
+    <Paper elevation={3} sx={{ 
+      height: '100%', 
+      display: 'flex', 
+      flexDirection: 'column',
+      position: 'relative',
+      width: 300, // Keep the container at fixed width
+    }}>
+      {/* Fixed width header section */}
+      <Box sx={{ 
+        width: 300,
+        flexShrink: 0,
+        zIndex: 3,
+        bgcolor: 'background.paper',
+        borderBottom: 1,
+        borderColor: 'divider',
+      }}>
+        {/* Search Bar */}
+        <Box sx={{ p: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Search channels..."
+            onChange={(e) => handleSearch(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon />
+                </InputAdornment>
+              ),
+            }}
+          />
+          {onOpenSettings && (
+            <IconButton onClick={onOpenSettings} size="small">
+              <SettingsIcon />
+            </IconButton>
+          )}
+        </Box>
+
+        {/* Tabs and EPG Toggle */}
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Tabs
+            value={activeTab}
+            onChange={handleTabChange}
+            variant="fullWidth"
+            sx={{ borderBottom: 1, borderColor: 'divider', flexGrow: 1 }}
+          >
+            <Tab label="All" value="all" />
+            <Tab label="Favorites" value="favorites" />
+            <Tab label="Recent" value="recent" />
+          </Tabs>
+          <IconButton
+            onClick={() => setEpgExpanded(!epgExpanded)}
+            sx={{
+              borderRadius: '4px 0 0 4px',
+              bgcolor: 'background.paper',
+              '&:hover': { bgcolor: 'action.hover' },
+            }}
+          >
+            {epgExpanded ? <ChevronLeft /> : <ChevronRight />}
           </IconButton>
-        )}
+        </Box>
       </Box>
 
-      {/* Add Tabs */}
-      <Tabs
-        value={activeTab}
-        onChange={handleTabChange}
-        variant="fullWidth"
-        sx={{ borderBottom: 1, borderColor: 'divider' }}
-      >
-        <Tab label="All" value="all" />
-        <Tab label="Favorites" value="favorites" />
-        <Tab label="Recent" value="recent" />
-      </Tabs>
-
-      {/* Channel List */}
+      {/* Expandable channels section */}
       <Box
         ref={containerRef}
         onScroll={handleScroll}
         sx={{
           flexGrow: 1,
           overflow: 'auto',
-          bgcolor: 'background.default'
+          bgcolor: 'background.default',
+          position: 'relative',
+          width: channelListOpen && epgExpanded ? `${300 + (timeSlots.length * TIME_BLOCK_WIDTH)}px` : '300px',
+          transition: theme => theme.transitions.create('width', {
+            easing: theme.transitions.easing.sharp,
+            duration: theme.transitions.duration.enteringScreen,
+          }),
         }}
       >
+        {/* Time header - highest z-index */}
+        <Box sx={{
+          position: 'sticky',
+          top: 0,
+          zIndex: 2,
+          display: 'flex',
+          bgcolor: 'background.paper',
+          borderBottom: 1,
+          borderColor: 'divider',
+          height: HEADER_HEIGHT,
+        }}>
+          {/* Empty space for channel info width */}
+          <Box sx={{ width: 300, flexShrink: 0 }} />
+          
+          {/* Time slots */}
+          <Box sx={{ 
+            display: channelListOpen && epgExpanded ? 'flex' : 'none',
+            height: HEADER_HEIGHT,
+          }}>
+            {timeSlots.map((time, index) => (
+              <Box
+                key={time.getTime()}
+                sx={{
+                  width: TIME_BLOCK_WIDTH,
+                  borderLeft: 1,
+                  borderColor: 'divider',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  typography: 'body2',
+                }}
+              >
+                {time.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+              </Box>
+            ))}
+          </Box>
+        </Box>
+
+        {/* Channel groups */}
         {channels.map((channel, index) => {
           const showHeader = index === 0 || channels[index - 1].group !== channel.group;
 
           return (
             <React.Fragment key={`${channel.guide_id}-${index}`}>
               {showHeader && (
-                <Box sx={headerStyles.container}>
-                  <Typography sx={headerStyles.text}>
-                    {channel.group}
-                  </Typography>
+                <Box sx={{
+                  ...headerStyles.container,
+                  width: channelListOpen && epgExpanded ? `${300 + (timeSlots.length * TIME_BLOCK_WIDTH)}px` : '300px',
+                  bgcolor: 'background.default',
+                  backdropFilter: 'blur(8px)',
+                }}>
+                  <Box sx={headerStyles.groupSection}>
+                    <Typography sx={headerStyles.text}>
+                      {channel.group}
+                    </Typography>
+                  </Box>
                 </Box>
               )}
-              <ListItemButton
-                selected={selectedChannel?.guide_id === channel.guide_id}
-                onClick={async () => {
-                  onChannelSelect(channel);
-                  navigate(`/channel/${channel.guide_id}`);
-                  try {
-                    await channelService.updateLastWatched(channel.guide_id);
-                  } catch (error) {
-                    console.error('Failed to update last watched:', error);
-                  }
-                }}
-                sx={{ 
-                  height: ITEM_HEIGHT,
-                  '&:hover': {
-                    bgcolor: 'action.hover',
-                  },
-                  transition: 'background-color 0.2s'
-                }}
-              >
-                <IconButton
-                  size="small"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    onToggleFavorite(channel);
+              <Box sx={{ 
+                display: 'flex',
+                transition: theme => theme.transitions.create('width', {
+                  easing: theme.transitions.easing.sharp,
+                  duration: theme.transitions.duration.enteringScreen,
+                }),
+                width: channelListOpen && epgExpanded ? `${300 + (timeSlots.length * TIME_BLOCK_WIDTH)}px` : '300px',
+              }}>
+                <ListItemButton
+                  selected={selectedChannel?.guide_id === channel.guide_id}
+                  onClick={async () => {
+                    onChannelSelect(channel);
+                    navigate(`/channel/${channel.guide_id}`);
+                    try {
+                      await channelService.updateLastWatched(channel.guide_id);
+                    } catch (error) {
+                      console.error('Failed to update last watched:', error);
+                    }
                   }}
-                  sx={{ mr: 1 }}
+                  sx={{ width: 300, flexShrink: 0 }}
                 >
-                  {channel.isFavorite ? <StarIcon color="primary" /> : <StarBorderIcon />}
-                </IconButton>
-                <ListItemIcon>
-                  <Avatar
-                    src={channel.logo}
-                    alt={channel.name}
-                    variant="square"
-                    sx={{ width: 32, height: 32 }}
+                  <IconButton
+                    size="small"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onToggleFavorite(channel);
+                    }}
+                    sx={{ mr: 1 }}
                   >
-                    {channel.name[0]}
-                  </Avatar>
-                </ListItemIcon>
-                <ListItemText primary={channel.name} />
-              </ListItemButton>
+                    {channel.isFavorite ? <StarIcon color="primary" /> : <StarBorderIcon />}
+                  </IconButton>
+                  <ListItemIcon>
+                    <Avatar
+                      src={channel.logo}
+                      alt={channel.name}
+                      variant="square"
+                      sx={{ width: 32, height: 32 }}
+                    >
+                      {channel.name[0]}
+                    </Avatar>
+                  </ListItemIcon>
+                  <ListItemText primary={channel.name} />
+                </ListItemButton>
+
+                <Box sx={{ 
+                  display: 'flex',
+                  overflow: 'hidden',
+                  opacity: channelListOpen && epgExpanded ? 1 : 0,
+                  transition: 'opacity 0.2s',
+                  position: 'relative',
+                  height: ITEM_HEIGHT,
+                }}>
+                  {programs[channel.guide_id]?.map((program) => (
+                    <Box
+                      key={program.id}
+                      sx={{
+                        position: 'absolute',
+                        left: getProgramPosition(program.start),
+                        width: getProgramWidth(program.duration),
+                        height: '100%',
+                        bgcolor: 'action.hover',
+                        borderLeft: 1,
+                        borderRight: 1,
+                        borderColor: 'divider',
+                        display: 'flex',
+                        alignItems: 'center',
+                        px: 1,
+                        overflow: 'hidden',
+                        whiteSpace: 'nowrap',
+                        textOverflow: 'ellipsis',
+                        typography: 'body2',
+                        '&:hover': {
+                          bgcolor: 'action.selected',
+                        },
+                      }}
+                      title={`${program.title}\n${format(program.start, 'HH:mm')} - ${format(program.end, 'HH:mm')}`}
+                    >
+                      {program.title}
+                    </Box>
+                  ))}
+                </Box>
+              </Box>
             </React.Fragment>
           );
         })}

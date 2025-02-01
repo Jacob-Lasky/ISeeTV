@@ -23,6 +23,14 @@ interface ProgressCallback {
   (current: number, total: number | { type: 'complete' }): void;
 }
 
+interface Program {
+  id: string;
+  title: string;
+  start: Date;
+  end: Date;
+  duration: number;
+}
+
 export const channelService = {
   async getChannels(
     skip: number = 0,
@@ -272,5 +280,36 @@ export const channelService = {
     if (!response.ok) {
       throw new Error(`Failed to update last watched: ${response.statusText}`);
     }
+  },
+
+  async getPrograms(
+    guideIds: string[], 
+    start: Date, 
+    end: Date
+  ): Promise<Record<string, Program[]>> {
+    const searchParams = new URLSearchParams({
+      start: start.toISOString(),
+      end: end.toISOString(),
+      guide_ids: guideIds.join(','),
+    });
+
+    const response = await fetch(`${API_URL}/programs?${searchParams}`);
+    if (!response.ok) {
+      throw new Error(`Failed to fetch programs: ${response.statusText}`);
+    }
+
+    const data = await response.json();
+    
+    // Convert dates from strings to Date objects
+    return Object.fromEntries(
+      Object.entries(data).map(([guideId, programs]) => [
+        guideId,
+        (programs as any[]).map(p => ({
+          ...p,
+          start: new Date(p.start),
+          end: new Date(p.end),
+        }))
+      ])
+    );
   },
 }; 

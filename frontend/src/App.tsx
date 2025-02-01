@@ -11,7 +11,6 @@ import type { Settings } from './models/Settings';
 import MenuIcon from '@mui/icons-material/Menu';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import { LoadingPopup } from './components/LoadingPopup';
-import { EPG } from './components/EPG';
 
 
 // Interface for progress data state
@@ -36,9 +35,9 @@ export default function App() {
   const [channelListOpen, setChannelListOpen] = useState(true);
   const [m3uProgress, setM3uProgress] = useState<ProgressData | null>(null);
   const [epgProgress, setEpgProgress] = useState<ProgressData | null>(null);
-  const [epgOpen, setEpgOpen] = useState(false);
   const channelListRef = useRef<{ refresh: () => Promise<void> }>(null);
   const [visibleChannels, setVisibleChannels] = useState<Channel[]>([]);
+  const [programs, setPrograms] = useState<Record<string, Program[]>>({});
   
   useEffect(() => {
     const checkSettings = async () => {
@@ -185,6 +184,27 @@ export default function App() {
     setChannelListOpen(prev => !prev); // Simply toggle the channel list state
   };
 
+  // Add effect to fetch programs
+  useEffect(() => {
+    const fetchPrograms = async () => {
+      if (visibleChannels.length > 0) {
+        try {
+          const startTime = getStartTime();
+          const endTime = new Date(startTime);
+          endTime.setHours(endTime.getHours() + 4);
+
+          const guideIds = visibleChannels.map(c => c.guide_id);
+          const programData = await channelService.getPrograms(guideIds, startTime, endTime);
+          setPrograms(programData);
+        } catch (error) {
+          console.error('Failed to fetch programs:', error);
+        }
+      }
+    };
+
+    fetchPrograms();
+  }, [visibleChannels]);
+
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -201,8 +221,9 @@ export default function App() {
             left: 0,
             top: 0,
             bottom: 0,
-            width: 300,
-            transform: channelListOpen ? 'none' : 'translateX(-300px)',
+            width: 'auto',
+            minWidth: 300,
+            transform: channelListOpen ? 'none' : 'translateX(-100%)',
             transition: theme.transitions.create('transform', {
               easing: theme.transitions.easing.sharp,
               duration: theme.transitions.duration.enteringScreen,
@@ -216,12 +237,14 @@ export default function App() {
               selectedChannel={selectedChannel}
               onOpenSettings={() => setSettingsOpen(true)}
               onChannelsChange={setVisibleChannels}
+              programs={programs}
+              channelListOpen={channelListOpen}
             />
           </Box>
 
           <Box sx={{ 
             position: 'absolute',
-            left: channelListOpen ? (epgOpen ? '900px' : '300px') : 0, // 300px (channel list) + 600px (EPG) when open
+            left: channelListOpen ? 300 : 0,
             right: 0,  // Keep right edge fixed
             top: 0,
             bottom: 0,
@@ -270,13 +293,6 @@ export default function App() {
               <Route path="*" element={<Navigate to="/" replace />} />
             </Routes>
           </Box>
-
-          <EPG 
-            open={epgOpen}
-            onToggle={() => setEpgOpen(!epgOpen)}
-            channelListOpen={channelListOpen}
-            channels={visibleChannels}
-          />
         </Box>
         <SettingsModal 
           open={settingsOpen} 
