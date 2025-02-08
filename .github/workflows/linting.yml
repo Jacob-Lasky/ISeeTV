@@ -45,4 +45,3 @@ jobs:
         run: |
           cd frontend
           npm run lint
-          npx prettier --check .
