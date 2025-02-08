@@ -36,21 +36,48 @@ The ISeeTV project seeks to build a docker-based IPTV client for desktop and mob
 ## Known Bugs
 - When the EPG goes past the 12am mark (00:00), it counts upwards starting at 25. This is a limitation added by the Planby library. I will be transitioning out of this library but I wanted to get something working before I built my own EPG handler.
 
-## UI:
-![image](https://github.com/user-attachments/assets/30fffa09-fbca-45a5-a6ef-4c3c6ff2907b)
+## Video UI:
+![image](https://github.com/user-attachments/assets/2865d1f2-74fb-4cb6-9e2e-5043ef1c455e)
+
+## Channel Picker:
+![image](https://github.com/user-attachments/assets/3534c77d-3713-46b0-a55a-306a3984198f)
+- Search box for channel searching
+- Settings gear to bring up the settings modal
 - Three channel tabs: All, Favorites and Recent
 - Collapsable channel list
-- Search box
-- Settings gear to bring up the settings modal
-- Toggleable channel numbers
--   Channel search appears when channel numbers are toggled
+- Collapsable guide
+- Count of channels and programs currently filtered
 
 ## Settings Modal:
-![image](https://github.com/user-attachments/assets/56c695d2-434d-4109-9be3-8f4717bb367f)
+![image](https://github.com/user-attachments/assets/a68129cd-17a4-4329-8c88-71d2de8cc7cc)
 - Provide ISeeTV with an M3U link and (optionally) with an EPG link
-- Change the update interval
-- Set the M3U to update on app-startup
+- Change the update intervals
+- Toggle to update links on start
 - Change the theme to light, dark or system (default)
+- Adjustable "recent" length
+- Adjustable guide UI
+- Automatic timezone recognition and able to be set by the user
+
+## Help Modal:
+![image](https://github.com/user-attachments/assets/78db3575-9d31-4280-9a85-e953cce9652a)
+- Links to project pages
+- Ability to hard reset all existing channels by wiping the database
+
+## Channel and Guide Container:
+![image](https://github.com/user-attachments/assets/8632aca1-0202-4c74-82d3-ffdec767bcef)
+- live event indicator
+- clickable events and channels
+
+## Channel Modal:
+![image](https://github.com/user-attachments/assets/7b9f74e2-78bc-47bc-a8f7-08dae437c80c)
+- Detail view
+- Can favorite from here
+- Can watch channel from here
+
+## Program Modal:
+![image](https://github.com/user-attachments/assets/59d91a3b-33ea-4580-a084-04eaa8eb3bd6)
+- Detail view including channel category and description
+- Can watch program from here
 
 ## Running the project manually
 
