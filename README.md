@@ -33,6 +33,9 @@ The ISeeTV project seeks to build a docker-based IPTV client for desktop and mob
 | [Guide view via expanded scrolling element ](https://github.com/Jacob-Lasky/ISeeTV/issues/30) | v1.0.0 - EPG Parsing |
 <!-- END TICKETS -->
 
+## Known Bugs
+- When the EPG goes past the 12am mark (00:00), it counts upwards starting at 25. This is a limitation added by the Planby library. I will be transitioning out of this library but I wanted to get something working before I built my own EPG handler.
+
 ## UI:
 ![image](https://github.com/user-attachments/assets/30fffa09-fbca-45a5-a6ef-4c3c6ff2907b)
 - Three channel tabs: All, Favorites and Recent
