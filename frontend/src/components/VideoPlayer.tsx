@@ -1,10 +1,10 @@
-import React, { useState, useCallback, useEffect } from 'react';
-import { Box, Paper, Avatar, Typography, IconButton } from '@mui/material';
-import Hls from 'hls.js';
-import { Channel } from '../models/Channel';
-import { API_URL } from '../config/api';
-import { useParams, useNavigate } from 'react-router-dom';
-import { Close } from '@mui/icons-material';
+import React, { useState, useCallback, useEffect } from "react";
+import { Box, Paper, Avatar, Typography, IconButton } from "@mui/material";
+import Hls from "hls.js";
+import { Channel } from "../models/Channel";
+import { API_URL } from "../config/api";
+import { useParams, useNavigate } from "react-router-dom";
+import { Close } from "@mui/icons-material";
 
 export {};
 
@@ -24,10 +24,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ channel }) => {
   const cleanupStream = useCallback(async () => {
     try {
       await fetch(`${API_URL}/stream/${channel.channel_id}/cleanup`, {
-        method: 'GET',
+        method: "GET",
       });
     } catch (error) {
-      console.error('Failed to cleanup stream:', error);
+      console.error("Failed to cleanup stream:", error);
     }
   }, [channel.channel_id]);
 
@@ -39,7 +39,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ channel }) => {
       }
       cleanupStream();
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   React.useEffect(() => {
@@ -53,7 +53,7 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ channel }) => {
     const timeoutId = setTimeout(async () => {
       try {
         await cleanupStream();
-        
+
         if (Hls.isSupported()) {
           const video = videoRef.current;
           if (!video) return;
@@ -61,15 +61,15 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ channel }) => {
           const proxyUrl = `${API_URL}/stream/${channel.channel_id}`;
           const hls = new Hls({
             // API reference: https://github.com/video-dev/hls.js/blob/master/docs/API.md
-            maxBufferLength: Infinity,  // the maximum number of seconds to buffer
+            maxBufferLength: Infinity, // the maximum number of seconds to buffer
             maxMaxBufferLength: Infinity,
             backBufferLength: 120, // allow up to 120 seconds
             frontBufferFlushThreshold: 60, // in-memory buffer flush threshold in seconds
             manifestLoadingMaxRetry: 10,
-            manifestLoadingRetryDelay: 500,  // retry every X milliseconds
-            levelLoadingMaxRetry: 5,  // Retry level loading X times
+            manifestLoadingRetryDelay: 500, // retry every X milliseconds
+            levelLoadingMaxRetry: 5, // Retry level loading X times
             enableWorker: true,
-            liveDurationInfinity: false,  // Indicates it's a live stream, but cannot go forward in the stream if we've ever paused
+            liveDurationInfinity: false, // Indicates it's a live stream, but cannot go forward in the stream if we've ever paused
           });
 
           hlsRef.current = hls;
@@ -77,28 +77,27 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ channel }) => {
           hls.attachMedia(video);
 
           hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            video.play()
-              .catch((e) => {
-                console.warn('Autoplay prevented:', e);
-                setIsPlaying(false);
-              });
+            video.play().catch((e) => {
+              console.warn("Autoplay prevented:", e);
+              setIsPlaying(false);
+            });
           });
 
           hls.on(Hls.Events.ERROR, (_, data) => {
-            console.warn('HLS error:', data);
+            console.warn("HLS error:", data);
             if (data.fatal) {
               setIsPlaying(false);
               switch (data.type) {
                 case Hls.ErrorTypes.NETWORK_ERROR:
-                  console.warn('Network error, attempting recovery...');
+                  console.warn("Network error, attempting recovery...");
                   hls.startLoad();
                   break;
                 case Hls.ErrorTypes.MEDIA_ERROR:
-                  console.warn('Media error, attempting recovery...');
+                  console.warn("Media error, attempting recovery...");
                   hls.recoverMediaError();
                   break;
                 default:
-                  console.error('Fatal error:', data);
+                  console.error("Fatal error:", data);
                   hls.destroy();
                   break;
               }
@@ -106,8 +105,8 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ channel }) => {
           });
         }
       } catch (error) {
-        console.error('Error switching channels:', error);
-        setErrorMessage('Failed to switch channels');
+        console.error("Error switching channels:", error);
+        setErrorMessage("Failed to switch channels");
         setIsPlaying(false);
       }
     }, 1000);
@@ -115,11 +114,11 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ channel }) => {
     return () => {
       clearTimeout(timeoutId);
     };
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [channel.channel_id, cleanupStream]);
 
   const handleBack = () => {
-    navigate('/');
+    navigate("/");
   };
 
   useEffect(() => {
@@ -129,25 +128,39 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ channel }) => {
   }, [channelId]);
 
   return (
-    <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ p: 1, display: 'flex', justifyContent: 'flex-end', alignItems: 'center' }}>
+    <Paper
+      elevation={3}
+      sx={{ height: "100%", display: "flex", flexDirection: "column" }}
+    >
+      <Box
+        sx={{
+          p: 1,
+          display: "flex",
+          justifyContent: "flex-end",
+          alignItems: "center",
+        }}
+      >
         <IconButton onClick={handleBack}>
           <Close />
         </IconButton>
       </Box>
       <Box
         sx={{
-          width: '100%',
-          height: '100%',
-          maxHeight: 'calc(100vh - 160px)',
-          bgcolor: 'black',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
+          width: "100%",
+          height: "100%",
+          maxHeight: "calc(100vh - 160px)",
+          bgcolor: "black",
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
         }}
       >
         {errorMessage && (
-          <Typography variant="body1" color="error" sx={{ textAlign: 'center' }}>
+          <Typography
+            variant="body1"
+            color="error"
+            sx={{ textAlign: "center" }}
+          >
             {errorMessage}
           </Typography>
         )}
@@ -156,10 +169,10 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ channel }) => {
             ref={videoRef}
             controls
             style={{
-              width: '100%',
-              height: '100%',
-              maxHeight: '100%',
-              objectFit: 'contain',
+              width: "100%",
+              height: "100%",
+              maxHeight: "100%",
+              objectFit: "contain",
             }}
             playsInline
             autoPlay
@@ -171,15 +184,17 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ channel }) => {
       <Box
         sx={{
           p: 1,
-          display: 'flex',
-          alignItems: 'center',
+          display: "flex",
+          alignItems: "center",
           gap: 2,
           borderTop: 1,
-          borderColor: 'divider',
+          borderColor: "divider",
         }}
       >
         {/* Left side with channel info */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, flexGrow: 1 }}>
+        <Box
+          sx={{ display: "flex", alignItems: "center", gap: 2, flexGrow: 1 }}
+        >
           <Avatar
             src={channel.logo}
             alt={channel.name}

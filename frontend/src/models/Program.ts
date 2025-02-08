@@ -6,4 +6,4 @@ export interface Program {
   duration: number;
   description?: string;
   category?: string;
-} 
+}

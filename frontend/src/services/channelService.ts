@@ -1,14 +1,14 @@
-import { Channel } from '../models/Channel';
-import { ChannelGroup } from '../types/api';
-import { Settings } from '../models/Settings';
-import { API_URL } from '../config/api';
+import { Channel } from "../models/Channel";
+import { ChannelGroup } from "../types/api";
+import { Settings } from "../models/Settings";
+import { API_URL } from "../config/api";
 
 interface GetChannelsParams {
   search?: string;
   group?: string;
   favoritesOnly?: boolean;
   recentOnly?: boolean;
-} 
+}
 
 interface GetChannelsResponse {
   items: Channel[];
@@ -17,7 +17,7 @@ interface GetChannelsResponse {
 }
 
 interface ProgressCallback {
-  (current: number, total: number | { type: 'complete' }): void;
+  (current: number, total: number | { type: "complete" }): void;
 }
 
 interface Program {
@@ -42,25 +42,28 @@ interface ChannelResponse {
 export const channelService = {
   async getChannels(
     limit?: number,
-    params: GetChannelsParams = {}
+    params: GetChannelsParams = {},
   ): Promise<GetChannelsResponse> {
     const searchParams = new URLSearchParams({
       ...(limit && { limit: limit.toString() }),
       ...(params.search && { search: params.search }),
-      ...(params.favoritesOnly && { favorites_only: 'true' }),
-      ...(params.recentOnly && { recent_only: 'true' }),
+      ...(params.favoritesOnly && { favorites_only: "true" }),
+      ...(params.recentOnly && { recent_only: "true" }),
     });
 
-    console.log('Fetching channels with params:', Object.fromEntries(searchParams.entries()));
+    console.log(
+      "Fetching channels with params:",
+      Object.fromEntries(searchParams.entries()),
+    );
 
     const response = await fetch(`${API_URL}/channels?${searchParams}`);
     if (!response.ok) {
       const errorText = await response.text();
-      console.error('Channel fetch error:', errorText);
+      console.error("Channel fetch error:", errorText);
       throw new Error(`HTTP error! status: ${response.status}`);
     }
     const data = await response.json();
-    
+
     // Map the backend fields to frontend fields
     return {
       ...data,
@@ -68,17 +71,19 @@ export const channelService = {
         ...item,
         isFavorite: item.is_favorite,
         channel_id: item.channel_id,
-        lastWatched: item.last_watched ? new Date(item.last_watched) : undefined,
-      }))
+        lastWatched: item.last_watched
+          ? new Date(item.last_watched)
+          : undefined,
+      })),
     };
   },
 
   async toggleFavorite(guideId: string): Promise<Channel> {
     try {
       const response = await fetch(`${API_URL}/channels/${guideId}/favorite`, {
-        method: 'PUT',
+        method: "PUT",
         headers: {
-          'Content-Type': 'application/json',
+          "Content-Type": "application/json",
         },
       });
 
@@ -91,23 +96,25 @@ export const channelService = {
         ...data,
         channel_id: data.channel_id,
         isFavorite: data.is_favorite,
-        lastWatched: data.last_watched ? new Date(data.last_watched) : undefined,
+        lastWatched: data.last_watched
+          ? new Date(data.last_watched)
+          : undefined,
       };
     } catch (error) {
-      console.error('Error toggling favorite:', error);
+      console.error("Error toggling favorite:", error);
       throw error;
     }
   },
 
   async refreshM3U(
-    url: string, 
-    interval: number, 
+    url: string,
+    interval: number,
     force: boolean = false,
-    onProgress?: ProgressCallback
+    onProgress?: ProgressCallback,
   ): Promise<void> {
     const response = await fetch(
-      `${API_URL}/m3u/refresh?url=${encodeURIComponent(url)}&interval=${interval}&force=${force}`, 
-      { method: 'POST' }
+      `${API_URL}/m3u/refresh?url=${encodeURIComponent(url)}&interval=${interval}&force=${force}`,
+      { method: "POST" },
     );
 
     if (!response.ok) {
@@ -124,19 +131,19 @@ export const channelService = {
           if (done) break;
 
           const chunk = decoder.decode(value);
-          const lines = chunk.split('\n');
+          const lines = chunk.split("\n");
 
           for (const line of lines) {
             if (!line) continue;
             try {
               const data = JSON.parse(line);
-              if (data.type === 'progress' && onProgress) {
+              if (data.type === "progress" && onProgress) {
                 onProgress(data.current, data.total);
-              } else if (data.type === 'complete') {
-                onProgress?.(0, { type: 'complete' });
+              } else if (data.type === "complete") {
+                onProgress?.(0, { type: "complete" });
               }
             } catch (e) {
-              console.warn('Failed to parse line:', line, 'with error:', e);
+              console.warn("Failed to parse line:", line, "with error:", e);
             }
           }
         }
@@ -147,16 +154,16 @@ export const channelService = {
   },
 
   async refreshEPG(
-    url: string, 
-    interval: number, 
+    url: string,
+    interval: number,
     force: boolean = false,
-    onProgress?: ProgressCallback
+    onProgress?: ProgressCallback,
   ): Promise<void> {
     const response = await fetch(
-      `${API_URL}/epg/refresh?url=${encodeURIComponent(url)}&interval=${interval}&force=${force}`, 
-      { method: 'POST' }
+      `${API_URL}/epg/refresh?url=${encodeURIComponent(url)}&interval=${interval}&force=${force}`,
+      { method: "POST" },
     );
-    
+
     if (!response.ok) {
       throw new Error(`Failed to refresh EPG: ${response.statusText}`);
     }
@@ -171,19 +178,19 @@ export const channelService = {
           if (done) break;
 
           const chunk = decoder.decode(value);
-          const lines = chunk.split('\n');
+          const lines = chunk.split("\n");
 
           for (const line of lines) {
             if (!line) continue;
             try {
               const data = JSON.parse(line);
-              if (data.type === 'progress' && onProgress) {
+              if (data.type === "progress" && onProgress) {
                 onProgress(data.current, data.total);
-              } else if (data.type === 'complete') {
-                onProgress?.(0, { type: 'complete' });
+              } else if (data.type === "complete") {
+                onProgress?.(0, { type: "complete" });
               }
             } catch (e) {
-              console.warn('Failed to parse line:', line, 'with error:', e);
+              console.warn("Failed to parse line:", line, "with error:", e);
             }
           }
         }
@@ -203,9 +210,9 @@ export const channelService = {
 
   async saveChannels(channels: Channel[]): Promise<void> {
     const response = await fetch(`${API_URL}/channels/bulk`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify(channels),
     });
@@ -217,9 +224,9 @@ export const channelService = {
 
   async saveSettings(settings: Settings): Promise<void> {
     const response = await fetch(`${API_URL}/settings/save`, {
-      method: 'POST',
+      method: "POST",
       headers: {
-        'Content-Type': 'application/json',
+        "Content-Type": "application/json",
       },
       body: JSON.stringify(settings),
     });
@@ -239,7 +246,7 @@ export const channelService = {
 
   async hardReset(): Promise<void> {
     const response = await fetch(`${API_URL}/channels/hard-reset`, {
-      method: 'POST',
+      method: "POST",
     });
 
     if (!response.ok) {
@@ -257,15 +264,15 @@ export const channelService = {
           if (done) break;
 
           const chunk = decoder.decode(value);
-          const lines = chunk.split('\n');
+          const lines = chunk.split("\n");
 
           for (const line of lines) {
             if (!line) continue;
             try {
               const data = JSON.parse(line);
-              console.log('Hard reset progress:', data);
+              console.log("Hard reset progress:", data);
             } catch (e) {
-              console.warn('Failed to parse line:', line, 'with error:', e);
+              console.warn("Failed to parse line:", line, "with error:", e);
             }
           }
         }
@@ -277,7 +284,7 @@ export const channelService = {
 
   async updateLastWatched(guideId: string): Promise<void> {
     const response = await fetch(`${API_URL}/channels/${guideId}/watched`, {
-      method: 'POST',
+      method: "POST",
     });
 
     if (!response.ok) {
@@ -286,10 +293,10 @@ export const channelService = {
   },
 
   async getPrograms(
-    channelIds: string[] | null, 
-    start: Date, 
+    channelIds: string[] | null,
+    start: Date,
     end: Date,
-    toTimezone: string | null = null
+    toTimezone: string | null = null,
   ): Promise<Record<string, Program[]>> {
     try {
       const searchParams = new URLSearchParams({
@@ -299,7 +306,7 @@ export const channelService = {
       });
 
       if (channelIds) {
-        searchParams.append('channel_ids', channelIds.join(','));
+        searchParams.append("channel_ids", channelIds.join(","));
       }
 
       const response = await fetch(`${API_URL}/programs?${searchParams}`);
@@ -307,7 +314,7 @@ export const channelService = {
         throw new Error(`Failed to fetch programs: ${response.statusText}`);
       }
 
-      let buffer = '';
+      let buffer = "";
       let programData = null;
       const reader = response.body?.getReader();
       const decoder = new TextDecoder();
@@ -324,7 +331,7 @@ export const channelService = {
 
             // Split on newlines and process complete lines
             let newlineIndex;
-            while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+            while ((newlineIndex = buffer.indexOf("\n")) !== -1) {
               const line = buffer.slice(0, newlineIndex).trim();
               buffer = buffer.slice(newlineIndex + 1);
 
@@ -332,15 +339,15 @@ export const channelService = {
                 try {
                   // Try to parse each complete line
                   const data = JSON.parse(line);
-                  if (data.type === 'progress') {
-                    console.debug('Progress:', data);
+                  if (data.type === "progress") {
+                    console.debug("Progress:", data);
                   } else {
                     programData = data;
                   }
                 } catch (e) {
-                  console.warn('Failed to parse line:', line, 'with error:', e);
+                  console.warn("Failed to parse line:", line, "with error:", e);
                   // If we can't parse the line, it might be incomplete
-                  buffer = line + '\n' + buffer;
+                  buffer = line + "\n" + buffer;
                   break;
                 }
               }
@@ -355,7 +362,12 @@ export const channelService = {
                 programData = data;
               }
             } catch (e) {
-              console.warn('Failed to parse final buffer:', buffer, 'with error:', e);
+              console.warn(
+                "Failed to parse final buffer:",
+                buffer,
+                "with error:",
+                e,
+              );
             }
           }
         } finally {
@@ -363,25 +375,31 @@ export const channelService = {
         }
       }
 
-      if (!programData || typeof programData !== 'object') {
-        console.error('Invalid program data received:', programData);
+      if (!programData || typeof programData !== "object") {
+        console.error("Invalid program data received:", programData);
         return {};
       }
 
-      console.log('Total programs fetched:', Object.values(programData).flat().length);
+      console.log(
+        "Total programs fetched:",
+        Object.values(programData).flat().length,
+      );
       return programData;
     } catch (error) {
-      console.error('Failed to fetch programs:', error);
+      console.error("Failed to fetch programs:", error);
       return {};
     }
   },
 
   async clearLastWatched(channelId: string): Promise<void> {
-    const response = await fetch(`${API_URL}/channels/${channelId}/clear_last_watched`, {
-      method: 'POST',
-    });
+    const response = await fetch(
+      `${API_URL}/channels/${channelId}/clear_last_watched`,
+      {
+        method: "POST",
+      },
+    );
     if (!response.ok) {
-      throw new Error('Failed to clear last watched time');
+      throw new Error("Failed to clear last watched time");
     }
   },
-}; 
+};
