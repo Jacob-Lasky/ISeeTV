@@ -19,6 +19,8 @@ logger = Logger(
     color="GREEN",
 )
 
+DATA_DIRECTORY = os.environ.get("DATA_DIRECTORY", "/app/data")
+
 
 class ChannelDict(TypedDict):
     channel_id: str
@@ -51,9 +53,8 @@ class M3UService:
         logger.info(f"Downloading M3U from {url}")
 
         # Setup paths and save file
-        data_dir = os.path.join(Path(__file__).resolve().parents[3], "data")
-        m3u_file = os.path.join(data_dir, "m3u_content.txt")
-        os.makedirs(data_dir, exist_ok=True)
+        m3u_file = os.path.join(DATA_DIRECTORY, "m3u_content.txt")
+        os.makedirs(DATA_DIRECTORY, exist_ok=True)
 
         try:
             async for progress in stream_download(url, self.content_length, m3u_file):
@@ -72,6 +73,8 @@ class M3UService:
         self, file_path: str
     ) -> tuple[list[ChannelDict], set[str]]:
         """Read M3U file from disk and parse into channels"""
+        logger.info(f"Reading and parsing M3U file: {file_path}")
+
         try:
             with open(file_path, encoding="utf-8") as file:
                 content = file.read()
@@ -108,6 +111,20 @@ class M3UService:
         channels: list[ChannelDict] = []
         current_channel: ChannelDict | None = None
 
+        # create CSV files for bad M3U lines
+        # will be for channel_id failures
+        # if the files already exist, remove them
+
+        bad_channel_ids_file = os.path.join(
+            DATA_DIRECTORY, "m3u_channel_id_failures.csv"
+        )
+        bad_channel_id_count = 0
+        if os.path.exists(bad_channel_ids_file):
+            os.remove(bad_channel_ids_file)
+            # create a new file and write the header
+            with open(bad_channel_ids_file, "w") as f:
+                f.write("channel_id,name,group,reason\n")
+
         for line in lines:
             line = line.strip()
 
@@ -117,21 +134,24 @@ class M3UService:
                 if len(info) == 2:
                     attrs = self._parse_attributes(info[0])
                     name = attrs.get("tvg-name", "")
-                    # channel_id = generate_channel_id(attrs.get("tvg-id", None), name)
                     channel_id = attrs.get("tvg-id", None)
 
                     if channel_id:
+                        group = attrs.get("group-title", "Uncategorized")
                         current_channel = {
                             "channel_id": channel_id,
                             "name": name,
-                            "group": attrs.get("group-title", "Uncategorized"),
+                            "group": group,
                             "logo": attrs.get("tvg-logo"),
                             "url": "",  # Will be set when we get the URL line
                             "is_missing": False,
                             "is_favorite": False,
                         }
                     else:
-                        logger.warning(f"No channel_id found for channel: {name}")
+                        logger.debug(f"No channel_id found for channel: {name}")
+                        with open(bad_channel_ids_file, "a") as f:
+                            f.write(f"'',{name},{group},'missing_channel_id'\n")
+                        bad_channel_id_count += 1
 
             elif line.startswith("http"):
                 if current_channel:
@@ -147,6 +167,11 @@ class M3UService:
                 continue
             else:
                 logger.warning(f"Unprocessed line: {line}")
+
+        logger.info(f"Parsed {len(channels)} channels")
+        logger.warning(
+            f"- {bad_channel_id_count} channel ID failures. See details at: {bad_channel_ids_file}"
+        )
 
         return channels
 

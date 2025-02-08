@@ -18,6 +18,8 @@ logger = Logger(
     color="LIGHT_GREEN",
 )
 
+DATA_DIRECTORY = os.environ.get("DATA_DIRECTORY", "/app/data")
+
 
 class EPGChannelDict(TypedDict):
     channel_id: str
@@ -56,9 +58,8 @@ class EPGService:
         logger.info(f"Downloading EPG from {url}")
 
         # Setup paths and save file
-        data_dir = os.path.join(Path(__file__).resolve().parents[3], "data")
-        epg_file = os.path.join(data_dir, "epg_content.xml")
-        os.makedirs(data_dir, exist_ok=True)
+        epg_file = os.path.join(DATA_DIRECTORY, "epg_content.xml")
+        os.makedirs(DATA_DIRECTORY, exist_ok=True)
 
         try:
             async for progress in stream_download(url, self.content_length, epg_file):
@@ -78,6 +79,28 @@ class EPGService:
     ) -> tuple[list[EPGChannelDict], list[EPGProgramDict]]:
         """Parse EPG XML and return channel and program data"""
         logger.info(f"Parsing EPG file: {file_path}")
+
+        # create CSV files for bad EPG lines
+        # one will be parse failures, the other will be channel id failures
+        # if the files already exist, remove them
+
+        parse_failures_file = os.path.join(DATA_DIRECTORY, "epg_parse_failures.csv")
+        parse_failure_count = 0
+        if os.path.exists(parse_failures_file):
+            os.remove(parse_failures_file)
+            # create a new file and write the header
+            with open(parse_failures_file, "w") as f:
+                f.write("channel_id,start,end,title,description,category,reason\n")
+
+        channel_id_failures_file = os.path.join(
+            DATA_DIRECTORY, "epg_channel_id_failures.csv"
+        )
+        channel_id_failure_count = 0
+        if os.path.exists(channel_id_failures_file):
+            os.remove(channel_id_failures_file)
+            # create a new file and write the header
+            with open(channel_id_failures_file, "w") as f:
+                f.write("channel_id,display_name,reason\n")
 
         try:
             tree = ET.parse(file_path)
@@ -109,9 +132,18 @@ class EPGService:
                             }
                         )
                     else:
-                        logger.warning(
+                        logger.debug(
                             f"Duplicate channel ID: {channel_id} | Display Name: {display_name}"
                         )
+                        with open(channel_id_failures_file, "a") as f:
+                            f.write(f"{channel_id},{display_name},'duplicate'\n")
+                        channel_id_failure_count += 1
+                else:
+                    logger.debug(f"No display name found for channel ID: {channel_id}")
+                    with open(parse_failures_file, "a") as f:
+                        f.write(f"'{channel_id}','','missing_display_name'\n")
+                    parse_failure_count += 1
+                    continue
 
             # Parse programs
             programs: list[EPGProgramDict] = []
@@ -151,8 +183,29 @@ class EPGService:
                             }
                         )
                     except ValueError as e:
-                        logger.error(f"Failed to parse datetime: {e}")
+                        logger.debug(f"Failed to parse datetime: {e}")
+                        with open(parse_failures_file, "a") as f:
+                            f.write(
+                                f"{channel_id}, {start_str}, {end_str}, {title_elem.text}, {description}, {category},'bad_datetime'\n"
+                            )
+                        parse_failure_count += 1
                         continue
+                else:
+                    logger.debug(f"Missing required fields for program: {program}")
+                    with open(parse_failures_file, "a") as f:
+                        f.write(
+                            f"{channel_id}, {start_str}, {end_str}, {title_elem.text}, {description}, {category},'missing_fields'\n"
+                        )
+                    parse_failure_count += 1
+                    continue
+
+            logger.info(f"Parsed {len(channels)} channels and {len(programs)} programs")
+            logger.warning(
+                f"- {parse_failure_count} parse failures. See details at: {parse_failures_file}"
+            )
+            logger.warning(
+                f"- {channel_id_failure_count} channel ID failures. See details at: {channel_id_failures_file}"
+            )
 
             return channels, programs
 
