@@ -214,7 +214,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           </IconButton>
         )}
       </DialogTitle>
-      <DialogContent>
+      <DialogContent sx={{ height: '80vh', overflow: 'auto' }}>
         <Tabs
           value={activeTab}
           onChange={(_, newValue) => setActiveTab(newValue)}
