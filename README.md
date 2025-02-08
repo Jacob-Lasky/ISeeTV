@@ -31,7 +31,6 @@ The ISeeTV project seeks to build a docker-based IPTV client for desktop and mob
 | Title | Milestone |
 |-------|-----------|
 | [filter channels by program names](https://github.com/Jacob-Lasky/ISeeTV/issues/80) | v1.0.0 - EPG Parsing |
-| [create CSV for bad M3U and EPG lines](https://github.com/Jacob-Lasky/ISeeTV/issues/72) | v1.0.0 - EPG Parsing |
 <!-- END TICKETS -->
 
 ## Known Bugs
