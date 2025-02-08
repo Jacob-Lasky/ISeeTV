@@ -29,6 +29,7 @@ The ISeeTV project seeks to build a docker-based IPTV client for desktop and mob
 <!-- START TICKETS -->
 | Title | Milestone |
 |-------|-----------|
+| [EPG Program viewer](https://github.com/Jacob-Lasky/ISeeTV/issues/73) | v1.0.0 - EPG Parsing |
 | [EPG visualization](https://github.com/Jacob-Lasky/ISeeTV/issues/52) | v1.0.0 - EPG Parsing |
 | [Guide view via expanded scrolling element ](https://github.com/Jacob-Lasky/ISeeTV/issues/30) | v1.0.0 - EPG Parsing |
 <!-- END TICKETS -->
