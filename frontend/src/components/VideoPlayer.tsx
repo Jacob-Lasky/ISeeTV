@@ -13,7 +13,7 @@ interface VideoPlayerProps {
   channel: Channel;
 }
 
-export const VideoPlayer: React.FC<VideoPlayerProps> = ({ url, channel }) => {
+export const VideoPlayer: React.FC<VideoPlayerProps> = ({ channel }) => {
   const { channelId } = useParams();
   const navigate = useNavigate();
   const videoRef = React.useRef<HTMLVideoElement>(null);

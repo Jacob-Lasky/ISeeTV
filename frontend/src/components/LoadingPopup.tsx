@@ -1,4 +1,4 @@
-import { Dialog, DialogContent, CircularProgress, Typography, Box, LinearProgress } from '@mui/material';
+import { Dialog, DialogContent, Typography, LinearProgress } from '@mui/material';
 
 interface ProgressData {
   current: number;

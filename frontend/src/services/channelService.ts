@@ -28,6 +28,17 @@ interface Program {
   duration: number;
 }
 
+// Add interface for backend channel response
+interface ChannelResponse {
+  channel_id: string;
+  is_favorite: boolean;
+  last_watched?: string;
+  name: string;
+  logo?: string;
+  group?: string;
+  url: string;
+}
+
 export const channelService = {
   async getChannels(
     limit?: number,
@@ -53,7 +64,7 @@ export const channelService = {
     // Map the backend fields to frontend fields
     return {
       ...data,
-      items: data.items.map((item: any) => ({
+      items: data.items.map((item: ChannelResponse) => ({
         ...item,
         isFavorite: item.is_favorite,
         channel_id: item.channel_id,
@@ -125,7 +136,7 @@ export const channelService = {
                 onProgress?.(0, { type: 'complete' });
               }
             } catch (e) {
-              console.warn('Failed to parse line:', line);
+              console.warn('Failed to parse line:', line, 'with error:', e);
             }
           }
         }
@@ -172,7 +183,7 @@ export const channelService = {
                 onProgress?.(0, { type: 'complete' });
               }
             } catch (e) {
-              console.warn('Failed to parse line:', line);
+              console.warn('Failed to parse line:', line, 'with error:', e);
             }
           }
         }
@@ -254,7 +265,7 @@ export const channelService = {
               const data = JSON.parse(line);
               console.log('Hard reset progress:', data);
             } catch (e) {
-              console.warn('Failed to parse line:', line);
+              console.warn('Failed to parse line:', line, 'with error:', e);
             }
           }
         }
@@ -327,6 +338,7 @@ export const channelService = {
                     programData = data;
                   }
                 } catch (e) {
+                  console.warn('Failed to parse line:', line, 'with error:', e);
                   // If we can't parse the line, it might be incomplete
                   buffer = line + '\n' + buffer;
                   break;
@@ -343,7 +355,7 @@ export const channelService = {
                 programData = data;
               }
             } catch (e) {
-              console.warn('Failed to parse final buffer:', buffer);
+              console.warn('Failed to parse final buffer:', buffer, 'with error:', e);
             }
           }
         } finally {

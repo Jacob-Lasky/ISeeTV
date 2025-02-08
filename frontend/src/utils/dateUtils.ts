@@ -40,7 +40,7 @@ export const generateTimeSlots = (startTime: Date, timezone: string = getUserTim
   return slots;
 }; 
 
-export const getTodayOffsetDate = (offsetHours: number = 0, timezone: string = getUserTimezone(), zero_minute_second: boolean = true): Date => {
+export const getTodayOffsetDate = (offsetHours: number = 0, zero_minute_second: boolean = true): Date => {
   const today = new Date();
   const offsetDate = addHours(today, offsetHours);
   if (zero_minute_second) {

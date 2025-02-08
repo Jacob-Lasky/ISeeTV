@@ -37,7 +37,7 @@ export const m3uService = {
       }
 
       let receivedLength = 0;
-      let chunks: Uint8Array[] = [];
+      const chunks: Uint8Array[] = [];
 
       while (true) {
         const { done, value } = await reader.read();

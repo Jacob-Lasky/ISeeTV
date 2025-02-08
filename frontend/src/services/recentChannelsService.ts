@@ -20,7 +20,7 @@ export const recentChannelsService = {
       // Filter out old channels and convert to Channel type
       return recentChannels
         .filter(ch => (now - ch.timestamp) <= MAX_AGE_MS)
-        .map(({ timestamp, ...channel }) => channel);
+        .map(({ ...channel }) => channel);
 
     } catch (error) {
       console.error('Error getting recent channels:', error);

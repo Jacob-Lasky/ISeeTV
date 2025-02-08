@@ -19,14 +19,11 @@ import {
   Tabs,
   Tab,
   Alert,
-  DialogActions,
-  FormHelperText,
   Autocomplete,
 } from '@mui/material';
 import { Settings } from '../models/Settings';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { channelService } from '../services/channelService';
-import HelpIcon from '@mui/icons-material/Help';
 import Link from '@mui/material/Link';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import RedditIcon from '@mui/icons-material/Reddit';
@@ -388,7 +385,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 Hard Reset
               </Typography>
               <Typography paragraph>
-                If you're experiencing issues, you can perform a hard reset which will delete all channels
+                If you are experiencing issues, you can perform a hard reset which will delete all channels
                 and reload them from your M3U file.
               </Typography>
               {resetError && (

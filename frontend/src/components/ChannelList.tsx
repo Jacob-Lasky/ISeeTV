@@ -1,9 +1,6 @@
 import React, { useState, useCallback, useEffect, useRef, forwardRef, useImperativeHandle, useMemo } from 'react';
 import {
   Box,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
   Paper,
   Avatar,
   TextField,
@@ -34,12 +31,11 @@ import {
 import { Channel } from '../models/Channel';
 import { channelService } from '../services/channelService';
 import { useNavigate } from 'react-router-dom';
-import debounce from 'lodash/debounce';
-import { format, addHours } from 'date-fns';
-import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
-import { Epg, Layout, useEpg, useProgram, ProgramBox, ProgramContent, ProgramFlex, ProgramStack, ProgramTitle, ProgramText, ChannelBox, ChannelLogo, ProgramImage } from 'planby';
+import { format } from 'date-fns';
+import { utcToZonedTime } from 'date-fns-tz';
+import { Epg, Layout, useEpg, useProgram, ProgramBox, ProgramContent, ProgramFlex, ProgramStack, ProgramTitle, ProgramText, ChannelBox, ProgramImage } from 'planby';
 import { useTheme } from '@mui/material/styles';
-import { generateTimeSlots, formatTimeWithTimezone, localToUtc, getTodayOffsetDate } from '../utils/dateUtils';
+import { formatTimeWithTimezone, getTodayOffsetDate } from '../utils/dateUtils';
 import { Settings } from '../models/Settings';
 
 const TIME_BLOCK_WIDTH = 150;
@@ -119,6 +115,24 @@ interface ChannelDialogProps {
   isFavorite: boolean;
 }
 
+interface ProgramItemProps {
+  program: {
+    data: PlanbyProgram;
+    styles: {
+      width: number;
+      position: React.CSSProperties;
+    };
+  };
+  isBaseTimeFormat?: boolean;
+  isMobile?: boolean;
+  isLine?: boolean;
+  // Add other known props as needed
+}
+
+interface ChannelItemProps {
+  channel: PlanbyChannel;
+}
+
 const ProgramDialog = ({ program, onClose, onWatch }: ProgramDialogProps) => {
   if (!program) return null;
 
@@ -150,9 +164,9 @@ const ProgramDialog = ({ program, onClose, onWatch }: ProgramDialogProps) => {
 };
 
 const ChannelDialog = ({ channel, onClose, onWatch, onToggleFavorite, isFavorite: initialIsFavorite }: ChannelDialogProps) => {
-  if (!channel) return null;
-
   const [isFavorite, setIsFavorite] = useState(initialIsFavorite);
+  
+  if (!channel) return null;
 
   const handleFavorite = () => {
     setIsFavorite(!isFavorite);
@@ -184,12 +198,10 @@ const ChannelDialog = ({ channel, onClose, onWatch, onToggleFavorite, isFavorite
 };
 
 export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelListProps>(({
-  selectedChannel,
   onChannelSelect,
   onToggleFavorite,
   onRefresh,
   onOpenSettings,
-  onChannelsChange,
   programs = {},
   channelListOpen,
   timezone = Intl.DateTimeFormat().resolvedOptions().timeZone,
@@ -240,12 +252,9 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
   const [channels, setChannels] = useState<Channel[]>([]);
-  const [hasMore, setHasMore] = useState(true);
-  const [page, setPage] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const [epgExpanded, setEpgExpanded] = useState(false);
-  const timeSlots = useMemo(() => generateTimeSlots(getTodayOffsetDate(settings?.guideStartHour ?? -1, timezone)), []);
   const theme = useTheme();
   const [selectedProgram, setSelectedProgram] = useState<PlanbyProgram | null>(null);
   const [selectedChannelDialog, setSelectedChannelDialog] = useState<PlanbyChannel | null>(null);
@@ -297,7 +306,7 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   }), [theme]);
 
   // Modify loadChannels to always load channels
-  const loadChannels = useCallback(async (reset: boolean = false) => {
+  const loadChannels = useCallback(async () => {
     try {
       setLoading(true);
       const response = await channelService.getChannels(0, {
@@ -307,8 +316,6 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
       });
 
       setChannels(response.items);
-      setHasMore(false);
-      setPage(1);
     } catch (error) {
       console.error('Failed to load channels:', error);
     } finally {
@@ -318,33 +325,14 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
 
   // Update the effect to load channels on mount and when dependencies change
   useEffect(() => {
-    loadChannels(true);
+    loadChannels();
   }, [searchTerm, activeTab, loadChannels]);
-
-  // Simplify scroll handler since we don't need pagination anymore
-  const debouncedScroll = useMemo(
-    () => debounce((element: HTMLDivElement) => {
-      // Keep scroll tracking for future use if needed
-      const { scrollTop, clientHeight, scrollHeight } = element;
-      const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
-    }, 100),
-    []
-  );
-
-  // Handle scroll event
-  const handleScroll = useCallback((event: React.UIEvent<HTMLDivElement>) => {
-    if (event.currentTarget) {
-      debouncedScroll(event.currentTarget);
-    }
-  }, [debouncedScroll]);
 
   // Handle search with debounce
   const handleSearch = useCallback((term: string) => {
     setSearchTerm(term);
     setLoading(true);
     setChannels([]);
-    setHasMore(true);
-    setPage(0);
     if (containerRef.current) {
       containerRef.current.scrollTop = 0;
     }
@@ -354,8 +342,6 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   const handleTabChange = useCallback((_: React.SyntheticEvent, newValue: TabValue) => {
     setActiveTab(newValue);
     setChannels([]);
-    setHasMore(true);
-    setPage(0);
     if (containerRef.current) {
       containerRef.current.scrollTop = 0;
     }
@@ -365,9 +351,7 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   const refresh = useCallback(async () => {
     setLoading(true);
     setChannels([]);
-    setHasMore(true);
-    setPage(0);
-    await loadChannels(true);
+    await loadChannels();
   }, [loadChannels]);
 
   useImperativeHandle(ref, () => ({
@@ -379,18 +363,6 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
       onRefresh(refresh);
     }
   }, [onRefresh, refresh]);
-
-  // Add helper to calculate program width
-  const getProgramWidth = useCallback((duration: number) => {
-    return (duration / 30) * TIME_BLOCK_WIDTH;
-  }, []);
-
-  // Add helper to calculate program position
-  const getProgramPosition = useCallback((start: Date) => {
-    const firstSlot = timeSlots[0];
-    const diffMinutes = (start.getTime() - firstSlot.getTime()) / (1000 * 60);
-    return (diffMinutes / 30) * TIME_BLOCK_WIDTH;
-  }, [timeSlots]);
 
   // Convert channels to Planby format
   const planbyChannels = useMemo<PlanbyChannel[]>(() => 
@@ -409,7 +381,7 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   const planbyPrograms = useMemo<PlanbyProgram[]>(() => {
     const allPrograms: PlanbyProgram[] = [];
     const now = new Date();
-    const startTime = getTodayOffsetDate(settings?.guideStartHour ?? -1, timezone);
+    const startTime = getTodayOffsetDate(settings?.guideStartHour ?? -1);
 
     Object.entries(programs).forEach(([channelId, channelPrograms]) => {
       const channel = channels.find(c => c.channel_id === channelId);
@@ -445,14 +417,14 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
       });
     });
     return allPrograms;
-  }, [programs, channels, timezone]);
+  }, [programs, channels, timezone, settings?.guideStartHour]);
 
   // Update where we create the dates
   // for example 1738620000 is 2025-02-04 10:00:00 but in UTC, while I'm at EST
   const guideStartHour = settings?.guideStartHour ?? -1; // Default 2 hours back
   const guideEndHour = settings?.guideEndHour ?? 12;    // Default 12 hours forward
-  const guideStartDate = getTodayOffsetDate(guideStartHour, timezone);
-  const guideEndDate = getTodayOffsetDate(guideEndHour, timezone);
+  const guideStartDate = getTodayOffsetDate(guideStartHour);
+  const guideEndDate = getTodayOffsetDate(guideEndHour);
   const formattedStartDate = format(guideStartDate, 'yyyy-MM-dd\'T\'HH:mm:ss');
   const formattedEndDate = format(guideEndDate, 'yyyy-MM-dd\'T\'HH:mm:ss');
 
@@ -556,8 +528,8 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   }, [channelListOpen, epgExpanded, isMobile]);
 
   // Custom Program component using Material-UI
-  const ProgramItem = ({ program, ...rest }: any) => {
-    const { styles, formatTime, isLive, isMinWidth } = useProgram({ program, ...rest });
+  const ProgramItem = ({ program, ...rest }: ProgramItemProps) => {
+    const { styles, isLive, isMinWidth } = useProgram({ program, ...rest });
 
     const { data } = program;
     const { image, title, since, till, description, category } = data;
@@ -598,16 +570,15 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   };
 
   // Custom Channel component using Material-UI
-  const ChannelItem = ({ channel }: { channel: any }) => {
+  const ChannelItem = ({ channel }: ChannelItemProps) => {
     const { position, logo, name } = channel;
-    const isChannelFavorite = channels.find(c => c.channel_id === channel.uuid)?.isFavorite || false;
 
     const handleClearLastWatched = async (e: React.MouseEvent) => {
       e.stopPropagation(); // Prevent channel dialog from opening
       try {
         await channelService.clearLastWatched(channel.uuid);
         // Refresh the channel list to update the UI
-        await loadChannels(true);
+        await loadChannels();
       } catch (error) {
         console.error('Failed to clear last watched:', error);
       }
@@ -852,5 +823,7 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
     </Paper>
   );
 });
+
+ChannelList.displayName = 'ChannelList';
 
 export type { ChannelListProps }; 

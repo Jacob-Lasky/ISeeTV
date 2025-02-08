@@ -30,7 +30,13 @@ interface ProgressMessage {
   message?: string;
 }
 
-const HOURS_TO_DISPLAY = 13; // 1 hour back + 12 hours forward
+// Add Program interface
+interface Program {
+  start: string;
+  stop: string;
+  title: string;
+  desc?: string;
+}
 
 // Update the default settings
 const defaultSettings: Settings = {
@@ -54,7 +60,6 @@ export default function App() {
   const [m3uProgress, setM3uProgress] = useState<ProgressData | null>(null);
   const [epgProgress, setEpgProgress] = useState<ProgressData | null>(null);
   const channelListRef = useRef<{ refresh: () => Promise<void> }>(null);
-  const [visibleChannels, setVisibleChannels] = useState<Channel[]>([]);
   const [programs, setPrograms] = useState<Record<string, Program[]>>({});
 
   // Create theme based on settings
@@ -88,8 +93,8 @@ export default function App() {
 
         // Fetch initial programs
         // start time and end time are based now + guideStartHour and now + guideEndHour
-        const startTimeDate = getTodayOffsetDate(settings.guideStartHour, settings.timezone);
-        const endTimeDate = getTodayOffsetDate(settings.guideEndHour, settings.timezone);
+        const startTimeDate = getTodayOffsetDate(settings.guideStartHour);
+        const endTimeDate = getTodayOffsetDate(settings.guideEndHour);
         const startTime = format(startTimeDate, 'yyyy-MM-dd\'T\'HH:mm:ss');
         const endTime = format(endTimeDate, 'yyyy-MM-dd\'T\'HH:mm:ss');
         console.debug('Fetching programs between', startTime, 'and', endTime);
@@ -127,14 +132,14 @@ export default function App() {
     };
 
     initializeApp();
-  }, []); // Run once on mount
+  }, [settings.guideStartHour, settings.guideEndHour, settings.timezone]);
 
   // Add system theme listener
   useEffect(() => {
     if (settings?.theme === 'system') {
       const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
       const handleChange = () => {
-        setSettings(prev => prev ? { ...prev } : null);
+        setSettings(prev => ({ ...prev }));
       };
       
       mediaQuery.addEventListener('change', handleChange);
@@ -322,7 +327,6 @@ export default function App() {
               <Route path="/channel/:channelId" element={
                 selectedChannel ? 
                   <VideoPlayer 
-                    url={selectedChannel.url} 
                     channel={selectedChannel}
                   /> : 
                   <Navigate to="/" replace />
