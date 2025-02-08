@@ -11,7 +11,6 @@ from typing import TypedDict
 from app.common.download_helper import ProgressDict
 from app.common.download_helper import stream_download
 from app.common.logger import Logger
-from app.common.utils import generate_channel_id
 
 logger = Logger(
     "ISeeTV-M3UService",

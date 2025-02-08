@@ -43,6 +43,6 @@ class Program(Base):
     start_time = Column(DateTime(timezone=True), nullable=False)
     end_time = Column(DateTime(timezone=True), nullable=False)
     title = Column(String, nullable=False)
-    description = Column(String, nullable=False, default='No description available')
-    category = Column(String, nullable=False, default='Uncategorized')
+    description = Column(String, nullable=False, default="No description available")
+    category = Column(String, nullable=False, default="Uncategorized")
     created_at = Column(DateTime, default=func.now())

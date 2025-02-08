@@ -5,17 +5,33 @@ import os
 import shutil
 import subprocess
 from collections.abc import AsyncGenerator
-from datetime import datetime, timezone, timedelta
-from typing import Any, Optional, List, Dict
+from datetime import datetime
+from datetime import timedelta
+from datetime import timezone
+from typing import Any
+from typing import Optional
+from typing import dict
+from typing import list
 from zoneinfo import ZoneInfo
 
 # Third-party imports
-from fastapi import Depends, FastAPI, HTTPException, Request, Query
+from fastapi import Depends
+from fastapi import FastAPI
+from fastapi import HTTPException
+from fastapi import Query
+from fastapi import Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, RedirectResponse, StreamingResponse
+from fastapi.responses import FileResponse
+from fastapi.responses import RedirectResponse
+from fastapi.responses import StreamingResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from sqlalchemy import delete, func, insert, select, update, and_
+from sqlalchemy import and_
+from sqlalchemy import delete
+from sqlalchemy import func
+from sqlalchemy import insert
+from sqlalchemy import select
+from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Local imports
@@ -781,7 +797,7 @@ async def get_programs(
     end: str = Query(..., description="ISO format datetime"),
     to_timezone: str | None = None,
     db: AsyncSession = Depends(get_db),
-) -> Dict[str, List[ProgramResponse]]:
+) -> dict[str, list[ProgramResponse]]:
     """Get programs for specified channels in a time range"""
     logger.debug(f"Will convert all programs to timezone: {to_timezone}")
     try:
@@ -818,7 +834,7 @@ async def get_programs(
         programs = result.scalars().all()
 
         # Group programs by channel_id and convert timezone if specified
-        programs_by_channel: Dict[str, List[ProgramResponse]] = {}
+        programs_by_channel: dict[str, list[ProgramResponse]] = {}
         for program in programs:
             if program.channel_id not in programs_by_channel:
                 programs_by_channel[program.channel_id] = []

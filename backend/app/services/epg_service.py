@@ -10,7 +10,6 @@ from typing import TypedDict
 from app.common.download_helper import ProgressDict
 from app.common.download_helper import stream_download
 from app.common.logger import Logger
-from app.common.utils import generate_channel_id
 
 logger = Logger(
     "ISeeTV-EPGService",
@@ -110,7 +109,9 @@ class EPGService:
                             }
                         )
                     else:
-                        logger.warning(f"Duplicate channel ID: {channel_id} | Display Name: {display_name}")
+                        logger.warning(
+                            f"Duplicate channel ID: {channel_id} | Display Name: {display_name}"
+                        )
 
             # Parse programs
             programs: list[EPGProgramDict] = []
