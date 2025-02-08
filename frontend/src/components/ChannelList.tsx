@@ -1,35 +1,90 @@
-import React, { useState, useCallback, useEffect, useRef, forwardRef, useImperativeHandle } from 'react';
+import React, { useState, useCallback, useEffect, useRef, forwardRef, useImperativeHandle, useMemo } from 'react';
 import {
   Box,
-  ListItemButton,
-  ListItemIcon,
-  ListItemText,
   Paper,
   Avatar,
   TextField,
   IconButton,
-  Tabs,
-  Tab,
   InputAdornment,
   CircularProgress,
+  Typography,
+  Tabs,
+  Tab,
+  Card,
+  CardContent,
+  Stack,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
 } from '@mui/material';
 import {
   Search as SearchIcon,
   Star as StarIcon,
   StarBorder as StarBorderIcon,
-  ExpandLess,
-  ExpandMore,
   Settings as SettingsIcon,
+  ChevronRight,
+  ChevronLeft,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import { Channel } from '../models/Channel';
 import { channelService } from '../services/channelService';
-import { ChannelGroup } from '../types/api';
-import { recentChannelsService } from '../services/recentChannelsService';
-import { VariableSizeList } from 'react-window';
-import AutoSizer from 'react-virtualized-auto-sizer';
 import { useNavigate } from 'react-router-dom';
+import { format } from 'date-fns';
+import { toZonedTime } from 'date-fns-tz';
+import { Epg, Layout, useEpg, useProgram, ProgramBox, ProgramContent, ProgramFlex, ProgramStack, ProgramTitle, ProgramText, ChannelBox, ProgramImage } from 'planby';
+import { useTheme } from '@mui/material/styles';
+import { formatTimeWithTimezone, getTodayOffsetDate } from '../utils/dateUtils';
+import { Settings } from '../models/Settings';
 
-export {};
+const TIME_BLOCK_WIDTH = 150;
+const HEADER_HEIGHT = 48;
+const HOUR_WIDTH = TIME_BLOCK_WIDTH * 2;
+const SCROLLBAR_WIDTH = 20; // Standard scrollbar width
+
+// Add type for tab values
+type TabValue = 'all' | 'favorites' | 'recent';
+
+// Add interface for program data
+interface Program {
+  id: string;
+  title: string;
+  start: Date;
+  end: Date;
+  duration: number;
+  description: string;
+  category: string;
+}
+
+// match Planby's expected format
+interface PlanbyProgram {
+  id: string;
+  title: string;
+  channelUuid: string;
+  image: string;
+  since: string;    // ISO string
+  till: string;     // ISO string
+  description: string;
+  category: string;
+  isLive?: boolean;
+  position?: {      // optional position data
+    top: number;
+    height: number;
+    width: number;
+    left: number;
+  };
+}
+
+interface PlanbyChannel {
+  uuid: string;  // unique identifier
+  logo: string;  // required by Planby
+  name: string;
+  position?: {   // optional position data
+    top: number;
+    height: number;
+  };
+}
 
 interface ChannelListProps {
   selectedChannel?: Channel;
@@ -37,729 +92,738 @@ interface ChannelListProps {
   onToggleFavorite: (channel: Channel) => void;
   onRefresh?: (refreshFn: (() => Promise<void>) | undefined) => void;
   onOpenSettings?: () => void;
+  onChannelsChange?: (channels: Channel[]) => void;
+  programs?: Record<string, Program[]>;
+  channelListOpen: boolean;
+  timezone?: string;
+  settings?: Settings;
+  isMobile?: boolean;
+  setChannelListOpen?: (open: boolean) => void;
 }
 
-type TabValue = 'all' | 'favorites' | 'recent';
-
-interface TabState {
-  scrollPosition: number;
-  expandedGroups: Record<string, boolean>;
+interface ProgramDialogProps {
+  program: PlanbyProgram | null;
+  onClose: () => void;
+  onWatch: (channelId: string) => void;
 }
 
-interface VirtualizedChannelListProps {
-  items: (Channel | ChannelGroup)[];
-  expandedGroups: Record<string, boolean>;
-  onToggleGroup: (group: string) => void;
-  selectedChannel?: Channel;
-  onChannelSelect: (channel: Channel) => void;
-  onToggleFavorite: (channel: Channel) => void;
-  initialScrollOffset?: number;
-  onScroll?: (scrollOffset: number) => void;
+interface ChannelDialogProps {
+  channel: PlanbyChannel | null;
+  onClose: () => void;
+  onWatch: (channelId: string) => void;
+  onToggleFavorite: (channelId: string) => void;
+  isFavorite: boolean;
 }
 
-interface AutoSizerProps {
-  height: number;
-  width: number;
+interface ProgramItemProps {
+  program: {
+    data: PlanbyProgram;
+    styles: {
+      width: number;
+      position: React.CSSProperties;
+    };
+  };
+  isBaseTimeFormat?: boolean;
+  isMobile?: boolean;
+  isLine?: boolean;
+  // Add other known props as needed
 }
 
-const VirtualizedChannelList: React.FC<VirtualizedChannelListProps> = ({
-  items,
-  expandedGroups,
-  onToggleGroup,
-  selectedChannel,
-  onChannelSelect,
-  onToggleFavorite,
-  initialScrollOffset = 0,
-  onScroll,
-}) => {
-  const listRef = useRef<VariableSizeList>(null);
-  const [expandedItems, setExpandedItems] = useState<Record<number, boolean>>({});
-  const rowRefs = useRef<Record<number, HTMLDivElement>>({});
-  const navigate = useNavigate();
+interface ChannelItemProps {
+  channel: PlanbyChannel;
+}
 
-  const handleScroll = ({ scrollOffset }: { scrollOffset: number }) => {
-    onScroll?.(scrollOffset);
-  };
-
-  const getItemSize = (index: number) => {
-    const item = items[index];
-    if (!item) return 56;
-    if ('count' in item) return 56; // Group header height
-    
-    // Only expand if text is actually overflowing
-    const rowElement = rowRefs.current[index];
-    if (rowElement && expandedItems[index]) {
-      return rowElement.scrollHeight;
-    }
-    return 56; // Default height
-  };
-
-  const checkIfNeedsExpansion = (element: HTMLDivElement): boolean => {
-    return element.scrollHeight > element.clientHeight;
-  };
-
-  const Row = ({ index, style }: { index: number; style: React.CSSProperties }) => {
-    const item = items[index];
-    
-    if (!item) return null;
-
-    if ('count' in item) { // Group header
-      return (
-        <ListItemButton 
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleGroup(item.name);
-          }}
-          style={style}
-        >
-          <ListItemText primary={`${item.name} (${item.count})`} />
-          {expandedGroups[item.name] ? <ExpandLess /> : <ExpandMore />}
-        </ListItemButton>
-      );
-    }
-    
-    // Channel item
-    return (
-      <ListItemButton
-        ref={(el) => {
-          if (el) rowRefs.current[index] = el;
-        }}
-        onClick={() => {
-          onChannelSelect(item);
-          navigate(`/channel/${item.guide_id}`);
-        }}
-        sx={{
-          transition: 'background-color 0s !important',
-          height: 'auto',
-          '&:hover': {
-            transition: 'background-color 0s !important',
-          }
-        }}
-        style={style}
-        onMouseEnter={(e) => {
-          const element = e.currentTarget;
-          if (checkIfNeedsExpansion(element)) {
-            setExpandedItems(prev => {
-              const newState = { ...prev, [index]: true };
-              listRef.current?.resetAfterIndex(index);
-              return newState;
-            });
-          }
-        }}
-        onMouseLeave={() => {
-          setExpandedItems(prev => {
-            const newState = { ...prev, [index]: false };
-            listRef.current?.resetAfterIndex(index);
-            return newState;
-          });
-        }}
-      >
-        <IconButton
-          size="small"
-          onClick={(e) => {
-            e.stopPropagation();
-            onToggleFavorite(item);
-          }}
-          sx={{ mr: 1 }}
-        >
-          {item.isFavorite ? <StarIcon color="primary" /> : <StarBorderIcon />}
-        </IconButton>
-        <ListItemIcon>
-          <Box sx={{ display: 'flex', flexDirection: 'column', alignItems: 'center' }}>
-            <Avatar
-              src={item.logo}
-              alt={item.name}
-              variant="square"
-              sx={{ width: 32, height: 32 }}
-            >
-              {item.name[0]}
-            </Avatar>
-          </Box>
-        </ListItemIcon>
-        <ListItemText 
-          primary={item.name}
-          sx={{
-            '& .MuiTypography-root': {
-              display: '-webkit-box',
-              WebkitLineClamp: expandedItems[index] ? 'unset' : 2,
-              WebkitBoxOrient: 'vertical',
-              overflow: 'hidden',
-              lineHeight: '1.2em',
-              transition: 'all 0.3s ease',
-            }
-          }}
-        />
-      </ListItemButton>
-    );
-  };
+const ProgramDialog = ({ program, onClose, onWatch }: ProgramDialogProps) => {
+  if (!program) return null;
 
   return (
-    <AutoSizer>
-      {({ height, width }: AutoSizerProps) => (
-        <VariableSizeList
-          ref={listRef}
-          height={height}
-          width={width}
-          itemCount={items.length}
-          itemSize={getItemSize}
-          initialScrollOffset={initialScrollOffset}
-          onScroll={handleScroll}
-        >
-          {Row}
-        </VariableSizeList>
-      )}
-    </AutoSizer>
+    <Dialog open={!!program} onClose={onClose}>
+      <DialogTitle>{program.title}</DialogTitle>
+      <DialogContent>
+        <Typography gutterBottom>
+          {format(new Date(program.since), 'h:mm a')} - {format(new Date(program.till), 'h:mm a')}
+        </Typography>
+        <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+          Channel ID: {program.channelUuid}
+        </Typography>
+        {program.category && (
+          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            {program.category}
+          </Typography>
+        )}
+        <Typography>{program.description}</Typography>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
+        <Button onClick={() => onWatch(program.channelUuid)} variant="contained">
+          Watch
+        </Button>
+      </DialogActions>
+    </Dialog>
   );
 };
 
-// Add a debounce utility at the top of the file
-const debounce = <T extends (...args: any[]) => any>(
-  func: T,
-  wait: number
-): ((...args: Parameters<T>) => void) => {
-  let timeout: NodeJS.Timeout;
-  return (...args: Parameters<T>) => {
-    clearTimeout(timeout);
-    timeout = setTimeout(() => func(...args), wait);
+const ChannelDialog = ({ channel, onClose, onWatch, onToggleFavorite, isFavorite: initialIsFavorite }: ChannelDialogProps) => {
+  const [isFavorite, setIsFavorite] = useState(initialIsFavorite);
+  
+  if (!channel) return null;
+
+  const handleFavorite = () => {
+    setIsFavorite(!isFavorite);
+    onToggleFavorite(channel.uuid);
   };
+
+  return (
+    <Dialog open={!!channel} onClose={onClose}>
+      <DialogTitle>{channel.name}</DialogTitle>
+      <DialogContent>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
+          <Avatar src={channel.logo} alt={channel.name} variant="square" />
+          <IconButton onClick={handleFavorite}>
+            {isFavorite ? <StarIcon color="primary" /> : <StarBorderIcon />}
+          </IconButton>
+        </Box>
+        <Typography variant="caption" color="text.secondary">
+          Channel ID: {channel.uuid}
+        </Typography>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
+        <Button onClick={() => onWatch(channel.uuid)} variant="contained">
+          Watch
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
 };
 
 export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelListProps>(({
-  selectedChannel,
   onChannelSelect,
   onToggleFavorite,
   onRefresh,
   onOpenSettings,
+  programs = {},
+  channelListOpen,
+  timezone = Intl.DateTimeFormat().resolvedOptions().timeZone,
+  settings,
+  isMobile,
+  setChannelListOpen,
 }, ref) => {
-  const [searchTerm, setSearchTerm] = useState('');
-  const [activeTab, setActiveTab] = useState<TabValue>('all');
-  const [initialLoading, setLoading] = useState(true);
-  const [channels, setChannels] = useState<Channel[]>([]);
-  const [expandedGroups, setExpandedGroups] = useState<Record<string, boolean>>({});
-  const [groups, setGroups] = useState<ChannelGroup[]>([]);
-  const [groupChannels, setGroupChannels] = useState<Record<string, Channel[]>>({});
-  const [debouncedSearchTerm, setDebouncedSearchTerm] = useState('');
-  const searchTimeoutRef = useRef<NodeJS.Timeout | undefined>(undefined);
-
-  const filteredChannels = React.useMemo(() => {
-    let filtered = channels;
-
-    if (activeTab === 'favorites') {
-      filtered = filtered.filter(c => c.isFavorite);
-    } else if (activeTab === 'recent') {
-      filtered = recentChannelsService.getRecentChannels();
-    }
-
-    if (debouncedSearchTerm) {
-      const search = debouncedSearchTerm.toLowerCase();
-      filtered = filtered.filter(c => 
-        c.name.toLowerCase().includes(search)
-      );
-    }
-
-    console.log('Filtered Channels:', filtered); // Debugging line
-
-    return filtered;
-  }, [channels, debouncedSearchTerm, activeTab]);
-
-  const virtualizedItems = React.useMemo(() => {
-    // If searching in any tab, show filtered channels directly
-    if (debouncedSearchTerm) {
-      // If we're in "all" tab and searching, load all channels
-      if (activeTab === 'all') {
-        // Flatten all channels from groupChannels
-        const allChannels = Object.values(groupChannels).flat();
-        return allChannels.filter(c => 
-          c.name.toLowerCase().includes(debouncedSearchTerm.toLowerCase())
-        );
-      }
-      return filteredChannels;
-    }
-
-    // If not searching, handle normal tab behavior
-    if (activeTab === 'all') {
-      return groups.reduce<(Channel | ChannelGroup)[]>((acc, group) => {
-        acc.push(group);
-        if (expandedGroups[group.name] && groupChannels[group.name]) {
-          acc.push(...groupChannels[group.name]);
-        }
-        return acc;
-      }, []);
-    }
-    
-    return filteredChannels;
-  }, [
-    activeTab,
-    debouncedSearchTerm,
-    groups,
-    expandedGroups,
-    groupChannels,
-    filteredChannels
-  ]);
-
-  const [tabStates, setTabStates] = useState<Record<TabValue, TabState>>({
-    all: {
-      scrollPosition: parseInt(localStorage.getItem('channelListScroll_all') || '0'),
-      expandedGroups: JSON.parse(localStorage.getItem('channelListGroups_all') || '{}'),
+  // Update headerStyles
+  const headerStyles = {
+    container: {
+      width: isMobile ? '100%' : 300,
+      flexShrink: 0,
+      zIndex: 3,
+      bgcolor: 'background.paper',
+      borderBottom: 1,
+      borderColor: 'divider',
+      display: 'flex',
+      flexDirection: 'column',
     },
-    favorites: {
-      scrollPosition: parseInt(localStorage.getItem('channelListScroll_favorites') || '0'),
-      expandedGroups: JSON.parse(localStorage.getItem('channelListGroups_favorites') || '{}'),
+    groupSection: {  
+      width: isMobile ? '100%' : 300,
+      flexShrink: 0,
+      display: 'flex',
+      alignItems: 'center',
+      position: 'relative',
+      '&::before': {
+        content: '""',
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        width: 4,
+        height: '100%',
+        bgcolor: 'primary.main',
+        opacity: 0.7,
+      },
     },
-    recent: {
-      scrollPosition: parseInt(localStorage.getItem('channelListScroll_recent') || '0'),
-      expandedGroups: JSON.parse(localStorage.getItem('channelListGroups_recent') || '{}'),
-    },
-  });
-
-  const initiateSearch = useCallback((term: string) => {
-    setDebouncedSearchTerm(term);
-  }, []);
-
-  const loadChannels = useCallback(async (loadMore = false) => {
-    try {
-      const response = await channelService.getChannels(
-        0,
-        1000,
-        {
-          search: debouncedSearchTerm,
-          favoritesOnly: activeTab === 'favorites'
-        }
-      );
-
-      // Update both channels and groupChannels states
-      if (activeTab === 'all') {
-        const newGroupChannels: Record<string, Channel[]> = {};
-        response.items.forEach(channel => {
-          const group = channel.group || 'Uncategorized';
-          if (!newGroupChannels[group]) {
-            newGroupChannels[group] = [];
-          }
-          newGroupChannels[group].push(channel);
-        });
-        setGroupChannels(newGroupChannels);
-      }
-      
-      setChannels(response.items);
-      
-    } catch (error) {
-      console.error('Failed to load channels:', error);
-    }
-  }, [debouncedSearchTerm, activeTab]);
-
-  const loadGroups = useCallback(async (forceReload = false) => {
-    if (groups.length > 0 && !forceReload) return;
-
-    try {
-      // Load groups
-      const groups = await channelService.getGroups();
-      setGroups(groups);
-      
-      const savedExpandedGroups = JSON.parse(
-        localStorage.getItem(`channelListGroups_${activeTab}`) || '{}'
-      );
-      
-      // Only load channels for expanded groups
-      const expandedGroupNames = Object.entries(savedExpandedGroups)
-        .filter(([_, isExpanded]) => isExpanded)
-        .map(([groupName]) => groupName);
-
-      if (expandedGroupNames.length > 0) {
-        const groupPromises = expandedGroupNames.map(groupName => 
-          channelService.getChannels(
-            0,
-            10000,
-            { 
-              group: groupName,
-              search: debouncedSearchTerm,
-              favoritesOnly: activeTab === 'favorites'
-            }
-          )
-        );
-        
-        const responses = await Promise.all(groupPromises);
-        
-        // Update only expanded group channels
-        const newGroupChannels: Record<string, Channel[]> = {};
-        expandedGroupNames.forEach((groupName, index) => {
-          newGroupChannels[groupName] = responses[index].items;
-        });
-        
-        setGroupChannels(newGroupChannels);
-      }
-      
-      setExpandedGroups(savedExpandedGroups);
-      
-    } catch (error) {
-      console.error('Failed to load groups and channels:', error);
-    }
-  }, [activeTab, groups.length, debouncedSearchTerm]);
-
-  // Update the initialization effect
-  useEffect(() => {
-    let mounted = true;
-
-    const initializeList = async () => {
-      if (!mounted) return;
-      
-      setLoading(true);
-      try {
-        if (activeTab === 'all') {
-          await loadGroups();
-        } else if (activeTab === 'favorites') {
-          await loadChannels(false);
-        } else if (activeTab === 'recent') {
-          // Get fresh data from backend
-          const response = await channelService.getChannels(0, 1000);
-          const freshChannels = response.items;
-          
-          // Get recent channels and update them with fresh data
-          const recentChannels = recentChannelsService.getRecentChannels();
-          const updatedRecentChannels = recentChannels.map(ch => {
-            const freshChannel = freshChannels.find(f => f.guide_id === ch.guide_id);
-            return freshChannel || ch;
-          });
-          
-          // Update recent channels in storage and state
-          recentChannelsService.updateRecentChannels(updatedRecentChannels);
-          setChannels(updatedRecentChannels);
-        }
-      } finally {
-        if (mounted) {
-          setLoading(false);
-        }
-      }
-    };
-
-    initializeList();
-
-    return () => {
-      mounted = false;
-    };
-  }, [activeTab, loadGroups, loadChannels]);
-
-  const handleToggleFavorite = async (channel: Channel) => {
-    const originalFavoriteStatus = channel.isFavorite;
-    
-    try {
-      const newFavoriteStatus = !originalFavoriteStatus;
-      
-      // Update UI optimistically
-      setChannels(prev => prev.map(ch => 
-        ch.guide_id === channel.guide_id 
-          ? { ...ch, isFavorite: newFavoriteStatus }
-          : ch
-      ));
-
-      setGroupChannels(prev => {
-        const newState = { ...prev };
-        Object.keys(newState).forEach(group => {
-          if (newState[group]) {
-            newState[group] = newState[group].map(ch =>
-              ch.guide_id === channel.guide_id 
-                ? { ...ch, isFavorite: newFavoriteStatus }
-                : ch
-            );
-          }
-        });
-        return newState;
-      });
-
-      // Call backend
-      await onToggleFavorite(channel);
-
-      // Refresh all relevant states
-      if (activeTab === 'all') {
-        await loadGroups(true); // Pass true to force reload
-      } else if (activeTab === 'favorites') {
-        await loadChannels(false);
-      } else if (activeTab === 'recent') {
-        // Get fresh data from backend
-        const response = await channelService.getChannels(0, 1000);
-        const freshChannels = response.items;
-        
-        // Get recent channels and update them with fresh data
-        const recentChannels = recentChannelsService.getRecentChannels();
-        const updatedRecentChannels = recentChannels.map(ch => {
-          const freshChannel = freshChannels.find(f => f.guide_id === ch.guide_id);
-          return freshChannel || ch;
-        });
-        
-        // Update recent channels in storage and state
-        recentChannelsService.updateRecentChannels(updatedRecentChannels);
-        setChannels(updatedRecentChannels);
-      }
-
-    } catch (error) {
-      console.error('Failed to toggle favorite:', error);
-      // Revert UI changes
-      setChannels(prev => prev.map(ch => 
-        ch.guide_id === channel.guide_id 
-          ? { ...ch, isFavorite: originalFavoriteStatus }
-          : ch
-      ));
-      
-      setGroupChannels(prev => {
-        const newState = { ...prev };
-        Object.keys(newState).forEach(group => {
-          if (newState[group]) {
-            newState[group] = newState[group].map(ch =>
-              ch.guide_id === channel.guide_id 
-                ? { ...ch, isFavorite: originalFavoriteStatus }
-                : ch
-            );
-          }
-        });
-        return newState;
-      });
+    text: {
+      color: 'text.primary',
+      fontWeight: 500,
+      pl: 3,
+      textTransform: 'uppercase',
+      letterSpacing: '0.5px',
+      fontSize: '0.8125rem',
     }
   };
 
-  // Update the debounced refresh to return a Promise
-  const debouncedRefresh = useCallback(
-    () => new Promise<void>(resolve => {
-      debounce(async () => {
-        try {
-          if (activeTab === 'all') {
-            await loadGroups();
-          } else if (activeTab === 'favorites') {
-            await loadChannels(false);
-          } else if (activeTab === 'recent') {
-            const recentChannels = recentChannelsService.getRecentChannels();
-            setChannels(recentChannels);
-          }
-        } catch (error) {
-          console.error('Failed to refresh channel list:', error);
-        } finally {
-          resolve();
-        }
-      }, 500)();
-    }),
-    [activeTab, loadGroups, loadChannels]
-  );
+  const [activeTab, setActiveTab] = useState<TabValue>('all');
+  const [searchTerm, setSearchTerm] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [channels, setChannels] = useState<Channel[]>([]);
+  const containerRef = useRef<HTMLDivElement>(null);
+  const navigate = useNavigate();
+  const [epgExpanded, setEpgExpanded] = useState(false);
+  const theme = useTheme();
+  const [selectedProgram, setSelectedProgram] = useState<PlanbyProgram | null>(null);
+  const [selectedChannelDialog, setSelectedChannelDialog] = useState<PlanbyChannel | null>(null);
 
-  // Use the debounced version in the component
-  useEffect(() => {
-    if (onRefresh) {
-      onRefresh(debouncedRefresh);
-    }
-    return () => {
-      if (onRefresh) {
-        onRefresh(undefined);
-      }
-    };
-  }, [onRefresh, debouncedRefresh]);
+  // Move planbyTheme inside the component to access theme
+  const planbyTheme = useMemo(() => ({
+    primary: {
+      600: theme.palette.mode === 'dark' ? '#040d1e' : '#b2eff7', // finished and upcoming programs
+      900: theme.palette.mode === 'dark' ? '#1f1f1f' : '#ffffff', // guide background
+    },
+    grey: { 
+      300: theme.palette.mode === 'dark' ? '#d1d1d1' : '#757575' 
+    },
+    white: theme.palette.mode === 'dark' ? '#fff' : '#000',
+    green: {
+      300: theme.palette.primary.main, // Use MUI primary color
+    },
+    loader: {
+      teal: theme.palette.primary.light,
+      purple: theme.palette.primary.main,
+      pink: theme.palette.primary.dark,
+      bg: theme.palette.mode === 'dark' ? '#171923db' : '#f5f5f5db',
+    },
+    scrollbar: {
+      border: theme.palette.divider,
+      thumb: {
+        bg: theme.palette.mode === 'dark' ? '#e1e1e1' : '#757575',
+      },
+    },
+    // live channel gradient
+    gradient: {
+      blue: {
+        300: theme.palette.mode === 'dark' ? '#040d1e': '#b2eff7',
+        600: theme.palette.mode === 'dark' ? '#001d31': '#ceecf0',
+        900: theme.palette.mode === 'dark' ? '#040d1e': '#b2eff7',
+      },
+    },
+    text: {
+      grey: {
+        300: theme.palette.text.primary,
+        500: theme.palette.text.secondary,
+      },
+    },
+    timeline: {
+      divider: {
+        bg: theme.palette.divider,
+      },
+    },
+  }), [theme]);
 
-  // Update handleTabChange to preload data
-  const handleTabChange = async (_: any, newValue: TabValue) => {
-    setLoading(true); // Show loading state while switching
+  // Modify loadChannels to always load channels
+  const loadChannels = useCallback(async () => {
     try {
-      // Reset states first
-      setChannels([]);
-      setGroupChannels({});
-      setExpandedGroups({});
-      
-      if (newValue === 'all') {
-        // Force reload groups and their channels
-        await loadGroups(true); // Pass true to force reload
-        
-        // Get and set expanded groups after data is loaded
-        const savedExpandedGroups = JSON.parse(
-          localStorage.getItem(`channelListGroups_${newValue}`) || '{}'
-        );
-        setExpandedGroups(savedExpandedGroups);
-        
-      } else if (newValue === 'favorites') {
-        await loadChannels(false);
-      } else if (newValue === 'recent') {
-        const recentChannels = recentChannelsService.getRecentChannels();
-        setChannels(recentChannels);
-      }
+      setLoading(true);
+      const response = await channelService.getChannels(0, {
+        search: searchTerm,
+        favoritesOnly: activeTab === 'favorites',
+        recentOnly: activeTab === 'recent'
+      });
 
-      // Change tab after data is loaded
-      setActiveTab(newValue);
-      
-      // Reset search
-      setSearchTerm('');
-      setDebouncedSearchTerm('');
+      setChannels(response.items);
+    } catch (error) {
+      console.error('Failed to load channels:', error);
     } finally {
       setLoading(false);
     }
-  };
+  }, [searchTerm, activeTab]);
 
-  const handleToggleGroup = async (group: string) => {
-    const isExpanding = !expandedGroups[group];
-    const newExpandedGroups = {
-      ...expandedGroups,
-      [group]: !expandedGroups[group]
-    };
-    setExpandedGroups(newExpandedGroups);
-
-    // Save expanded groups state for current tab
-    localStorage.setItem(
-      `channelListGroups_${activeTab}`, 
-      JSON.stringify(newExpandedGroups)
-    );
-
-    // Load channels if expanding and not already loaded
-    if (isExpanding && (!groupChannels[group] || groupChannels[group].length === 0)) {
-      try {
-        const response = await channelService.getChannels(0, 1000, {
-          group: group,
-          search: debouncedSearchTerm,
-          favoritesOnly: activeTab === 'favorites'
-        });
-
-        setGroupChannels(prev => ({
-          ...prev,
-          [group]: response.items
-        }));
-
-      } catch (error) {
-        console.error('Failed to load channels for group:', error);
-        // Revert expansion state on error
-        setExpandedGroups(prev => ({
-          ...prev,
-          [group]: false
-        }));
-        localStorage.setItem(
-          `channelListGroups_${activeTab}`,
-          JSON.stringify({
-            ...newExpandedGroups,
-            [group]: false
-          })
-        );
-      }
-    }
-  };
-
-  // Clean up the timeout on unmount
+  // Update the effect to load channels on mount and when dependencies change
   useEffect(() => {
-    return () => {
-      if (searchTimeoutRef.current) {
-        clearTimeout(searchTimeoutRef.current);
+    loadChannels();
+  }, [searchTerm, activeTab, loadChannels]);
+
+  // Handle search with debounce
+  const handleSearch = useCallback((term: string) => {
+    setSearchTerm(term);
+    setLoading(true);
+    setChannels([]);
+    if (containerRef.current) {
+      containerRef.current.scrollTop = 0;
+    }
+  }, []);
+
+  // Add tab change handler
+  const handleTabChange = useCallback((_: React.SyntheticEvent, newValue: TabValue) => {
+    setActiveTab(newValue);
+    setChannels([]);
+    if (containerRef.current) {
+      containerRef.current.scrollTop = 0;
+    }
+  }, []);
+
+  // Keep the refresh function for parent component
+  const refresh = useCallback(async () => {
+    setLoading(true);
+    setChannels([]);
+    await loadChannels();
+  }, [loadChannels]);
+
+  useImperativeHandle(ref, () => ({
+    refresh
+  }), [refresh]);
+
+  useEffect(() => {
+    if (onRefresh) {
+      onRefresh(refresh);
+    }
+  }, [onRefresh, refresh]);
+
+  // Convert channels to Planby format
+  const planbyChannels = useMemo<PlanbyChannel[]>(() => 
+    channels.map((channel, index) => ({
+      uuid: channel.channel_id,
+      name: channel.name,
+      logo: channel.logo || 'https://via.placeholder.com/150',  // Provide default logo
+      position: {
+        top: index * 70,  // matches itemHeight in useEpg config
+        height: 70
       }
+    })), [channels]
+  );
+
+  // Convert programs to Planby format
+  const planbyPrograms = useMemo<PlanbyProgram[]>(() => {
+    const allPrograms: PlanbyProgram[] = [];
+    const now = new Date();
+    const startTime = getTodayOffsetDate(settings?.guideStartHour ?? -1);
+
+    Object.entries(programs).forEach(([channelId, channelPrograms]) => {
+      const channel = channels.find(c => c.channel_id === channelId);
+      if (!channel) return;
+
+      channelPrograms.forEach(program => {
+        const startDate = toZonedTime(new Date(program.start), timezone);
+        const endDate = toZonedTime(new Date(program.end), timezone);
+        
+        // Calculate position data
+        const durationMs = endDate.getTime() - startDate.getTime();
+        const durationMinutes = durationMs / (1000 * 60);
+        const width = (durationMinutes / 30) * TIME_BLOCK_WIDTH;
+        const left = ((startDate.getTime() - startTime.getTime()) / (1000 * 60 * 30)) * TIME_BLOCK_WIDTH;
+
+        allPrograms.push({
+          id: program.id,
+          title: program.title,
+          since: startDate.toISOString(),
+          till: endDate.toISOString(),
+          channelUuid: channelId,
+          image: 'https://via.placeholder.com/150',
+          description: program.description || 'No description available',
+          category: channel.group || program.category || 'Uncategorized',
+          isLive: startDate <= now && endDate >= now,
+          position: {
+            top: channels.findIndex(c => c.channel_id === channelId) * 70,
+            height: 70,
+            width,
+            left
+          }
+        });
+      });
+    });
+    return allPrograms;
+  }, [programs, channels, timezone, settings?.guideStartHour]);
+
+  // Update where we create the dates
+  // for example 1738620000 is 2025-02-04 10:00:00 but in UTC, while I'm at EST
+  const guideStartHour = settings?.guideStartHour ?? -1; // Default 2 hours back
+  const guideEndHour = settings?.guideEndHour ?? 12;    // Default 12 hours forward
+  const guideStartDate = getTodayOffsetDate(guideStartHour);
+  const guideEndDate = getTodayOffsetDate(guideEndHour);
+  const formattedStartDate = format(guideStartDate, 'yyyy-MM-dd\'T\'HH:mm:ss');
+  const formattedEndDate = format(guideEndDate, 'yyyy-MM-dd\'T\'HH:mm:ss');
+
+  // Add height state
+  const [containerHeight, setContainerHeight] = useState(window.innerHeight - HEADER_HEIGHT);
+
+  // Update the height observer effect
+  useEffect(() => {
+    const updateHeight = () => {
+      if (containerRef.current) {
+        const viewportHeight = window.innerHeight;
+        const containerTop = containerRef.current.getBoundingClientRect().top;
+        const newHeight = viewportHeight - containerTop;
+        setContainerHeight(newHeight);
+      }
+    };
+
+    // Initial height calculation
+    updateHeight();
+
+    // Update height on resize
+    window.addEventListener('resize', updateHeight);
+    
+    // Create resize observer for parent element changes
+    const resizeObserver = new ResizeObserver(updateHeight);
+    if (containerRef.current?.parentElement) {
+      resizeObserver.observe(containerRef.current.parentElement);
+    }
+
+    return () => {
+      window.removeEventListener('resize', updateHeight);
+      resizeObserver.disconnect();
     };
   }, []);
 
-  // Reload the favorites list when switching to the favorites tab
+  // Add a constant for expanded width percentage
+  const EXPANDED_WIDTH_PERCENTAGE = 80; // 80% of viewport width
+
+  // First, declare the width state
+  const [epgWidth, setEpgWidth] = useState(() => 
+    channelListOpen 
+      ? epgExpanded 
+        ? isMobile
+          ? window.innerWidth  // Full width on mobile
+          : Math.min(window.innerWidth * (EXPANDED_WIDTH_PERCENTAGE/100), 1200)
+        : 300 
+      : 0
+  );
+
+  // Then use it in the EPG configuration
+  const { getEpgProps, getLayoutProps } = useEpg({
+    channels: planbyChannels,
+    epg: planbyPrograms,
+    width: epgWidth,
+    height: containerHeight,
+    itemHeight: 70,
+    // Adjust sidebar width when expanded on mobile
+    sidebarWidth: isMobile && epgExpanded 
+      ? window.innerWidth * 0.25  // 1/4 of screen width when expanded
+      : isMobile 
+        ? window.innerWidth 
+        : 300,
+    theme: planbyTheme,
+    isBaseTimeFormat: true,
+    isSidebar: true,
+    isTimeline: true,
+    dayWidth: 24 * HOUR_WIDTH,
+    isLine: epgExpanded,
+    startDate: formattedStartDate,
+    endDate: formattedEndDate,
+  });
+
+  // Keep the resize effects after
   useEffect(() => {
-    if (activeTab === 'favorites') {
-      loadChannels(false);
-    }
-  }, [activeTab, loadChannels]);
+    const updateWidth = () => {
+      setEpgWidth(
+        channelListOpen 
+          ? epgExpanded 
+            ? isMobile
+              ? window.innerWidth  // Full width on mobile
+              : Math.min(window.innerWidth * (EXPANDED_WIDTH_PERCENTAGE/100), 1200)
+            : 300 + SCROLLBAR_WIDTH
+          : 0
+      );
+    };
 
-  const handleChannelSelect = (channel: Channel) => {
-    // Add to recent channels
-    recentChannelsService.addRecentChannel(channel);
-    // Call the original onChannelSelect
-    onChannelSelect(channel);
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, [channelListOpen, epgExpanded, isMobile]);
+
+  useEffect(() => {
+    setEpgWidth(
+      channelListOpen 
+        ? epgExpanded 
+          ? isMobile
+            ? window.innerWidth  // Full width on mobile
+            : Math.min(window.innerWidth * (EXPANDED_WIDTH_PERCENTAGE/100), 1200)
+          : 300 + SCROLLBAR_WIDTH
+        : 0
+    );
+  }, [channelListOpen, epgExpanded, isMobile]);
+
+  // Custom Program component using Material-UI
+  const ProgramItem = ({ program, ...rest }: ProgramItemProps) => {
+    const { styles, isLive, isMinWidth } = useProgram({ program, ...rest });
+
+    const { data } = program;
+    const { image, title, since, till, description, category } = data;
+
+    const sinceTime = formatTimeWithTimezone(new Date(since), timezone);
+    const tillTime = formatTimeWithTimezone(new Date(till), timezone);
+
+    return (
+      <ProgramBox 
+        width={styles.width} 
+        style={styles.position}
+        onClick={() => setSelectedProgram(data)}
+        sx={{ cursor: 'pointer' }}
+      >
+        <ProgramContent width={styles.width} isLive={isLive}>
+          <ProgramFlex>
+            {isLive && isMinWidth && <ProgramImage src={image} alt="Preview" />}
+            <ProgramStack>
+              <ProgramTitle>{title}</ProgramTitle>
+              <ProgramText>
+                {sinceTime} - {tillTime}
+              </ProgramText>
+              {category && (
+                <ProgramText>
+                  {category}
+                </ProgramText>
+              )}
+              {description && isMinWidth && (
+                <ProgramText>
+                  {description}
+                </ProgramText>
+              )}
+            </ProgramStack>
+          </ProgramFlex>
+        </ProgramContent>
+      </ProgramBox>
+    );
   };
 
-  const handleScroll = useCallback((scrollOffset: number) => {
-    localStorage.setItem(`channelListScroll_${activeTab}`, scrollOffset.toString());
-    setTabStates(prev => ({
-      ...prev,
-      [activeTab]: {
-        ...prev[activeTab],
-        scrollPosition: scrollOffset
+  // Custom Channel component using Material-UI
+  const ChannelItem = ({ channel }: ChannelItemProps) => {
+    const { position, logo, name } = channel;
+
+    const handleClearLastWatched = async (e: React.MouseEvent) => {
+      e.stopPropagation(); // Prevent channel dialog from opening
+      try {
+        await channelService.clearLastWatched(channel.uuid);
+        // Refresh the channel list to update the UI
+        await loadChannels();
+      } catch (error) {
+        console.error('Failed to clear last watched:', error);
       }
-    }));
-  }, [activeTab]);
+    };
 
-  const handleSearchChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const newTerm = e.target.value;
-    setSearchTerm(newTerm);
-
-    // Clear any existing timeout
-    if (searchTimeoutRef.current) {
-      clearTimeout(searchTimeoutRef.current);
-    }
-
-    // Set new timeout for debounced search
-    searchTimeoutRef.current = setTimeout(() => {
-      setDebouncedSearchTerm(newTerm);
-      // Load channels when search term changes
-      if (activeTab === 'all') {
-        loadChannels(false);
-      }
-    }, 300);
+    return (
+      <ChannelBox {...position}>
+        <Card 
+          sx={{ 
+            height: '100%', 
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            borderRadius: 0,
+            bgcolor: 'background.paper',
+            cursor: 'pointer',
+            transition: 'background-color 0.2s',
+            '&:hover': {
+              bgcolor: 'action.hover',
+            },
+          }}
+          onClick={() => setSelectedChannelDialog(channel)}
+        >
+          <CardContent sx={{ 
+            p: 1, 
+            '&:last-child': { pb: 1 },
+            display: 'flex',
+            alignItems: 'flex-start',
+            gap: 1,
+            width: '100%',
+            position: 'relative', // Add this for absolute positioning of X button
+          }}>
+            <Avatar
+              src={logo}
+              alt={name}
+              variant="square"
+              sx={{ 
+                width: 32, 
+                height: 32,
+                flexShrink: 0
+              }}
+            />
+            <Typography 
+              sx={{ 
+                wordBreak: 'break-word',
+                whiteSpace: 'normal',
+                overflow: 'hidden',
+                fontSize: '0.875rem',
+                lineHeight: 1.2,
+                maxHeight: '2.4em',
+                WebkitLineClamp: 2,
+                display: '-webkit-box',
+                WebkitBoxOrient: 'vertical',
+              }}
+            >
+              {name}
+            </Typography>
+            {/* Add X button only in recent tab */}
+            {activeTab === 'recent' && (
+              <IconButton
+                size="small"
+                onClick={handleClearLastWatched}
+                sx={{
+                  position: 'absolute',
+                  right: 8,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  opacity: 0.7,
+                  '&:hover': {
+                    opacity: 1,
+                  },
+                }}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            )}
+          </CardContent>
+        </Card>
+      </ChannelBox>
+    );
   };
-
-  // Expose refresh method via ref
-  useImperativeHandle(ref, () => ({
-    refresh: async () => {
-      if (activeTab === 'all') {
-        await loadGroups(true);
-      } else if (activeTab === 'favorites') {
-        await loadChannels(false);
-      }
-    }
-  }));
 
   return (
     <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
-      <Box sx={{ p: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
-        <TextField
-          fullWidth
-          size="small"
-          placeholder="Search channels..."
-          value={searchTerm}
-          onChange={handleSearchChange}
-          onBlur={() => initiateSearch(searchTerm)}
-          onKeyDown={(e) => {
-            if (e.key === 'Enter') {
-              if (searchTimeoutRef.current) {
-                clearTimeout(searchTimeoutRef.current);
-              }
-              initiateSearch(searchTerm);
-            }
-          }}
-          InputProps={{
-            startAdornment: (
-              <InputAdornment position="start">
-                <SearchIcon />
-              </InputAdornment>
-            ),
-          }}
-        />
-        {onOpenSettings && (
-          <IconButton onClick={onOpenSettings} size="small">
-            <SettingsIcon />
-          </IconButton>
-        )}
-      </Box>
-
-      <Tabs
-        value={activeTab}
-        onChange={handleTabChange}  // Use the new handler
-        variant="fullWidth"
-      >
-        <Tab label="All" value="all" />
-        <Tab label="Favorites" value="favorites" />
-        <Tab label="Recent" value="recent" />
-      </Tabs>
-
-      <Box sx={{ flexGrow: 1 }}>
-        {initialLoading ? (
-          <Box sx={{ display: 'flex', justifyContent: 'center', alignItems: 'center', height: '100%' }}>
-            <CircularProgress />
-          </Box>
-        ) : (
-          <VirtualizedChannelList
-            items={virtualizedItems}
-            expandedGroups={expandedGroups}
-            onToggleGroup={handleToggleGroup}
-            selectedChannel={selectedChannel}
-            onChannelSelect={handleChannelSelect}
-            onToggleFavorite={handleToggleFavorite}
-            initialScrollOffset={tabStates[activeTab].scrollPosition}
-            onScroll={handleScroll}
+      {/* Fixed width header section */}
+      <Box sx={headerStyles.container}>
+        {/* Search Bar */}
+        <Box sx={{ 
+          p: 1, 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 1,
+          // Add margin-right when mobile and channel list is open
+          mr: isMobile && channelListOpen ? 5 : 0  // Add space for collapse button
+        }}>
+          <TextField
+            fullWidth
+            size="small"
+            placeholder="Search channels..."
+            onChange={(e) => handleSearch(e.target.value)}
+            InputProps={{
+              startAdornment: (
+                <InputAdornment position="start">
+                  <SearchIcon />
+                </InputAdornment>
+              ),
+            }}
           />
-        )}
+          {onOpenSettings && (
+            <IconButton onClick={onOpenSettings} size="small">
+              <SettingsIcon />
+            </IconButton>
+          )}
+        </Box>
+
+        {/* Tabs and EPG Toggle */}
+        <Box sx={{ display: 'flex', alignItems: 'center' }}>
+          <Tabs
+            value={activeTab}
+            onChange={handleTabChange}
+            variant="fullWidth"
+            sx={{ flexGrow: 1 }}
+          >
+            <Tab label="All" value="all" />
+            <Tab label="Favorites" value="favorites" />
+            <Tab label="Recent" value="recent" />
+          </Tabs>
+          <IconButton
+            onClick={() => setEpgExpanded(!epgExpanded)}
+            sx={{
+              borderRadius: '4px 0 0 4px',
+              bgcolor: 'background.paper',
+              '&:hover': { bgcolor: 'action.hover' },
+            }}
+          >
+            {epgExpanded ? <ChevronLeft /> : <ChevronRight />}
+          </IconButton>
+        </Box>
       </Box>
+
+      {/* Update EPG section */}
+      <Box 
+        ref={containerRef} 
+        sx={{ 
+          flexGrow: 1, 
+          overflow: 'hidden',
+          bgcolor: 'background.default',
+          position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+          height: containerHeight,
+        }}
+      >
+        {/* Add overlay text */}
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            height: 60,
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            px: 2,
+            color: 'text.primary',
+            pointerEvents: 'none',
+            // Hide when guide is expanded on mobile
+            opacity: isMobile && epgExpanded ? 0 : 1,
+            visibility: isMobile && epgExpanded ? 'hidden' : 'visible',
+          }}
+        >
+          <Stack>
+            <Typography>{channels.length} Channels</Typography>
+            <Typography>{planbyPrograms.length} Programs</Typography>
+          </Stack>
+        </Box>
+        <Epg {...getEpgProps()}>
+          <Layout
+            {...getLayoutProps()}
+            renderProgram={({ program, ...rest }) => (
+              <ProgramItem key={program.data.id} program={program} {...rest} />
+            )}
+            renderChannel={({ channel }) => (
+              <ChannelItem key={channel.uuid} channel={channel} />
+            )}
+          />
+        </Epg>
+      </Box>
+
+      {/* Update the loading state display */}
+      {loading && (
+        <Box 
+          sx={{ 
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            bgcolor: 'rgba(0, 0, 0, 0.3)',
+            zIndex: 1001, // Above the channel list content
+          }}
+        >
+          <CircularProgress />
+        </Box>
+      )}
+
+      <ProgramDialog 
+        program={selectedProgram}
+        onClose={() => setSelectedProgram(null)}
+        onWatch={(channelId) => {
+          onChannelSelect(channels.find(c => c.channel_id === channelId)!);
+          setSelectedProgram(null);
+          navigate(`/channel/${channelId}`);
+          if (isMobile && setChannelListOpen) {
+            setChannelListOpen(false);
+          }
+        }}
+      />
+
+      <ChannelDialog 
+        channel={selectedChannelDialog}
+        onClose={() => setSelectedChannelDialog(null)}
+        onWatch={(channelId) => {
+          onChannelSelect(channels.find(c => c.channel_id === channelId)!);
+          setSelectedChannelDialog(null);
+          navigate(`/channel/${channelId}`);
+          if (isMobile && setChannelListOpen) {
+            setChannelListOpen(false);
+          }
+        }}
+        onToggleFavorite={(channelId) => {
+          const channel = channels.find(c => c.channel_id === channelId);
+          if (channel) {
+            onToggleFavorite(channel);
+          }
+        }}
+        isFavorite={channels.find(c => c.channel_id === selectedChannelDialog?.uuid)?.isFavorite || false}
+      />
     </Paper>
   );
 });
+
+ChannelList.displayName = 'ChannelList';
 
 export type { ChannelListProps }; 

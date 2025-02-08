@@ -5,4 +5,8 @@ export interface Settings {
   epgUpdateInterval: number; 
   updateOnStart: boolean;
   theme: 'light' | 'dark' | 'system';
+  recentDays: number;
+  guideStartHour: number;
+  guideEndHour: number;
+  timezone?: string;
 } 

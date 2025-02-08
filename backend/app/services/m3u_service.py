@@ -11,7 +11,6 @@ from typing import TypedDict
 from app.common.download_helper import ProgressDict
 from app.common.download_helper import stream_download
 from app.common.logger import Logger
-from app.common.utils import generate_channel_id
 
 logger = Logger(
     "ISeeTV-M3UService",
@@ -22,7 +21,7 @@ logger = Logger(
 
 
 class ChannelDict(TypedDict):
-    guide_id: str
+    channel_id: str
     name: str
     url: str
     group: str
@@ -79,15 +78,15 @@ class M3UService:
 
             channels = self.parse_m3u(content)
 
-            # Get list of guide_ids from parsed channels
-            new_guide_ids = {channel["guide_id"] for channel in channels}
-            logger.info(f"Found {len(new_guide_ids)} channels in the M3U")
+            # Get list of channel_ids from parsed channels
+            new_channel_ids = {channel["channel_id"] for channel in channels}
+            logger.info(f"Found {len(new_channel_ids)} channels in the M3U")
 
             # Set is_missing=0 for all channels in the update
             for channel in channels:
                 channel["is_missing"] = False
 
-            return channels, new_guide_ids
+            return channels, new_channel_ids
 
         except Exception as e:
             logger.error(f"Failed to read and parse M3U: {str(e)}")
@@ -117,20 +116,22 @@ class M3UService:
                 info = line[8:].split(",", 1)
                 if len(info) == 2:
                     attrs = self._parse_attributes(info[0])
-
                     name = attrs.get("tvg-name", "")
+                    # channel_id = generate_channel_id(attrs.get("tvg-id", None), name)
+                    channel_id = attrs.get("tvg-id", None)
 
-                    guide_id = generate_channel_id(attrs.get("tvg-id", None), name)
-
-                    current_channel = {
-                        "guide_id": guide_id,
-                        "name": name,
-                        "group": attrs.get("group-title", "Uncategorized"),
-                        "logo": attrs.get("tvg-logo"),
-                        "url": "",  # Will be set when we get the URL line
-                        "is_missing": False,
-                        "is_favorite": False,
-                    }
+                    if channel_id:
+                        current_channel = {
+                            "channel_id": channel_id,
+                            "name": name,
+                            "group": attrs.get("group-title", "Uncategorized"),
+                            "logo": attrs.get("tvg-logo"),
+                            "url": "",  # Will be set when we get the URL line
+                            "is_missing": False,
+                            "is_favorite": False,
+                        }
+                    else:
+                        logger.warning(f"No channel_id found for channel: {name}")
 
             elif line.startswith("http"):
                 if current_channel:
@@ -146,14 +147,6 @@ class M3UService:
                 continue
             else:
                 logger.warning(f"Unprocessed line: {line}")
-
-            if any(
-                guide_id in existing_guide_ids["guide_id"]
-                for existing_guide_ids in channels
-            ):
-                logger.debug(f"{guide_id} - already exists, renaming")
-                guide_id += self._sanitize_name(attrs.get("tvg-id", ""))
-                logger.debug(f"--- New guide_id: {guide_id}")
 
         return channels
 

@@ -18,14 +18,19 @@ import {
   Typography,
   Tabs,
   Tab,
+  Alert,
+  Autocomplete,
 } from '@mui/material';
 import { Settings } from '../models/Settings';
 import RefreshIcon from '@mui/icons-material/Refresh';
 import { channelService } from '../services/channelService';
-import HelpIcon from '@mui/icons-material/Help';
 import Link from '@mui/material/Link';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import RedditIcon from '@mui/icons-material/Reddit';
+import { getUserTimezone } from '../utils/dateUtils';
+
+// Add timezone list - these are IANA timezone names
+const TIMEZONES = Intl.supportedValuesOf('timeZone');
 
 interface SettingsModalProps {
   open: boolean;
@@ -50,7 +55,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     epgUrl: '',
     epgUpdateInterval: 24,
     updateOnStart: true,
-    theme: 'dark'
+    theme: 'dark',
+    recentDays: 3,
+    guideStartHour: settings.guideStartHour ?? -1,
+    guideEndHour: settings.guideEndHour ?? 12,
+    timezone: settings.timezone || getUserTimezone(),
   });
 
   const [activeTab, setActiveTab] = useState(0);
@@ -62,6 +71,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   }, [settings]);
 
   const [loading, setLoading] = useState(false);
+
+  const [isResetting, setIsResetting] = useState(false);
+  const [resetError, setResetError] = useState<string | null>(null);
 
   const handleM3uRefreshClick = async () => {
     setLoading(true);
@@ -132,11 +144,33 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         );
       }
 
-      onSave(formState);
+      const updatedSettings: Settings = {
+        ...formState,
+        guideStartHour: Number(formState.guideStartHour),
+        guideEndHour: Number(formState.guideEndHour),
+        timezone: formState.timezone,
+      };
+      await onSave(updatedSettings);
     } catch (error) {
       console.error('Failed to save settings:', error);
     } finally {
       setLoading(false);
+    }
+  };
+
+  const handleHardReset = async () => {
+    if (!window.confirm('Are you sure you want to perform a hard reset? This will delete all channels and reload them from the M3U.')) {
+      return;
+    }
+    
+    setIsResetting(true);
+    setResetError(null);
+    try {
+      await channelService.hardReset();
+    } catch (error) {
+      setResetError(error instanceof Error ? error.message : 'Failed to reset channels');
+    } finally {
+      setIsResetting(false);
     }
   };
 
@@ -151,10 +185,11 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     <Dialog 
       open={open} 
       onClose={formState.m3uUrl ? onClose : undefined}
-      maxWidth="sm" 
+      maxWidth="md" 
       fullWidth
       disableEscapeKeyDown={!formState.m3uUrl}
     >
+      <DialogTitle>Settings</DialogTitle>
       <DialogContent>
         <Tabs 
           value={activeTab} 
@@ -250,6 +285,68 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </Select>
             </FormControl>
             
+            <Box sx={{ display: 'flex', gap: 2, mt: 2 }}>
+              <TextField
+                label="Recent Days"
+                type="number"
+                value={formState.recentDays}
+                onChange={(e) => setFormState({
+                  ...formState,
+                  recentDays: Math.max(1, Math.min(30, Number(e.target.value)))
+                })}
+                inputProps={{
+                  min: 1,
+                  max: 30,
+                  step: 1
+                }}
+                fullWidth
+                helperText="Days to show in Recent tab"
+              />
+              <TextField
+                label="Guide Start Hour"
+                type="number"
+                value={formState.guideStartHour}
+                onChange={(e) => setFormState({ 
+                  ...formState, 
+                  guideStartHour: Math.max(-24, Math.min(0, Number(e.target.value))) 
+                })}
+                inputProps={{ min: -24, max: 0 }}
+                fullWidth
+                helperText="Hours before now (negative)"
+              />
+              <TextField
+                label="Guide End Hour"
+                type="number"
+                value={formState.guideEndHour}
+                onChange={(e) => setFormState({ 
+                  ...formState, 
+                  guideEndHour: Math.max(1, Math.min(48, Number(e.target.value))) 
+                })}
+                inputProps={{ min: 1, max: 48 }}
+                fullWidth
+                helperText="Hours after now"
+              />
+            </Box>
+            
+            {/* Add Timezone Selection */}
+            <Autocomplete
+              value={formState.timezone}
+              onChange={(_, newValue) => {
+                setFormState(prev => ({
+                  ...prev,
+                  timezone: newValue || getUserTimezone()
+                }));
+              }}
+              options={TIMEZONES}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Timezone"
+                  helperText="Defaults to browser timezone if not set"
+                />
+              )}
+            />
+            
             <Button 
               variant="contained" 
               onClick={handleSave}
@@ -282,6 +379,30 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             >
               <RedditIcon /> ISeeTV Subreddit
             </Link>
+
+            <Box sx={{ mt: 3 }}>
+              <Typography variant="h6" gutterBottom>
+                Hard Reset
+              </Typography>
+              <Typography paragraph>
+                If you are experiencing issues, you can perform a hard reset which will delete all channels
+                and reload them from your M3U file.
+              </Typography>
+              {resetError && (
+                <Alert severity="error" sx={{ mb: 2 }}>
+                  {resetError}
+                </Alert>
+              )}
+              <Button
+                variant="contained"
+                color="error"
+                onClick={handleHardReset}
+                disabled={isResetting}
+                startIcon={isResetting ? <CircularProgress size={20} /> : null}
+              >
+                {isResetting ? 'Resetting...' : 'Hard Reset Channels'}
+              </Button>
+            </Box>
           </Stack>
         </TabPanel>
       </DialogContent>

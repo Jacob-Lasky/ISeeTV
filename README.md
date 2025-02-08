@@ -64,3 +64,11 @@ If you're thinking about contributing to this repo in any way, I want you to! I 
   - Ask tons of questions
   - Keep code tested
   - Keep the README up to date
+
+
+## Linting
+- While in the frontend directory, run `docker run --rm -v $(pwd):/app -w /app node:22 npm run lint`
+- While in the backend directory, run:
+  - `poetry run mypy .`
+  - `poetry run ruff check .`
+  - `poetry run black .`

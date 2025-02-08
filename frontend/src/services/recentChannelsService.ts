@@ -20,7 +20,7 @@ export const recentChannelsService = {
       // Filter out old channels and convert to Channel type
       return recentChannels
         .filter(ch => (now - ch.timestamp) <= MAX_AGE_MS)
-        .map(({ timestamp, ...channel }) => channel);
+        .map(({ ...channel }) => channel);
 
     } catch (error) {
       console.error('Error getting recent channels:', error);
@@ -36,7 +36,7 @@ export const recentChannelsService = {
       
       const filtered = recentChannels
         .filter(ch => (now - ch.timestamp) <= MAX_AGE_MS)
-        .filter(ch => ch.guide_id !== channel.guide_id);
+        .filter(ch => ch.channel_id !== channel.channel_id);
       
       // Add new channel
       const updated: RecentChannel[] = [
@@ -57,7 +57,7 @@ export const recentChannelsService = {
       
       // Update stored channels while preserving timestamps
       const updatedChannels = recentChannels.map(stored => {
-        const updated = channels.find(ch => ch.guide_id === stored.guide_id);
+        const updated = channels.find(ch => ch.channel_id === stored.channel_id);
         return updated ? { ...updated, timestamp: stored.timestamp } : stored;
       });
       
