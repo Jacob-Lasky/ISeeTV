@@ -53,7 +53,6 @@ import {
   ProgramTitle,
   ProgramText,
   ChannelBox,
-  ProgramImage,
 } from "planby";
 import { useTheme } from "@mui/material/styles";
 import { formatTimeWithTimezone, getTodayOffsetDate } from "../utils/dateUtils";
@@ -172,29 +171,46 @@ const ProgramDialog = ({
   const timeFormat = settings?.use24Hour ? "HH:mm" : "h:mm a";
 
   return (
-    <Dialog open={!!program} onClose={onClose}>
-      <DialogTitle>{program.title}</DialogTitle>
-      <DialogContent>
-        <Typography gutterBottom>
-          {format(new Date(program.since), timeFormat)} -{" "}
-          {format(new Date(program.till), timeFormat)}
-        </Typography>
-        <Typography
-          variant="caption"
-          color="text.secondary"
-          display="block"
-          gutterBottom
+    <Dialog
+      open={!!program}
+      onClose={onClose}
+      PaperProps={{
+        sx: {
+          width: "100%",
+          maxWidth: 400, // Match ChannelDialog width
+          minHeight: 200, // Match ChannelDialog height
+        },
+      }}
+    >
+      <DialogTitle sx={{ pb: 1 }}>{program.title}</DialogTitle>
+      <DialogContent sx={{ pt: "8px !important" }}>
+        <Box
+          sx={{
+            display: "flex",
+            flexDirection: "column",
+            gap: 1,
+            mb: 2,
+            minHeight: 56,
+          }}
         >
-          Channel ID: {program.channelUuid}
-        </Typography>
-        {program.category && (
-          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
-            {program.category}
+          <Typography variant="subtitle1">
+            {format(new Date(program.since), timeFormat)} -{" "}
+            {format(new Date(program.till), timeFormat)}
           </Typography>
-        )}
-        <Typography>{program.description}</Typography>
+          <Typography variant="caption" color="text.secondary">
+            Channel ID: {program.channelUuid}
+          </Typography>
+          {program.category && (
+            <Typography variant="subtitle2" color="text.secondary">
+              {program.category}
+            </Typography>
+          )}
+          <Typography variant="body2" sx={{ mt: 1 }}>
+            {program.description}
+          </Typography>
+        </Box>
       </DialogContent>
-      <DialogActions>
+      <DialogActions sx={{ p: 2 }}>
         <Button onClick={onClose}>Close</Button>
         <Button
           onClick={() => onWatch(program.channelUuid)}
@@ -224,11 +240,34 @@ const ChannelDialog = ({
   };
 
   return (
-    <Dialog open={!!channel} onClose={onClose}>
-      <DialogTitle>{channel.name}</DialogTitle>
-      <DialogContent>
-        <Box sx={{ display: "flex", gap: 2, alignItems: "center", mb: 2 }}>
-          <Avatar src={channel.logo} alt={channel.name} variant="square" />
+    <Dialog
+      open={!!channel}
+      onClose={onClose}
+      PaperProps={{
+        sx: {
+          width: "100%",
+          maxWidth: 400, // Set consistent max width
+          minHeight: 200, // Set minimum height
+        },
+      }}
+    >
+      <DialogTitle sx={{ pb: 1 }}>{channel.name}</DialogTitle>
+      <DialogContent sx={{ pt: "8px !important" }}>
+        <Box
+          sx={{
+            display: "flex",
+            gap: 2,
+            alignItems: "center",
+            mb: 2,
+            minHeight: 56, // Ensure consistent height for avatar section
+          }}
+        >
+          <Avatar
+            src={channel.logo}
+            alt={channel.name}
+            variant="square"
+            sx={{ width: 48, height: 48 }} // Set consistent avatar size
+          />
           <IconButton onClick={handleFavorite}>
             {isFavorite ? <StarIcon color="primary" /> : <StarBorderIcon />}
           </IconButton>
@@ -237,7 +276,9 @@ const ChannelDialog = ({
           Channel ID: {channel.uuid}
         </Typography>
       </DialogContent>
-      <DialogActions>
+      <DialogActions sx={{ p: 2 }}>
+        {" "}
+        {/* Add consistent padding */}
         <Button onClick={onClose}>Close</Button>
         <Button onClick={() => onWatch(channel.uuid)} variant="contained">
           Watch
@@ -458,14 +499,14 @@ export const ChannelList = forwardRef<
         onRefresh(refresh);
       }
     }, [onRefresh, refresh]);
-
     // Convert channels to Planby format
     const planbyChannels = useMemo<PlanbyChannel[]>(
       () =>
         channels.map((channel, index) => ({
           uuid: channel.channel_id,
           name: channel.name,
-          logo: channel.logo || "https://via.placeholder.com/150", // Provide default logo
+          logo:
+            channel.logo || "/src/assets/logos/ISeeTV_Square_Blank_50pct.png", // Provide default logo
           position: {
             top: index * 70, // matches itemHeight in useEpg config
             height: 70,
@@ -503,7 +544,10 @@ export const ChannelList = forwardRef<
               since: startDate.toISOString(),
               till: endDate.toISOString(),
               channelUuid: channelId,
-              image: "https://via.placeholder.com/150",
+              image:
+                theme.palette.mode === "dark"
+                  ? "https://placehold.co/120x120/transparent/ffffff?font=noto-sans&text=ISeeTV"
+                  : "https://placehold.co/120x120/transparent/121212?font=noto-sans&text=ISeeTV",
               description: program.description || "No description available",
               category: channel.group || program.category || "Uncategorized",
               isLive: startDate <= now && endDate >= now,
@@ -519,10 +563,14 @@ export const ChannelList = forwardRef<
         return allPrograms;
       } finally {
       }
-    }, [programs, channels, timezone, settings?.guideStartHour]);
+    }, [
+      programs,
+      channels,
+      timezone,
+      settings?.guideStartHour,
+      theme.palette.mode,
+    ]);
 
-    // Update where we create the dates
-    // for example 1738620000 is 2025-02-04 10:00:00 but in UTC, while I'm at EST
     const guideStartHour = settings?.guideStartHour ?? -1; // Default 2 hours back
     const guideEndHour = settings?.guideEndHour ?? 12; // Default 12 hours forward
     const guideStartDate = getTodayOffsetDate(guideStartHour);
@@ -643,10 +691,10 @@ export const ChannelList = forwardRef<
 
     // Custom Program component using Material-UI
     const ProgramItem = ({ program, ...rest }: ProgramItemProps) => {
-      const { styles, isLive, isMinWidth } = useProgram({ program, ...rest });
+      const { styles, isLive } = useProgram({ program, ...rest });
 
       const { data } = program;
-      const { image, title, since, till, description, category } = data;
+      const { title, since, till } = data;
 
       const sinceTime = formatTimeWithTimezone(
         new Date(since),
@@ -658,28 +706,19 @@ export const ChannelList = forwardRef<
         timezone,
         settings?.use24Hour ? "HH:mm" : "h:mm a",
       );
-
       return (
         <ProgramBox
           width={styles.width}
           style={styles.position}
           onClick={() => setSelectedProgram(data)}
-          sx={{ cursor: "pointer" }}
         >
           <ProgramContent width={styles.width} isLive={isLive}>
             <ProgramFlex>
-              {isLive && isMinWidth && (
-                <ProgramImage src={image} alt="Preview" />
-              )}
               <ProgramStack>
                 <ProgramTitle>{title}</ProgramTitle>
                 <ProgramText>
                   {sinceTime} - {tillTime}
                 </ProgramText>
-                {category && <ProgramText>{category}</ProgramText>}
-                {description && isMinWidth && (
-                  <ProgramText>{description}</ProgramText>
-                )}
               </ProgramStack>
             </ProgramFlex>
           </ProgramContent>
@@ -804,12 +843,14 @@ export const ChannelList = forwardRef<
               size="small"
               placeholder="Search channels..."
               onChange={(e) => handleSearch(e.target.value)}
-              InputProps={{
-                startAdornment: (
-                  <InputAdornment position="start">
-                    <SearchIcon />
-                  </InputAdornment>
-                ),
+              slotProps={{
+                input: {
+                  startAdornment: (
+                    <InputAdornment position="start">
+                      <SearchIcon />
+                    </InputAdornment>
+                  ),
+                },
               }}
             />
             {onOpenSettings && (
