@@ -10,8 +10,6 @@ from datetime import timedelta
 from datetime import timezone
 from typing import Any
 from typing import Optional
-from typing import dict
-from typing import list
 from zoneinfo import ZoneInfo
 
 # Third-party imports
@@ -112,8 +110,10 @@ async def is_gpu_available(channel_id: str) -> bool:
 
 
 def save_config(config: dict[str, Any]) -> None:
-    # first, sort the keys
-    config = {k: v for k, v in sorted(config.items(), key=lambda item: item[0])}
+    # Sort the keys by converting to a list first
+    sorted_items = sorted((str(k), v) for k, v in config.items())
+    config = dict(sorted_items)
+
     with open(CONFIG_FILE, "w") as f:
         json.dump(config, f, indent=4)
         logger.info("Updated config.json")
@@ -420,7 +420,7 @@ async def get_channels(
         logger.debug(f"Query returned {len(channels)} channels")
         if channels:
             logger.debug(
-                f"Groups in this page: {sorted(set(c.group for c in channels))}"
+                f"Groups in this page: {sorted(set(c.group for c in channels))}"  # type: ignore
             )
             logger.debug(f"First channel: {channels[0].name}")
             logger.debug(f"Last channel: {channels[-1].name}")
@@ -702,7 +702,7 @@ async def hard_reset_channels(db: AsyncSession = Depends(get_db)) -> StreamingRe
         # Refresh M3U to recreate channels
         m3u_service = M3UService(config=config)
 
-        async def event_stream():
+        async def event_stream() -> AsyncGenerator[bytes, None]:
             yield json.dumps(
                 {"type": "progress", "message": "Deleting channels..."}
             ).encode() + b"\n"
@@ -836,8 +836,9 @@ async def get_programs(
         # Group programs by channel_id and convert timezone if specified
         programs_by_channel: dict[str, list[ProgramResponse]] = {}
         for program in programs:
-            if program.channel_id not in programs_by_channel:
-                programs_by_channel[program.channel_id] = []
+            channel_id = str(program.channel_id)  # Convert Column to str
+            if channel_id not in programs_by_channel:
+                programs_by_channel[channel_id] = []
 
             start_time = program.start_time
             end_time = program.end_time
@@ -849,17 +850,21 @@ async def get_programs(
                 start_time = start_time.replace(tzinfo=utc).astimezone(target_tz)
                 end_time = end_time.replace(tzinfo=utc).astimezone(target_tz)
 
-            programs_by_channel[program.channel_id].append(
+            programs_by_channel[channel_id].append(
                 ProgramResponse(
                     id=str(program.id),
-                    title=program.title,
-                    start=start_time,
-                    end=end_time,
+                    title=str(program.title),
+                    start=datetime.fromisoformat(
+                        str(start_time)
+                    ),  # Convert to datetime
+                    end=datetime.fromisoformat(str(end_time)),  # Convert to datetime
                     duration=int(
                         (program.end_time - program.start_time).total_seconds() / 60
                     ),
-                    description=program.description,
-                    category=program.category,
+                    description=(
+                        str(program.description) if program.description else None
+                    ),
+                    category=str(program.category) if program.category else None,
                 )
             )
 
