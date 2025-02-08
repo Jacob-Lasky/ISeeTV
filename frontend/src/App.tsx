@@ -261,6 +261,7 @@ export default function App() {
               onOpenSettings={() => setSettingsOpen(true)}
               programs={programs}
               channelListOpen={channelListOpen}
+              setChannelListOpen={setChannelListOpen}
               settings={settings}
               timezone={settings.timezone}
               isMobile={isMobile}

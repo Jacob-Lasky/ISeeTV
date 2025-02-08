@@ -102,6 +102,7 @@ interface ChannelListProps {
   timezone?: string;
   settings?: Settings;
   isMobile?: boolean;
+  setChannelListOpen?: (open: boolean) => void;
 }
 
 interface ProgramDialogProps {
@@ -194,6 +195,7 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   timezone = Intl.DateTimeFormat().resolvedOptions().timeZone,
   settings,
   isMobile,
+  setChannelListOpen,
 }, ref) => {
   // Update headerStyles
   const headerStyles = {
@@ -822,6 +824,9 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
           onChannelSelect(channels.find(c => c.channel_id === channelId)!);
           setSelectedProgram(null);
           navigate(`/channel/${channelId}`);
+          if (isMobile && setChannelListOpen) {
+            setChannelListOpen(false);
+          }
         }}
       />
 
@@ -832,6 +837,9 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
           onChannelSelect(channels.find(c => c.channel_id === channelId)!);
           setSelectedChannelDialog(null);
           navigate(`/channel/${channelId}`);
+          if (isMobile && setChannelListOpen) {
+            setChannelListOpen(false);
+          }
         }}
         onToggleFavorite={(channelId) => {
           const channel = channels.find(c => c.channel_id === channelId);
