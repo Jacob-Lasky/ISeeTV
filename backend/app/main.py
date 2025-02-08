@@ -648,6 +648,7 @@ async def save_settings(request: Request) -> dict[str, Any]:
         config["guide_start_hour"] = data.get("guideStartHour", -1)
         config["guide_end_hour"] = data.get("guideEndHour", 12)
         config["timezone"] = data.get("timezone", None)
+        config["use_24_hour"] = data.get("use24Hour", True)
 
         save_config(config)
         return {"status": "success"}
@@ -676,6 +677,7 @@ async def get_settings() -> dict[str, Any]:
             "guideStartHour": config.get("guide_start_hour", -1),
             "guideEndHour": config.get("guide_end_hour", 12),
             "timezone": config.get("timezone", None),
+            "use24Hour": config.get("use_24_hour", True),
         }
     except Exception as e:
         logger.error(f"Failed to load settings: {str(e)}")

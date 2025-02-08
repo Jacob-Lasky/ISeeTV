@@ -31,9 +31,10 @@ export const utcToLocal = (
 export const formatTimeWithTimezone = (
   date: Date,
   timezone: string = getUserTimezone(),
+  timeFormat: string = "HH:mm",
 ): string => {
   const localDate = toZonedTime(date, timezone);
-  return format(localDate, "HH:mm");
+  return format(localDate, timeFormat);
 };
 
 // Generate time slots for the EPG

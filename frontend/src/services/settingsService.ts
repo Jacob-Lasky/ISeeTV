@@ -13,6 +13,7 @@ export const defaultSettings: Settings = {
   guideStartHour: -2,
   guideEndHour: 12,
   timezone: getUserTimezone(),
+  use24Hour: true,
 };
 
 export const settingsService = {

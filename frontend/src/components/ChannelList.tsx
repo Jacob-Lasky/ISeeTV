@@ -129,6 +129,7 @@ interface ProgramDialogProps {
   program: PlanbyProgram | null;
   onClose: () => void;
   onWatch: (channelId: string) => void;
+  settings?: Settings;
 }
 
 interface ChannelDialogProps {
@@ -160,16 +161,23 @@ interface ChannelItemProps {
 // Add this near the top of the file, outside the component
 const SEARCH_DELAY = 2000; // 2 seconds delay for single character
 
-const ProgramDialog = ({ program, onClose, onWatch }: ProgramDialogProps) => {
+const ProgramDialog = ({
+  program,
+  onClose,
+  onWatch,
+  settings,
+}: ProgramDialogProps) => {
   if (!program) return null;
+
+  const timeFormat = settings?.use24Hour ? "HH:mm" : "h:mm a";
 
   return (
     <Dialog open={!!program} onClose={onClose}>
       <DialogTitle>{program.title}</DialogTitle>
       <DialogContent>
         <Typography gutterBottom>
-          {format(new Date(program.since), "h:mm a")} -{" "}
-          {format(new Date(program.till), "h:mm a")}
+          {format(new Date(program.since), timeFormat)} -{" "}
+          {format(new Date(program.till), timeFormat)}
         </Typography>
         <Typography
           variant="caption"
@@ -579,7 +587,7 @@ export const ChannelList = forwardRef<
       epg: planbyPrograms,
       width: epgWidth,
       height: containerHeight,
-      itemHeight: 70,
+      itemHeight: 80,
       // Adjust sidebar width when expanded on mobile
       sidebarWidth:
         isMobile && epgExpanded
@@ -588,7 +596,7 @@ export const ChannelList = forwardRef<
             ? window.innerWidth
             : 300,
       theme: planbyTheme,
-      isBaseTimeFormat: true,
+      isBaseTimeFormat: !settings?.use24Hour,
       isSidebar: true,
       isTimeline: true,
       dayWidth: 24 * HOUR_WIDTH,
@@ -640,8 +648,16 @@ export const ChannelList = forwardRef<
       const { data } = program;
       const { image, title, since, till, description, category } = data;
 
-      const sinceTime = formatTimeWithTimezone(new Date(since), timezone);
-      const tillTime = formatTimeWithTimezone(new Date(till), timezone);
+      const sinceTime = formatTimeWithTimezone(
+        new Date(since),
+        timezone,
+        settings?.use24Hour ? "HH:mm" : "h:mm a",
+      );
+      const tillTime = formatTimeWithTimezone(
+        new Date(till),
+        timezone,
+        settings?.use24Hour ? "HH:mm" : "h:mm a",
+      );
 
       return (
         <ProgramBox
@@ -912,6 +928,7 @@ export const ChannelList = forwardRef<
               setChannelListOpen(false);
             }
           }}
+          settings={settings}
         />
 
         <ChannelDialog

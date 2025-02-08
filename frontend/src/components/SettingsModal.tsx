@@ -390,6 +390,21 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               )}
             />
 
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={formState.use24Hour}
+                  onChange={(e) =>
+                    setFormState({
+                      ...formState,
+                      use24Hour: e.target.checked,
+                    })
+                  }
+                />
+              }
+              label="Use 24-hour time format"
+            />
+
             <Button
               variant="contained"
               onClick={handleSave}

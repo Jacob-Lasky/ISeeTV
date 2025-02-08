@@ -9,4 +9,5 @@ export interface Settings {
   guideStartHour: number;
   guideEndHour: number;
   timezone?: string;
+  use24Hour: boolean;
 }
