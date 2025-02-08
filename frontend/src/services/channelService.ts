@@ -363,4 +363,13 @@ export const channelService = {
       return {};
     }
   },
+
+  async clearLastWatched(channelId: string): Promise<void> {
+    const response = await fetch(`${API_URL}/channels/${channelId}/clear_last_watched`, {
+      method: 'POST',
+    });
+    if (!response.ok) {
+      throw new Error('Failed to clear last watched time');
+    }
+  },
 }; 

@@ -16,6 +16,11 @@ import {
   Card,
   CardContent,
   Stack,
+  Dialog,
+  DialogTitle,
+  DialogContent,
+  DialogActions,
+  Button,
 } from '@mui/material';
 import {
   Search as SearchIcon,
@@ -24,6 +29,7 @@ import {
   Settings as SettingsIcon,
   ChevronRight,
   ChevronLeft,
+  Close as CloseIcon,
 } from '@mui/icons-material';
 import { Channel } from '../models/Channel';
 import { channelService } from '../services/channelService';
@@ -98,6 +104,84 @@ interface ChannelListProps {
   isMobile?: boolean;
 }
 
+interface ProgramDialogProps {
+  program: PlanbyProgram | null;
+  onClose: () => void;
+  onWatch: (channelId: string) => void;
+}
+
+interface ChannelDialogProps {
+  channel: PlanbyChannel | null;
+  onClose: () => void;
+  onWatch: (channelId: string) => void;
+  onToggleFavorite: (channelId: string) => void;
+  isFavorite: boolean;
+}
+
+const ProgramDialog = ({ program, onClose, onWatch }: ProgramDialogProps) => {
+  if (!program) return null;
+
+  return (
+    <Dialog open={!!program} onClose={onClose}>
+      <DialogTitle>{program.title}</DialogTitle>
+      <DialogContent>
+        <Typography gutterBottom>
+          {format(new Date(program.since), 'h:mm a')} - {format(new Date(program.till), 'h:mm a')}
+        </Typography>
+        <Typography variant="caption" color="text.secondary" display="block" gutterBottom>
+          Channel ID: {program.channelUuid}
+        </Typography>
+        {program.category && (
+          <Typography variant="subtitle2" color="text.secondary" gutterBottom>
+            {program.category}
+          </Typography>
+        )}
+        <Typography>{program.description}</Typography>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
+        <Button onClick={() => onWatch(program.channelUuid)} variant="contained">
+          Watch
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
+const ChannelDialog = ({ channel, onClose, onWatch, onToggleFavorite, isFavorite: initialIsFavorite }: ChannelDialogProps) => {
+  if (!channel) return null;
+
+  const [isFavorite, setIsFavorite] = useState(initialIsFavorite);
+
+  const handleFavorite = () => {
+    setIsFavorite(!isFavorite);
+    onToggleFavorite(channel.uuid);
+  };
+
+  return (
+    <Dialog open={!!channel} onClose={onClose}>
+      <DialogTitle>{channel.name}</DialogTitle>
+      <DialogContent>
+        <Box sx={{ display: 'flex', gap: 2, alignItems: 'center', mb: 2 }}>
+          <Avatar src={channel.logo} alt={channel.name} variant="square" />
+          <IconButton onClick={handleFavorite}>
+            {isFavorite ? <StarIcon color="primary" /> : <StarBorderIcon />}
+          </IconButton>
+        </Box>
+        <Typography variant="caption" color="text.secondary">
+          Channel ID: {channel.uuid}
+        </Typography>
+      </DialogContent>
+      <DialogActions>
+        <Button onClick={onClose}>Close</Button>
+        <Button onClick={() => onWatch(channel.uuid)} variant="contained">
+          Watch
+        </Button>
+      </DialogActions>
+    </Dialog>
+  );
+};
+
 export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelListProps>(({
   selectedChannel,
   onChannelSelect,
@@ -161,6 +245,8 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   const [epgExpanded, setEpgExpanded] = useState(false);
   const timeSlots = useMemo(() => generateTimeSlots(getTodayOffsetDate(settings?.guideStartHour ?? -1, timezone)), []);
   const theme = useTheme();
+  const [selectedProgram, setSelectedProgram] = useState<PlanbyProgram | null>(null);
+  const [selectedChannelDialog, setSelectedChannelDialog] = useState<PlanbyChannel | null>(null);
 
   // Move planbyTheme inside the component to access theme
   const planbyTheme = useMemo(() => ({
@@ -324,8 +410,8 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
     const startTime = getTodayOffsetDate(settings?.guideStartHour ?? -1, timezone);
 
     Object.entries(programs).forEach(([channelId, channelPrograms]) => {
-      const channelIndex = channels.findIndex(c => c.channel_id === channelId);
-      if (channelIndex === -1) return;
+      const channel = channels.find(c => c.channel_id === channelId);
+      if (!channel) return;
 
       channelPrograms.forEach(program => {
         const startDate = utcToZonedTime(new Date(program.start), timezone);
@@ -345,10 +431,10 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
           channelUuid: channelId,
           image: 'https://via.placeholder.com/150',
           description: program.description || 'No description available',
-          category: program.category || 'Uncategorized',
+          category: channel.group || program.category || 'Uncategorized',
           isLive: startDate <= now && endDate >= now,
           position: {
-            top: channelIndex * 70,
+            top: channels.findIndex(c => c.channel_id === channelId) * 70,
             height: 70,
             width,
             left
@@ -478,7 +564,12 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
     const tillTime = formatTimeWithTimezone(new Date(till), timezone);
 
     return (
-      <ProgramBox width={styles.width} style={styles.position}>
+      <ProgramBox 
+        width={styles.width} 
+        style={styles.position}
+        onClick={() => setSelectedProgram(data)}
+        sx={{ cursor: 'pointer' }}
+      >
         <ProgramContent width={styles.width} isLive={isLive}>
           <ProgramFlex>
             {isLive && isMinWidth && <ProgramImage src={image} alt="Preview" />}
@@ -507,16 +598,37 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   // Custom Channel component using Material-UI
   const ChannelItem = ({ channel }: { channel: any }) => {
     const { position, logo, name } = channel;
+    const isChannelFavorite = channels.find(c => c.channel_id === channel.uuid)?.isFavorite || false;
+
+    const handleClearLastWatched = async (e: React.MouseEvent) => {
+      e.stopPropagation(); // Prevent channel dialog from opening
+      try {
+        await channelService.clearLastWatched(channel.uuid);
+        // Refresh the channel list to update the UI
+        await loadChannels(true);
+      } catch (error) {
+        console.error('Failed to clear last watched:', error);
+      }
+    };
+
     return (
       <ChannelBox {...position}>
-        <Card sx={{ 
-          height: '100%', 
-          width: '100%',
-          display: 'flex',
-          alignItems: 'center',
-          borderRadius: 0,
-          bgcolor: 'background.paper',
-        }}>
+        <Card 
+          sx={{ 
+            height: '100%', 
+            width: '100%',
+            display: 'flex',
+            alignItems: 'center',
+            borderRadius: 0,
+            bgcolor: 'background.paper',
+            cursor: 'pointer',
+            transition: 'background-color 0.2s',
+            '&:hover': {
+              bgcolor: 'action.hover',
+            },
+          }}
+          onClick={() => setSelectedChannelDialog(channel)}
+        >
           <CardContent sx={{ 
             p: 1, 
             '&:last-child': { pb: 1 },
@@ -524,6 +636,7 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
             alignItems: 'flex-start',
             gap: 1,
             width: '100%',
+            position: 'relative', // Add this for absolute positioning of X button
           }}>
             <Avatar
               src={logo}
@@ -550,6 +663,25 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
             >
               {name}
             </Typography>
+            {/* Add X button only in recent tab */}
+            {activeTab === 'recent' && (
+              <IconButton
+                size="small"
+                onClick={handleClearLastWatched}
+                sx={{
+                  position: 'absolute',
+                  right: 8,
+                  top: '50%',
+                  transform: 'translateY(-50%)',
+                  opacity: 0.7,
+                  '&:hover': {
+                    opacity: 1,
+                  },
+                }}
+              >
+                <CloseIcon fontSize="small" />
+              </IconButton>
+            )}
           </CardContent>
         </Card>
       </ChannelBox>
@@ -663,12 +795,52 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
         </Epg>
       </Box>
 
-      {/* Keep loading states */}
-      {(loading) && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
+      {/* Update the loading state display */}
+      {loading && (
+        <Box 
+          sx={{ 
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            display: 'flex',
+            justifyContent: 'center',
+            alignItems: 'center',
+            bgcolor: 'rgba(0, 0, 0, 0.3)',
+            zIndex: 1001, // Above the channel list content
+          }}
+        >
           <CircularProgress />
         </Box>
       )}
+
+      <ProgramDialog 
+        program={selectedProgram}
+        onClose={() => setSelectedProgram(null)}
+        onWatch={(channelId) => {
+          onChannelSelect(channels.find(c => c.channel_id === channelId)!);
+          setSelectedProgram(null);
+          navigate(`/channel/${channelId}`);
+        }}
+      />
+
+      <ChannelDialog 
+        channel={selectedChannelDialog}
+        onClose={() => setSelectedChannelDialog(null)}
+        onWatch={(channelId) => {
+          onChannelSelect(channels.find(c => c.channel_id === channelId)!);
+          setSelectedChannelDialog(null);
+          navigate(`/channel/${channelId}`);
+        }}
+        onToggleFavorite={(channelId) => {
+          const channel = channels.find(c => c.channel_id === channelId);
+          if (channel) {
+            onToggleFavorite(channel);
+          }
+        }}
+        isFavorite={channels.find(c => c.channel_id === selectedChannelDialog?.uuid)?.isFavorite || false}
+      />
     </Paper>
   );
 });

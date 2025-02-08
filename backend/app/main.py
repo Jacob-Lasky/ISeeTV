@@ -116,7 +116,7 @@ def check_config_file() -> None:
                 "update_on_start": True,
                 "theme": "dark",
                 "guide_start_hour": -1,  # Default 1 hour back
-                "guide_end_hour": 12,    # Default 12 hours forward
+                "guide_end_hour": 12,  # Default 12 hours forward
             }
         )
 
@@ -511,6 +511,8 @@ async def stream_channel(
     # Create channel-specific directory
     channel_dir = os.path.join(SEGMENTS_DIR, channel_id)
     os.makedirs(channel_dir, exist_ok=True)
+    # update last watched
+    await update_last_watched(channel_id, db, datetime.now(timezone.utc))
 
     output_m3u8 = os.path.join(channel_dir, m3u8_name)
 
@@ -718,23 +720,43 @@ async def hard_reset_channels(db: AsyncSession = Depends(get_db)) -> StreamingRe
         raise HTTPException(status_code=500, detail=str(e))
 
 
-@app.post("/channels/{channel_id}/watched")
 async def update_last_watched(
-    channel_id: str, db: AsyncSession = Depends(get_db)
+    channel_id: str,
+    db: AsyncSession = Depends(get_db),
+    last_watched: datetime | None = None,
 ) -> dict[str, Any]:
     """Update last watched time for a channel"""
+    logger.info(f"Updating last watched time for channel {channel_id}")
     try:
-        stmt = (
-            update(models.Channel)
-            .where(models.Channel.channel_id == channel_id)
-            .values(last_watched=datetime.now(timezone.utc))
-        )
+        if last_watched is None:
+            # None means the user wants to clear the last watched time
+            stmt = (
+                update(models.Channel)
+                .where(models.Channel.channel_id == channel_id)
+                .values(last_watched=None)
+            )
+        else:
+            stmt = (
+                update(models.Channel)
+                .where(models.Channel.channel_id == channel_id)
+                .values(last_watched=last_watched)
+            )
+
         await db.execute(stmt)
         await db.commit()
+        logger.debug(f"Updated last watched time for channel {channel_id}")
         return {"status": "success"}
     except Exception as e:
         logger.error(f"Failed to update last watched: {str(e)}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.post("/channels/{channel_id}/clear_last_watched")
+async def clear_last_watched(
+    channel_id: str, db: AsyncSession = Depends(get_db)
+) -> dict[str, Any]:
+    """Clear last watched time for a channel"""
+    return await update_last_watched(channel_id, db, None)
 
 
 # Add new model for program response
@@ -780,7 +802,11 @@ async def get_programs(
             select(models.Program)
             .where(
                 and_(
-                    models.Program.channel_id.in_(channel_id_list) if channel_id_list else True,
+                    (
+                        models.Program.channel_id.in_(channel_id_list)
+                        if channel_id_list
+                        else True
+                    ),
                     models.Program.start_time >= start_dt,
                     models.Program.end_time <= end_dt,
                 )
@@ -799,10 +825,10 @@ async def get_programs(
 
             start_time = program.start_time
             end_time = program.end_time
-            
+
             # Convert to target timezone if specified
             if to_timezone:
-                utc = ZoneInfo('UTC')
+                utc = ZoneInfo("UTC")
                 target_tz = ZoneInfo(to_timezone)
                 start_time = start_time.replace(tzinfo=utc).astimezone(target_tz)
                 end_time = end_time.replace(tzinfo=utc).astimezone(target_tz)
