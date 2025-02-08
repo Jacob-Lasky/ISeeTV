@@ -21,6 +21,7 @@ import {
   Alert,
   DialogActions,
   FormHelperText,
+  Autocomplete,
 } from '@mui/material';
 import { Settings } from '../models/Settings';
 import RefreshIcon from '@mui/icons-material/Refresh';
@@ -29,6 +30,10 @@ import HelpIcon from '@mui/icons-material/Help';
 import Link from '@mui/material/Link';
 import GitHubIcon from '@mui/icons-material/GitHub';
 import RedditIcon from '@mui/icons-material/Reddit';
+import { getUserTimezone } from '../utils/dateUtils';
+
+// Add timezone list - these are IANA timezone names
+const TIMEZONES = Intl.supportedValuesOf('timeZone');
 
 interface SettingsModalProps {
   open: boolean;
@@ -55,8 +60,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     updateOnStart: true,
     theme: 'dark',
     recentDays: 3,
-    guideHours: settings.guideHours || 13,
-    guideUtcOffset: settings.guideUtcOffset || 0,
+    guideStartHour: settings.guideStartHour ?? -1,
+    guideEndHour: settings.guideEndHour ?? 12,
+    timezone: settings.timezone || getUserTimezone(),
   });
 
   const [activeTab, setActiveTab] = useState(0);
@@ -143,8 +149,9 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
       const updatedSettings: Settings = {
         ...formState,
-        guideHours: Number(formState.guideHours),
-        guideUtcOffset: formState.guideUtcOffset,
+        guideStartHour: Number(formState.guideStartHour),
+        guideEndHour: Number(formState.guideEndHour),
+        timezone: formState.timezone,
       };
       await onSave(updatedSettings);
     } catch (error) {
@@ -299,34 +306,49 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 helperText="Days to show in Recent tab"
               />
               <TextField
-                label="Guide Hours"
+                label="Guide Start Hour"
                 type="number"
-                value={formState.guideHours}
+                value={formState.guideStartHour}
                 onChange={(e) => setFormState({ 
                   ...formState, 
-                  guideHours: Math.max(1, Math.min(48, Number(e.target.value))) 
+                  guideStartHour: Math.max(-24, Math.min(0, Number(e.target.value))) 
+                })}
+                inputProps={{ min: -24, max: 0 }}
+                fullWidth
+                helperText="Hours before now (negative)"
+              />
+              <TextField
+                label="Guide End Hour"
+                type="number"
+                value={formState.guideEndHour}
+                onChange={(e) => setFormState({ 
+                  ...formState, 
+                  guideEndHour: Math.max(1, Math.min(48, Number(e.target.value))) 
                 })}
                 inputProps={{ min: 1, max: 48 }}
                 fullWidth
-                helperText="Hours to display in guide"
-              />
-              <TextField
-                label="UTC Offset"
-                type="number"
-                value={formState.guideUtcOffset}
-                onChange={(e) => setFormState({ 
-                  ...formState, 
-                  guideUtcOffset: Math.max(-12, Math.min(14, Number(e.target.value))) 
-                })}
-                inputProps={{ 
-                  min: -12, 
-                  max: 14,
-                  step: 1
-                }}
-                fullWidth
-                helperText="Your timezone offset from UTC"
+                helperText="Hours after now"
               />
             </Box>
+            
+            {/* Add Timezone Selection */}
+            <Autocomplete
+              value={formState.timezone}
+              onChange={(_, newValue) => {
+                setFormState(prev => ({
+                  ...prev,
+                  timezone: newValue || getUserTimezone()
+                }));
+              }}
+              options={TIMEZONES}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  label="Timezone"
+                  helperText="Defaults to browser timezone if not set"
+                />
+              )}
+            />
             
             <Button 
               variant="contained" 

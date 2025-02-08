@@ -29,20 +29,17 @@ import { Channel } from '../models/Channel';
 import { channelService } from '../services/channelService';
 import { useNavigate } from 'react-router-dom';
 import debounce from 'lodash/debounce';
-import { format } from 'date-fns';
+import { format, addHours } from 'date-fns';
+import { zonedTimeToUtc, utcToZonedTime } from 'date-fns-tz';
 import { Epg, Layout, useEpg, useProgram, ProgramBox, ProgramContent, ProgramFlex, ProgramStack, ProgramTitle, ProgramText, ChannelBox, ChannelLogo, ProgramImage } from 'planby';
 import { useTheme } from '@mui/material/styles';
-import { getStartTime, generateTimeSlots, formatTimeWithOffset } from '../utils/dateUtils';
+import { generateTimeSlots, formatTimeWithTimezone, localToUtc, getTodayOffsetDate } from '../utils/dateUtils';
+import { Settings } from '../models/Settings';
 
-// Move all helper functions and interfaces to the top
-const ITEMS_PER_PAGE = 250;
-const ITEM_HEIGHT = 56;
 const TIME_BLOCK_WIDTH = 150;
 const HEADER_HEIGHT = 48;
-const PREFETCH_THRESHOLD = 0.8; // Start loading when user scrolls to 80% of the list
-const HOURS_TO_DISPLAY = 13; // 1 hour before + 12 hours after
-const HOURS_BACK = 1; // Show 1 hour before current time
-const HOUR_WIDTH = TIME_BLOCK_WIDTH * 2; // Width per hour (2 blocks of 30 minutes)
+const HOUR_WIDTH = TIME_BLOCK_WIDTH * 2;
+const SCROLLBAR_WIDTH = 20; // Standard scrollbar width
 
 // Add type for tab values
 type TabValue = 'all' | 'favorites' | 'recent';
@@ -58,7 +55,7 @@ interface Program {
   category: string;
 }
 
-// Update interfaces to match Planby's expected format
+// match Planby's expected format
 interface PlanbyProgram {
   id: string;
   title: string;
@@ -93,50 +90,13 @@ interface ChannelListProps {
   onToggleFavorite: (channel: Channel) => void;
   onRefresh?: (refreshFn: (() => Promise<void>) | undefined) => void;
   onOpenSettings?: () => void;
-  onChannelsChange: (channels: Channel[]) => void;
+  onChannelsChange?: (channels: Channel[]) => void;
   programs?: Record<string, Program[]>;
   channelListOpen: boolean;
-  guideUtcOffset: number;
+  timezone?: string;
+  settings?: Settings;
+  isMobile?: boolean;
 }
-
-// Styles for group headers
-const headerStyles = {
-  container: {
-    display: 'flex',
-    bgcolor: 'background.default',
-    borderBottom: 1,
-    borderColor: 'divider',
-    py: 1.5,
-    position: 'sticky',
-    top: HEADER_HEIGHT,
-    zIndex: 1,
-  },
-  groupSection: {  // New style for the fixed-width group section
-    width: 300,
-    flexShrink: 0,
-    display: 'flex',
-    alignItems: 'center',
-    position: 'relative',
-    '&::before': {
-      content: '""',
-      position: 'absolute',
-      left: 0,
-      top: 0,
-      width: 4,
-      height: '100%',
-      bgcolor: 'primary.main',
-      opacity: 0.7,
-    },
-  },
-  text: {
-    color: 'text.primary',
-    fontWeight: 500,
-    pl: 3,  // Increased padding to account for the indicator
-    textTransform: 'uppercase',
-    letterSpacing: '0.5px',
-    fontSize: '0.8125rem',
-  }
-};
 
 export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelListProps>(({
   selectedChannel,
@@ -147,26 +107,66 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   onChannelsChange,
   programs = {},
   channelListOpen,
-  guideUtcOffset,
+  timezone = Intl.DateTimeFormat().resolvedOptions().timeZone,
+  settings,
+  isMobile,
 }, ref) => {
+  // Update headerStyles
+  const headerStyles = {
+    container: {
+      width: isMobile ? '100%' : 300,
+      flexShrink: 0,
+      zIndex: 3,
+      bgcolor: 'background.paper',
+      borderBottom: 1,
+      borderColor: 'divider',
+      display: 'flex',
+      flexDirection: 'column',
+    },
+    groupSection: {  
+      width: isMobile ? '100%' : 300,
+      flexShrink: 0,
+      display: 'flex',
+      alignItems: 'center',
+      position: 'relative',
+      '&::before': {
+        content: '""',
+        position: 'absolute',
+        left: 0,
+        top: 0,
+        width: 4,
+        height: '100%',
+        bgcolor: 'primary.main',
+        opacity: 0.7,
+      },
+    },
+    text: {
+      color: 'text.primary',
+      fontWeight: 500,
+      pl: 3,
+      textTransform: 'uppercase',
+      letterSpacing: '0.5px',
+      fontSize: '0.8125rem',
+    }
+  };
+
   const [activeTab, setActiveTab] = useState<TabValue>('all');
   const [searchTerm, setSearchTerm] = useState('');
   const [loading, setLoading] = useState(true);
-  const [prefetching, setPrefetching] = useState(false);  // New state for prefetching
   const [channels, setChannels] = useState<Channel[]>([]);
   const [hasMore, setHasMore] = useState(true);
   const [page, setPage] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const navigate = useNavigate();
   const [epgExpanded, setEpgExpanded] = useState(false);
-  const timeSlots = useMemo(() => generateTimeSlots(getStartTime(guideUtcOffset)), []);
+  const timeSlots = useMemo(() => generateTimeSlots(getTodayOffsetDate(settings?.guideStartHour ?? -1, timezone)), []);
   const theme = useTheme();
 
   // Move planbyTheme inside the component to access theme
   const planbyTheme = useMemo(() => ({
     primary: {
-      600: theme.palette.mode === 'dark' ? '#171923' : '#f5f5f5',
-      900: theme.palette.mode === 'dark' ? '#1f1f1f' : '#ffffff',
+      600: theme.palette.mode === 'dark' ? '#040d1e' : '#b2eff7', // finished and upcoming programs
+      900: theme.palette.mode === 'dark' ? '#1f1f1f' : '#ffffff', // guide background
     },
     grey: { 
       300: theme.palette.mode === 'dark' ? '#d1d1d1' : '#757575' 
@@ -187,11 +187,12 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
         bg: theme.palette.mode === 'dark' ? '#e1e1e1' : '#757575',
       },
     },
+    // live channel gradient
     gradient: {
       blue: {
-        300: theme.palette.primary.light,
-        600: theme.palette.primary.main,
-        900: theme.palette.primary.dark,
+        300: theme.palette.mode === 'dark' ? '#040d1e': '#b2eff7',
+        600: theme.palette.mode === 'dark' ? '#001d31': '#ceecf0',
+        900: theme.palette.mode === 'dark' ? '#040d1e': '#b2eff7',
       },
     },
     text: {
@@ -207,57 +208,39 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
     },
   }), [theme]);
 
-  // Modify loadChannels to handle tab filters
-  const loadChannels = useCallback(async (reset: boolean = false, isPrefetch: boolean = false) => {
+  // Modify loadChannels to always load channels
+  const loadChannels = useCallback(async (reset: boolean = false) => {
     try {
-      if (isPrefetch) {
-        setPrefetching(true);
-      } else {
-        setLoading(true);
-      }
-
-      const newPage = reset ? 0 : page;
-      const skip = newPage * ITEMS_PER_PAGE;
-      
-      const response = await channelService.getChannels(skip, ITEMS_PER_PAGE, {
+      setLoading(true);
+      const response = await channelService.getChannels(0, {
         search: searchTerm,
         favoritesOnly: activeTab === 'favorites',
         recentOnly: activeTab === 'recent'
       });
 
-      const newChannels = reset ? response.items : [...channels, ...response.items];
-      setChannels(newChannels);
-      onChannelsChange(newChannels);
-      setHasMore(response.items.length === ITEMS_PER_PAGE);
-      setPage(prev => reset ? 1 : prev + 1);
+      setChannels(response.items);
+      setHasMore(false);
+      setPage(1);
     } catch (error) {
       console.error('Failed to load channels:', error);
     } finally {
-      if (isPrefetch) {
-        setPrefetching(false);
-      } else {
-        setLoading(false);
-      }
+      setLoading(false);
     }
-  }, [page, searchTerm, activeTab, channels, onChannelsChange]);
+  }, [searchTerm, activeTab]);
 
-  // Create a stable debounced scroll handler
+  // Update the effect to load channels on mount and when dependencies change
+  useEffect(() => {
+    loadChannels(true);
+  }, [searchTerm, activeTab, loadChannels]);
+
+  // Simplify scroll handler since we don't need pagination anymore
   const debouncedScroll = useMemo(
     () => debounce((element: HTMLDivElement) => {
+      // Keep scroll tracking for future use if needed
       const { scrollTop, clientHeight, scrollHeight } = element;
       const scrollPercentage = (scrollTop + clientHeight) / scrollHeight;
-
-      // If we're near the bottom and not already loading/prefetching
-      if (scrollPercentage > PREFETCH_THRESHOLD && !loading && !prefetching && hasMore) {
-        loadChannels(false, true);  // Start prefetching
-      }
-
-      // If we've hit the bottom and have prefetched data
-      if (scrollHeight - scrollTop - clientHeight < 50 && !loading && hasMore) {
-        loadChannels();  // Load the next page normally
-      }
     }, 100),
-    [loading, prefetching, hasMore, loadChannels]
+    []
   );
 
   // Handle scroll event
@@ -290,12 +273,7 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
     }
   }, []);
 
-  // Update useEffect to reload on tab change
-  useEffect(() => {
-    loadChannels(true);
-  }, [searchTerm, activeTab]);
-
-  // Refresh function for parent component
+  // Keep the refresh function for parent component
   const refresh = useCallback(async () => {
     setLoading(true);
     setChannels([]);
@@ -343,15 +321,15 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
   const planbyPrograms = useMemo<PlanbyProgram[]>(() => {
     const allPrograms: PlanbyProgram[] = [];
     const now = new Date();
-    const startTime = getStartTime(guideUtcOffset);
+    const startTime = getTodayOffsetDate(settings?.guideStartHour ?? -1, timezone);
 
     Object.entries(programs).forEach(([channelId, channelPrograms]) => {
       const channelIndex = channels.findIndex(c => c.channel_id === channelId);
       if (channelIndex === -1) return;
 
       channelPrograms.forEach(program => {
-        const startDate = program.start instanceof Date ? program.start : new Date(program.start);
-        const endDate = program.end instanceof Date ? program.end : new Date(program.end);
+        const startDate = utcToZonedTime(new Date(program.start), timezone);
+        const endDate = utcToZonedTime(new Date(program.end), timezone);
         
         // Calculate position data
         const durationMs = endDate.getTime() - startDate.getTime();
@@ -379,53 +357,115 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
       });
     });
     return allPrograms;
-  }, [programs, channels]);
+  }, [programs, channels, timezone]);
 
-  // Add this right after planbyPrograms is created
-  console.log('Sample program:', {
-    raw: Object.values(programs)[0]?.[0],  // Original program data
-    transformed: planbyPrograms[0],         // Planby formatted program
-    timeWindow: {
-      start: getStartTime(guideUtcOffset).toISOString(),
-      end: new Date(getStartTime(guideUtcOffset).getTime() + HOURS_TO_DISPLAY * 60 * 60 * 1000).toISOString()
+  // Update where we create the dates
+  // for example 1738620000 is 2025-02-04 10:00:00 but in UTC, while I'm at EST
+  const guideStartHour = settings?.guideStartHour ?? -1; // Default 2 hours back
+  const guideEndHour = settings?.guideEndHour ?? 12;    // Default 12 hours forward
+  const guideStartDate = getTodayOffsetDate(guideStartHour, timezone);
+  const guideEndDate = getTodayOffsetDate(guideEndHour, timezone);
+  const formattedStartDate = format(guideStartDate, 'yyyy-MM-dd\'T\'HH:mm:ss');
+  const formattedEndDate = format(guideEndDate, 'yyyy-MM-dd\'T\'HH:mm:ss');
+
+  // Add height state
+  const [containerHeight, setContainerHeight] = useState(window.innerHeight - HEADER_HEIGHT);
+
+  // Update the height observer effect
+  useEffect(() => {
+    const updateHeight = () => {
+      if (containerRef.current) {
+        const viewportHeight = window.innerHeight;
+        const containerTop = containerRef.current.getBoundingClientRect().top;
+        const newHeight = viewportHeight - containerTop;
+        setContainerHeight(newHeight);
+      }
+    };
+
+    // Initial height calculation
+    updateHeight();
+
+    // Update height on resize
+    window.addEventListener('resize', updateHeight);
+    
+    // Create resize observer for parent element changes
+    const resizeObserver = new ResizeObserver(updateHeight);
+    if (containerRef.current?.parentElement) {
+      resizeObserver.observe(containerRef.current.parentElement);
     }
-  });
 
-  // Add console logs before useEpg
-  console.log('Planby Channels:', planbyChannels);
-  console.log('Planby Programs:', planbyPrograms);
-  console.log('Start Date:', getStartTime(guideUtcOffset).toISOString());
+    return () => {
+      window.removeEventListener('resize', updateHeight);
+      resizeObserver.disconnect();
+    };
+  }, []);
 
-  // Add this before useEpg initialization
-  const startTime = getStartTime(guideUtcOffset);
-  const endTime = new Date(startTime);
-  endTime.setUTCHours(endTime.getUTCHours() + HOURS_TO_DISPLAY);
+  // Add a constant for expanded width percentage
+  const EXPANDED_WIDTH_PERCENTAGE = 80; // 80% of viewport width
 
-  console.log('EPG Time Window:', {
-    start: startTime.toISOString(),
-    end: endTime.toISOString(),
-    totalHours: HOURS_TO_DISPLAY,
-    dayWidth: HOURS_TO_DISPLAY * HOUR_WIDTH,
-    programs: planbyPrograms.length
-  });
+  // First, declare the width state
+  const [epgWidth, setEpgWidth] = useState(() => 
+    channelListOpen 
+      ? epgExpanded 
+        ? isMobile
+          ? window.innerWidth  // Full width on mobile
+          : Math.min(window.innerWidth * (EXPANDED_WIDTH_PERCENTAGE/100), 1200)
+        : 300 
+      : 0
+  );
 
-  // Initialize Planby EPG
+  // Then use it in the EPG configuration
   const { getEpgProps, getLayoutProps } = useEpg({
     channels: planbyChannels,
     epg: planbyPrograms,
-    startDate: getStartTime(guideUtcOffset).toISOString(),
-    width: channelListOpen ? epgExpanded ? 1200 : 300 : 0,
-    height: containerRef.current?.clientHeight || 800,
+    width: epgWidth,
+    height: containerHeight,
     itemHeight: 70,
-    sidebarWidth: 300,
+    // Adjust sidebar width when expanded on mobile
+    sidebarWidth: isMobile && epgExpanded 
+      ? window.innerWidth * 0.25  // 1/4 of screen width when expanded
+      : isMobile 
+        ? window.innerWidth 
+        : 300,
     theme: planbyTheme,
     isBaseTimeFormat: true,
     isSidebar: true,
     isTimeline: true,
-    dayWidth: HOURS_TO_DISPLAY * HOUR_WIDTH,
-    startDate: startTime.toISOString(),
-    endDate: endTime.toISOString(),
+    dayWidth: 24 * HOUR_WIDTH,
+    isLine: epgExpanded,
+    startDate: formattedStartDate,
+    endDate: formattedEndDate,
   });
+
+  // Keep the resize effects after
+  useEffect(() => {
+    const updateWidth = () => {
+      setEpgWidth(
+        channelListOpen 
+          ? epgExpanded 
+            ? isMobile
+              ? window.innerWidth  // Full width on mobile
+              : Math.min(window.innerWidth * (EXPANDED_WIDTH_PERCENTAGE/100), 1200)
+            : 300 + SCROLLBAR_WIDTH
+          : 0
+      );
+    };
+
+    window.addEventListener('resize', updateWidth);
+    return () => window.removeEventListener('resize', updateWidth);
+  }, [channelListOpen, epgExpanded, isMobile]);
+
+  useEffect(() => {
+    setEpgWidth(
+      channelListOpen 
+        ? epgExpanded 
+          ? isMobile
+            ? window.innerWidth  // Full width on mobile
+            : Math.min(window.innerWidth * (EXPANDED_WIDTH_PERCENTAGE/100), 1200)
+          : 300 + SCROLLBAR_WIDTH
+        : 0
+    );
+  }, [channelListOpen, epgExpanded, isMobile]);
 
   // Custom Program component using Material-UI
   const ProgramItem = ({ program, ...rest }: any) => {
@@ -434,8 +474,8 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
     const { data } = program;
     const { image, title, since, till, description, category } = data;
 
-    const sinceTime = formatTimeWithOffset(new Date(since), guideUtcOffset);
-    const tillTime = formatTimeWithOffset(new Date(till), guideUtcOffset);
+    const sinceTime = formatTimeWithTimezone(new Date(since), timezone);
+    const tillTime = formatTimeWithTimezone(new Date(till), timezone);
 
     return (
       <ProgramBox width={styles.width} style={styles.position}>
@@ -481,16 +521,33 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
             p: 1, 
             '&:last-child': { pb: 1 },
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'flex-start',
             gap: 1,
+            width: '100%',
           }}>
             <Avatar
               src={logo}
               alt={name}
               variant="square"
-              sx={{ width: 32, height: 32 }}
+              sx={{ 
+                width: 32, 
+                height: 32,
+                flexShrink: 0
+              }}
             />
-            <Typography noWrap>
+            <Typography 
+              sx={{ 
+                wordBreak: 'break-word',
+                whiteSpace: 'normal',
+                overflow: 'hidden',
+                fontSize: '0.875rem',
+                lineHeight: 1.2,
+                maxHeight: '2.4em',
+                WebkitLineClamp: 2,
+                display: '-webkit-box',
+                WebkitBoxOrient: 'vertical',
+              }}
+            >
               {name}
             </Typography>
           </CardContent>
@@ -499,47 +556,19 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
     );
   };
 
-  // Add a useEffect to fetch programs
-  useEffect(() => {
-    const fetchProgramData = async () => {
-      if (channels.length > 0) {
-        const startTime = getStartTime(guideUtcOffset);
-        const endTime = new Date(startTime);
-        endTime.setUTCHours(endTime.getUTCHours() + HOURS_TO_DISPLAY);
-
-        console.log('Fetching program data for window:', {
-          start: startTime.toISOString(),
-          end: endTime.toISOString(),
-          hours: HOURS_TO_DISPLAY
-        });
-
-        const programData = await channelService.getPrograms(
-          channels.map(c => c.channel_id),
-          startTime,
-          endTime
-        );
-
-        // Update programs state or however you're managing program data
-        onChannelsChange(channels); // This might need to be adjusted based on your app structure
-      }
-    };
-
-    fetchProgramData();
-  }, [channels, HOURS_TO_DISPLAY]);
-
   return (
     <Paper elevation={3} sx={{ height: '100%', display: 'flex', flexDirection: 'column' }}>
       {/* Fixed width header section */}
-      <Box sx={{ 
-        width: 300,
-        flexShrink: 0,
-        zIndex: 3,
-        bgcolor: 'background.paper',
-        borderBottom: 1,
-        borderColor: 'divider',
-      }}>
+      <Box sx={headerStyles.container}>
         {/* Search Bar */}
-        <Box sx={{ p: 1, display: 'flex', alignItems: 'center', gap: 1 }}>
+        <Box sx={{ 
+          p: 1, 
+          display: 'flex', 
+          alignItems: 'center', 
+          gap: 1,
+          // Add margin-right when mobile and channel list is open
+          mr: isMobile && channelListOpen ? 5 : 0  // Add space for collapse button
+        }}>
           <TextField
             fullWidth
             size="small"
@@ -566,7 +595,7 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
             value={activeTab}
             onChange={handleTabChange}
             variant="fullWidth"
-            sx={{ borderBottom: 1, borderColor: 'divider', flexGrow: 1 }}
+            sx={{ flexGrow: 1 }}
           >
             <Tab label="All" value="all" />
             <Tab label="Favorites" value="favorites" />
@@ -592,10 +621,35 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
           flexGrow: 1, 
           overflow: 'hidden',
           bgcolor: 'background.default',
-          minHeight: 400,
           position: 'relative',
+          display: 'flex',
+          flexDirection: 'column',
+          height: containerHeight,
         }}
       >
+        {/* Add overlay text */}
+        <Box
+          sx={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            height: 60,
+            zIndex: 1000,
+            display: 'flex',
+            alignItems: 'center',
+            px: 2,
+            color: 'text.primary',
+            pointerEvents: 'none',
+            // Hide when guide is expanded on mobile
+            opacity: isMobile && epgExpanded ? 0 : 1,
+            visibility: isMobile && epgExpanded ? 'hidden' : 'visible',
+          }}
+        >
+          <Stack>
+            <Typography>{channels.length} Channels</Typography>
+            <Typography>{planbyPrograms.length} Programs</Typography>
+          </Stack>
+        </Box>
         <Epg {...getEpgProps()}>
           <Layout
             {...getLayoutProps()}
@@ -610,7 +664,7 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
       </Box>
 
       {/* Keep loading states */}
-      {(loading || prefetching) && (
+      {(loading) && (
         <Box sx={{ display: 'flex', justifyContent: 'center', p: 2 }}>
           <CircularProgress />
         </Box>

@@ -7,15 +7,12 @@ interface GetChannelsParams {
   search?: string;
   group?: string;
   favoritesOnly?: boolean;
-  windowStart?: number;
-  windowSize?: number;
   recentOnly?: boolean;
 } 
 
 interface GetChannelsResponse {
   items: Channel[];
   total: number;
-  skip: number;
   limit: number;
 }
 
@@ -31,23 +28,15 @@ interface Program {
   duration: number;
 }
 
-// Add batch size constant
-const PROGRAM_BATCH_SIZE = 50;  // Adjust this number based on your server limits
-
 export const channelService = {
   async getChannels(
-    skip: number = 0,
-    limit: number = 100,
+    limit?: number,
     params: GetChannelsParams = {}
   ): Promise<GetChannelsResponse> {
     const searchParams = new URLSearchParams({
-      skip: skip.toString(),
-      limit: limit.toString(),
+      ...(limit && { limit: limit.toString() }),
       ...(params.search && { search: params.search }),
-      ...(params.group && { group: params.group }),
       ...(params.favoritesOnly && { favorites_only: 'true' }),
-      ...(params.windowStart !== undefined && { window_start: params.windowStart.toString() }),
-      ...(params.windowSize !== undefined && { window_size: params.windowSize.toString() }),
       ...(params.recentOnly && { recent_only: 'true' }),
     });
 
@@ -286,55 +275,92 @@ export const channelService = {
   },
 
   async getPrograms(
-    channelIds: string[], 
+    channelIds: string[] | null, 
     start: Date, 
-    end: Date
+    end: Date,
+    toTimezone: string | null = null
   ): Promise<Record<string, Program[]>> {
-    // Add debug logging
-    console.log('Fetching programs with time window:', {
+    try {
+      const searchParams = new URLSearchParams({
         start: start.toISOString(),
         end: end.toISOString(),
-        channelCount: channelIds.length
-    });
+        ...(toTimezone && { to_timezone: toTimezone }),
+      });
 
-    // Split channelIds into smaller batches
-    const batches = [];
-    for (let i = 0; i < channelIds.length; i += PROGRAM_BATCH_SIZE) {
-        batches.push(channelIds.slice(i, i + PROGRAM_BATCH_SIZE));
-    }
+      if (channelIds) {
+        searchParams.append('channel_ids', channelIds.join(','));
+      }
 
-    try {
-        // Fetch programs for each batch and combine results
-        const results = await Promise.all(
-            batches.map(async (batchIds) => {
-                const searchParams = new URLSearchParams({
-                    start: start.toISOString(),
-                    end: end.toISOString(),
-                    channel_ids: batchIds.join(','),
-                });
+      const response = await fetch(`${API_URL}/programs?${searchParams}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch programs: ${response.statusText}`);
+      }
 
-                const response = await fetch(`${API_URL}/programs?${searchParams}`);
-                if (!response.ok) {
-                    console.warn(`Failed to fetch programs for batch: ${response.statusText}`);
-                    return {};
+      let buffer = '';
+      let programData = null;
+      const reader = response.body?.getReader();
+      const decoder = new TextDecoder();
+
+      if (reader) {
+        try {
+          while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            // Decode the chunk and add to buffer
+            const chunk = decoder.decode(value, { stream: true });
+            buffer += chunk;
+
+            // Split on newlines and process complete lines
+            let newlineIndex;
+            while ((newlineIndex = buffer.indexOf('\n')) !== -1) {
+              const line = buffer.slice(0, newlineIndex).trim();
+              buffer = buffer.slice(newlineIndex + 1);
+
+              if (line) {
+                try {
+                  // Try to parse each complete line
+                  const data = JSON.parse(line);
+                  if (data.type === 'progress') {
+                    console.debug('Progress:', data);
+                  } else {
+                    programData = data;
+                  }
+                } catch (e) {
+                  // If we can't parse the line, it might be incomplete
+                  buffer = line + '\n' + buffer;
+                  break;
                 }
+              }
+            }
+          }
 
-                const data = await response.json();
-                console.log(`Received programs for batch:`, {
-                    channelCount: batchIds.length,
-                    programCount: Object.values(data).flat().length
-                });
-                return data;
-            })
-        );
+          // Process any remaining data in buffer
+          if (buffer.trim()) {
+            try {
+              const data = JSON.parse(buffer);
+              if (!data.type) {
+                programData = data;
+              }
+            } catch (e) {
+              console.warn('Failed to parse final buffer:', buffer);
+            }
+          }
+        } finally {
+          reader.releaseLock();
+        }
+      }
 
-        // Combine all batch results into a single object
-        const combinedResults = results.reduce((acc, result) => ({ ...acc, ...result }), {});
-        console.log('Total programs fetched:', Object.values(combinedResults).flat().length);
-        return combinedResults;
+      if (!programData || typeof programData !== 'object') {
+        console.error('Invalid program data received:', programData);
+        return {};
+      }
+
+      console.log('Total programs fetched:', Object.values(programData).flat().length);
+      return programData;
     } catch (error) {
-        console.error('Failed to fetch programs:', error);
-        throw new Error(`Failed to fetch programs: ${error}`);
+      console.error('Failed to fetch programs:', error);
+      return {};
     }
   },
 }; 

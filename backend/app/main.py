@@ -5,8 +5,9 @@ import os
 import shutil
 import subprocess
 from collections.abc import AsyncGenerator
-from datetime import datetime  # Import datetime class directly
+from datetime import datetime, timezone, timedelta
 from typing import Any, Optional, List, Dict
+from zoneinfo import ZoneInfo
 
 # Third-party imports
 from fastapi import Depends, FastAPI, HTTPException, Request, Query
@@ -114,6 +115,8 @@ def check_config_file() -> None:
                 "m3u_update_interval": 24,
                 "update_on_start": True,
                 "theme": "dark",
+                "guide_start_hour": -1,  # Default 1 hour back
+                "guide_end_hour": 12,    # Default 12 hours forward
             }
         )
 
@@ -352,26 +355,21 @@ async def refresh_epg(
 
 @app.get("/channels")
 async def get_channels(
-    skip: int = 0,
-    limit: int = 250,
-    group: Optional[str] = None,
+    limit: int | None = None,
     search: Optional[str] = None,
     favorites_only: bool = False,
     recent_only: bool = False,
-    window_start: Optional[int] = None,
-    window_size: Optional[int] = None,
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     try:
-        # Add debug logging
-        logger.debug(f"Getting channels with params: skip={skip}, limit={limit}, recent_only={recent_only}")
-        
-        # Build the base query
-        query = select(models.Channel).order_by(models.Channel.group, models.Channel.name)
+        logger.debug(
+            f"Getting channels with params: limit={limit}, recent_only={recent_only}"
+        )
 
-        # Apply filters
-        if group:
-            query = query.where(models.Channel.group == group)
+        query = select(models.Channel).order_by(
+            models.Channel.group, models.Channel.name
+        )
+
         if search:
             query = query.where(models.Channel.name.ilike(f"%{search}%"))
         if favorites_only:
@@ -380,16 +378,13 @@ async def get_channels(
             config = load_config()
             recent_days = config.get("recent_days", 3)
             recent_cutoff = datetime.now(timezone.utc) - timedelta(days=recent_days)
-            
-            # Add debug logging for recent filter
+
             logger.debug(f"Filtering for channels watched since: {recent_cutoff}")
-            
-            query = query.where(
-                models.Channel.last_watched.isnot(None)  # Has been watched
-            ).where(
-                models.Channel.last_watched >= recent_cutoff  # Watched recently
-            ).order_by(
-                models.Channel.last_watched.desc()  # Most recently watched first
+
+            query = (
+                query.where(models.Channel.last_watched.isnot(None))
+                .where(models.Channel.last_watched >= recent_cutoff)
+                .order_by(models.Channel.last_watched.desc())
             )
 
         # Get total count
@@ -398,11 +393,8 @@ async def get_channels(
         )
         total = count_result.scalar()
 
-        # Apply pagination
-        if window_start is not None and window_size is not None:
-            query = query.offset(window_start).limit(window_size)
-        else:
-            query = query.offset(skip).limit(limit)
+        if limit is not None:
+            query = query.limit(limit)
 
         # Execute the query
         result = await db.execute(query)
@@ -411,15 +403,16 @@ async def get_channels(
         # Debug logging
         logger.debug(f"Query returned {len(channels)} channels")
         if channels:
-            logger.debug(f"Groups in this page: {sorted(set(c.group for c in channels))}")
+            logger.debug(
+                f"Groups in this page: {sorted(set(c.group for c in channels))}"
+            )
             logger.debug(f"First channel: {channels[0].name}")
             logger.debug(f"Last channel: {channels[-1].name}")
 
         return {
             "items": [ChannelResponse.model_validate(channel) for channel in channels],
             "total": total,
-            "skip": window_start if window_start is not None else skip,
-            "limit": window_size if window_size is not None else limit,
+            "limit": limit,
         }
     except Exception as e:
         logger.error(f"Error getting channels: {str(e)}", exc_info=True)
@@ -631,7 +624,10 @@ async def save_settings(request: Request) -> dict[str, Any]:
         config["epg_update_interval"] = data.get("epgUpdateInterval", 24)
         config["update_on_start"] = data.get("updateOnStart", True)
         config["theme"] = data.get("theme", "light")
-        config["recent_days"] = data.get("recentDays", 3)  # Add recent days setting
+        config["recent_days"] = data.get("recentDays", 3)
+        config["guide_start_hour"] = data.get("guideStartHour", -1)
+        config["guide_end_hour"] = data.get("guideEndHour", 12)
+        config["timezone"] = data.get("timezone", None)
 
         save_config(config)
         return {"status": "success"}
@@ -654,7 +650,10 @@ async def get_settings() -> dict[str, Any]:
             "epgUpdateInterval": config.get("epg_update_interval", 24),
             "updateOnStart": config.get("update_on_start", True),
             "theme": config.get("theme", "dark"),
-            "recentDays": config.get("recent_days", 3),  # Add default of 3 days
+            "recentDays": config.get("recent_days", 3),
+            "guideStartHour": config.get("guide_start_hour", -1),
+            "guideEndHour": config.get("guide_end_hour", 12),
+            "timezone": config.get("timezone", None),
         }
     except Exception as e:
         logger.error(f"Failed to load settings: {str(e)}")
@@ -676,42 +675,43 @@ async def hard_reset_channels(db: AsyncSession = Depends(get_db)) -> StreamingRe
         # Delete all channels
         await db.execute(delete(models.Channel))
         await db.commit()
-        
+
         # Get M3U URL from config
         config = load_config()
         if not config.get("m3u_url"):
             raise HTTPException(status_code=400, detail="No M3U URL configured")
-            
+
         # Refresh M3U to recreate channels
         m3u_service = M3UService(config=config)
 
         async def event_stream():
-            yield json.dumps({"type": "progress", "message": "Deleting channels..."}).encode() + b"\n"
-            
+            yield json.dumps(
+                {"type": "progress", "message": "Deleting channels..."}
+            ).encode() + b"\n"
+
             # Start M3U refresh
             async for progress in m3u_service.download(config["m3u_url"]):
                 yield json.dumps(progress).encode() + b"\n"
 
             # Process the M3U file
-            channels, new_channel_ids = await m3u_service.read_and_parse(m3u_service.file)
+            channels, new_channel_ids = await m3u_service.read_and_parse(
+                m3u_service.file
+            )
 
             # Insert channels
             for channel in channels:
                 stmt = (
-                    insert(models.Channel)
-                    .prefix_with("OR REPLACE")
-                    .values(**channel)
+                    insert(models.Channel).prefix_with("OR REPLACE").values(**channel)
                 )
                 await db.execute(stmt)
-            
+
             await db.commit()
 
-            yield json.dumps({"type": "complete", "message": "Hard reset complete"}).encode() + b"\n"
+            yield json.dumps(
+                {"type": "complete", "message": "Hard reset complete"}
+            ).encode() + b"\n"
 
-        return StreamingResponse(
-            event_stream(),
-            media_type="text/event-stream"
-        )
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
 
     except Exception as e:
         logger.error(f"Failed to hard reset channels: {str(e)}")
@@ -720,8 +720,7 @@ async def hard_reset_channels(db: AsyncSession = Depends(get_db)) -> StreamingRe
 
 @app.post("/channels/{channel_id}/watched")
 async def update_last_watched(
-    channel_id: str,
-    db: AsyncSession = Depends(get_db)
+    channel_id: str, db: AsyncSession = Depends(get_db)
 ) -> dict[str, Any]:
     """Update last watched time for a channel"""
     try:
@@ -755,62 +754,80 @@ class ProgramResponse(BaseModel):
 
 @app.get("/programs")
 async def get_programs(
-    channel_ids: str,
+    channel_ids: str | None = None,
     start: str = Query(..., description="ISO format datetime"),
     end: str = Query(..., description="ISO format datetime"),
-    db: AsyncSession = Depends(get_db)
+    to_timezone: str | None = None,
+    db: AsyncSession = Depends(get_db),
 ) -> Dict[str, List[ProgramResponse]]:
     """Get programs for specified channels in a time range"""
+    logger.debug(f"Will convert all programs to timezone: {to_timezone}")
     try:
         # Convert string dates to datetime objects with explicit UTC timezone
-        start_dt = datetime.fromisoformat(start.replace('Z', '+00:00'))
-        end_dt = datetime.fromisoformat(end.replace('Z', '+00:00'))
-        
+        start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
+        end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
+
         logger.debug(f"Fetching programs between {start_dt} and {end_dt}")
-        
-        # Split channel_ids string into list
-        channel_id_list = channel_ids.split(',')
-        
-        # Query programs for these channels in the time range
+
+        if channel_ids:
+            channel_id_list = channel_ids.split(",")
+        else:
+            # Get all channels
+            logger.debug(f"Getting all programs between {start_dt} and {end_dt}")
+            channel_id_list = []
+
         stmt = (
             select(models.Program)
             .where(
                 and_(
-                    models.Program.channel_id.in_(channel_id_list),
+                    models.Program.channel_id.in_(channel_id_list) if channel_id_list else True,
                     models.Program.start_time >= start_dt,
-                    models.Program.end_time <= end_dt
+                    models.Program.end_time <= end_dt,
                 )
             )
             .order_by(models.Program.start_time)
         )
-        
+
         result = await db.execute(stmt)
         programs = result.scalars().all()
-        
-        # Group programs by channel_id and ensure timezone info is preserved
+
+        # Group programs by channel_id and convert timezone if specified
         programs_by_channel: Dict[str, List[ProgramResponse]] = {}
         for program in programs:
             if program.channel_id not in programs_by_channel:
                 programs_by_channel[program.channel_id] = []
-                
+
+            start_time = program.start_time
+            end_time = program.end_time
+            
+            # Convert to target timezone if specified
+            if to_timezone:
+                utc = ZoneInfo('UTC')
+                target_tz = ZoneInfo(to_timezone)
+                start_time = start_time.replace(tzinfo=utc).astimezone(target_tz)
+                end_time = end_time.replace(tzinfo=utc).astimezone(target_tz)
+
             programs_by_channel[program.channel_id].append(
                 ProgramResponse(
                     id=str(program.id),
                     title=program.title,
-                    start=program.start_time,
-                    end=program.end_time,
-                    duration=int((program.end_time - program.start_time).total_seconds() / 60),
+                    start=start_time,
+                    end=end_time,
+                    duration=int(
+                        (program.end_time - program.start_time).total_seconds() / 60
+                    ),
                     description=program.description,
-                    category=program.category
+                    category=program.category,
                 )
             )
-        
-        logger.debug(f"Found {sum(len(progs) for progs in programs_by_channel.values())} programs")
+
+        logger.debug(
+            f"Found {sum(len(progs) for progs in programs_by_channel.values())} programs"
+        )
         return programs_by_channel
-        
+
     except Exception as e:
         logger.error(f"Failed to fetch programs: {str(e)}")
         raise HTTPException(
-            status_code=500,
-            detail=f"Failed to fetch programs: {str(e)}"
+            status_code=500, detail=f"Failed to fetch programs: {str(e)}"
         )

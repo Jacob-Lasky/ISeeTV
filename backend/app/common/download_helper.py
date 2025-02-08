@@ -39,22 +39,29 @@ async def stream_download(
         content: list[bytes] = []
         total_bytes = 0
         chunk_count = 0
+        last_progress = -1  # Track last progress percentage
 
         async with aiohttp.ClientSession() as session:
             async with session.get(url) as response:
                 if not response.ok:
                     raise Exception(f"HTTP {response.status}: {response.reason}")
 
+                total = expected_size or response.content_length or 0
+
                 async for chunk in response.content.iter_chunked(8192):
                     chunk_count += 1
                     content.append(chunk)
                     total_bytes += len(chunk)
 
-                    yield {
-                        "type": "progress",
-                        "current": total_bytes,
-                        "total": expected_size or response.content_length or 0,
-                    }
+                    # Only yield progress if percentage has changed
+                    current_progress = int((total_bytes / total) * 100) if total else 0
+                    if current_progress > last_progress:
+                        yield {
+                            "type": "progress",
+                            "current": total_bytes,
+                            "total": total,
+                        }
+                        last_progress = current_progress
 
         logger.info(
             f"Download complete. {chunk_count} chunks, {total_bytes} bytes total"

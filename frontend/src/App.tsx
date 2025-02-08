@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
-import { Box, ThemeProvider, CssBaseline, Typography, IconButton } from '@mui/material';
+import { Box, ThemeProvider, CssBaseline, Typography, IconButton, useMediaQuery } from '@mui/material';
 import { createTheme } from '@mui/material/styles';
 import { ChannelList } from './components/ChannelList';
 import { VideoPlayer } from './components/VideoPlayer';
@@ -8,10 +8,11 @@ import { channelService } from './services/channelService';
 import { SettingsModal } from './components/SettingsModal';
 import type { Channel } from './models/Channel';
 import type { Settings } from './models/Settings';
+import { format } from 'date-fns';
 import MenuIcon from '@mui/icons-material/Menu';
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft';
 import { LoadingPopup } from './components/LoadingPopup';
-import { getStartTime } from './utils/dateUtils';
+import { getTodayOffsetDate, getUserTimezone } from './utils/dateUtils';
 
 
 // Interface for progress data state
@@ -40,36 +41,63 @@ const defaultSettings: Settings = {
   updateOnStart: true,
   theme: 'dark',
   recentDays: 3,
-  guideHours: 13,
-  guideUtcOffset: 0  // Default to UTC
+  guideStartHour: -1,
+  guideEndHour: 12,
+  timezone: getUserTimezone(),
 };
 
 export default function App() {
   const [selectedChannel, setSelectedChannel] = useState<Channel | undefined>();
   const [settingsOpen, setSettingsOpen] = useState(false);
-  const [settings, setSettings] = useState<Settings | null>(null);
+  const [settings, setSettings] = useState<Settings>(defaultSettings);
   const [channelListOpen, setChannelListOpen] = useState(true);
   const [m3uProgress, setM3uProgress] = useState<ProgressData | null>(null);
   const [epgProgress, setEpgProgress] = useState<ProgressData | null>(null);
   const channelListRef = useRef<{ refresh: () => Promise<void> }>(null);
   const [visibleChannels, setVisibleChannels] = useState<Channel[]>([]);
   const [programs, setPrograms] = useState<Record<string, Program[]>>({});
+
+  // Create theme based on settings
+  const theme = createTheme({
+    palette: {
+      mode: settings?.theme === 'system' 
+        ? window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
+        : settings?.theme ?? 'dark'
+    }
+  });
+
+  // Move useMediaQuery after theme creation
+  const isMobile = useMediaQuery(theme.breakpoints.down('sm'));
   
+  // Combine initial data loading into one effect
   useEffect(() => {
-    const checkSettings = async () => {
+    const initializeApp = async () => {
       try {
         const loadedSettings = await channelService.getSettings();
-        setSettings(loadedSettings);
+        setSettings({
+          ...defaultSettings,
+          ...loadedSettings,
+          // Use config timezone if available, otherwise use browser timezone
+          timezone: loadedSettings.timezone || getUserTimezone(),
+        });
         
-        // Show settings modal if no M3U URL
         if (!loadedSettings.m3uUrl) {
           setSettingsOpen(true);
           return;
         }
 
-        // If updateOnStart is enabled, refresh both M3U and EPG
+        // Fetch initial programs
+        // start time and end time are based now + guideStartHour and now + guideEndHour
+        const startTimeDate = getTodayOffsetDate(settings.guideStartHour, settings.timezone);
+        const endTimeDate = getTodayOffsetDate(settings.guideEndHour, settings.timezone);
+        const startTime = format(startTimeDate, 'yyyy-MM-dd\'T\'HH:mm:ss');
+        const endTime = format(endTimeDate, 'yyyy-MM-dd\'T\'HH:mm:ss');
+        console.debug('Fetching programs between', startTime, 'and', endTime);
+        console.debug('Converting programs to timezone:', settings.timezone);
+        const programData = await channelService.getPrograms(null, startTimeDate, endTimeDate, settings.timezone);
+        setPrograms(programData);
+
         if (loadedSettings.updateOnStart) {
-          // Refresh M3U
           await channelService.refreshM3U(
             loadedSettings.m3uUrl,
             loadedSettings.m3uUpdateInterval,
@@ -78,7 +106,6 @@ export default function App() {
           );
           await channelListRef.current?.refresh();
 
-          // Refresh EPG if URL is provided
           if (loadedSettings.epgUrl) {
             await channelService.refreshEPG(
               loadedSettings.epgUrl,
@@ -89,22 +116,18 @@ export default function App() {
           }
         }
       } catch (error) {
-        console.error('Failed to load settings:', error);
+        console.error('Failed to initialize app:', error);
+        setSettings(prev => ({
+          ...defaultSettings,
+          ...prev,
+          timezone: getUserTimezone(),
+        }));
         setSettingsOpen(true);
       }
     };
 
-    checkSettings();
-  }, []);
-
-  // Create theme based on settings
-  const theme = createTheme({
-    palette: {
-      mode: settings?.theme === 'system' 
-        ? window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'
-        : settings?.theme ?? 'dark'
-    }
-  });
+    initializeApp();
+  }, []); // Run once on mount
 
   // Add system theme listener
   useEffect(() => {
@@ -200,41 +223,6 @@ export default function App() {
     setChannelListOpen(prev => !prev); // Simply toggle the channel list state
   };
 
-  // Add effect to fetch programs
-  useEffect(() => {
-    const fetchPrograms = async () => {
-      if (visibleChannels.length > 0) {
-        try {
-          const startTime = getStartTime();
-          const endTime = new Date(startTime);
-          endTime.setUTCHours(endTime.getUTCHours() + HOURS_TO_DISPLAY);
-
-          console.log('Fetching programs with window:', {
-            start: startTime.toISOString(),
-            end: endTime.toISOString(),
-            hours: HOURS_TO_DISPLAY,
-            channelCount: visibleChannels.length
-          });
-
-          const guideIds = visibleChannels.map(c => c.channel_id);
-          const programData = await channelService.getPrograms(guideIds, startTime, endTime);
-          
-          console.log('Fetched programs:', {
-            channelCount: Object.keys(programData).length,
-            programCount: Object.values(programData).flat().length,
-            timeWindow: `${startTime.toISOString()} to ${endTime.toISOString()}`
-          });
-          
-          setPrograms(programData);
-        } catch (error) {
-          console.error('Failed to fetch programs:', error);
-        }
-      }
-    };
-
-    fetchPrograms();
-  }, [visibleChannels]);
-
   return (
     <ThemeProvider theme={theme}>
       <CssBaseline />
@@ -251,9 +239,13 @@ export default function App() {
             left: 0,
             top: 0,
             bottom: 0,
-            width: 'auto',
-            minWidth: 300,
-            maxWidth: channelListOpen ? '80vw' : 0,
+            width: isMobile ? '100%' : 'auto',
+            minWidth: isMobile ? '100%' : 300,
+            maxWidth: channelListOpen 
+              ? isMobile 
+                ? '100%'
+                : '80vw'
+              : 0,
             transform: channelListOpen ? 'none' : 'translateX(-100%)',
             transition: theme.transitions.create(['transform', 'max-width'], {
               easing: theme.transitions.easing.sharp,
@@ -267,18 +259,22 @@ export default function App() {
               onToggleFavorite={handleToggleFavorite}
               selectedChannel={selectedChannel}
               onOpenSettings={() => setSettingsOpen(true)}
-              onChannelsChange={setVisibleChannels}
               programs={programs}
               channelListOpen={channelListOpen}
-              guideHours={settings?.guideHours || 13}
-              guideUtcOffset={settings?.guideUtcOffset || 0}
+              settings={settings}
+              timezone={settings.timezone}
+              isMobile={isMobile}
             />
           </Box>
 
           <Box sx={{ 
             position: 'absolute',
-            left: channelListOpen ? 300 : 0,
-            right: 0,  // Keep right edge fixed
+            left: channelListOpen 
+              ? isMobile 
+                ? '100vw' 
+                : 300 
+              : 0,
+            right: 0,
             top: 0,
             bottom: 0,
             transition: theme.transitions.create('left', {
@@ -290,12 +286,19 @@ export default function App() {
               onClick={handleChannelListToggle}
               sx={{
                 position: 'fixed',
-                left: channelListOpen ? 300 : 0,
+                left: channelListOpen 
+                  ? isMobile 
+                    ? 'auto'
+                    : 300 
+                  : 0,
+                right: channelListOpen && isMobile ? 8 : 'auto',
                 top: 8,
                 zIndex: 3,
                 bgcolor: 'background.paper',
-                borderRadius: '0 4px 4px 0',
-                transition: theme.transitions.create('left', {
+                borderRadius: channelListOpen && isMobile 
+                  ? '4px'
+                  : '0 4px 4px 0',
+                transition: theme.transitions.create(['left', 'right'], {
                   easing: theme.transitions.easing.sharp,
                   duration: theme.transitions.duration.enteringScreen,
                 }),

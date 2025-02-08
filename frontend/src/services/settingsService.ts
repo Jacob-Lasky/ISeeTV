@@ -9,6 +9,10 @@ const defaultSettings: Settings = {
   epgUpdateInterval: 24,
   updateOnStart: true,
   theme: 'system',
+  recentDays: 3,
+  guideStartHour: -2,
+  guideEndHour: 12,
+  timezone: 'America/New_York',
 };
 
 export const settingsService = {
