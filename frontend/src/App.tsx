@@ -122,7 +122,6 @@ export default function App() {
         );
         setPrograms(programData);
         setProgramsLoading(false);
-
       } catch (error) {
         setProgramsLoading(false);
         console.error("Failed to initialize app:", error);

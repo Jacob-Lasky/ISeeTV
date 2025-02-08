@@ -310,7 +310,7 @@ export const ChannelList = forwardRef<
       useState<PlanbyProgram | null>(null);
     const [selectedChannelDialog, setSelectedChannelDialog] =
       useState<PlanbyChannel | null>(null);
-    const searchTimeoutRef = useRef<Window['setTimeout']>();
+    const searchTimeoutRef = useRef<Window["setTimeout"]>();
 
     // Move planbyTheme inside the component to access theme
     const planbyTheme = useMemo(
@@ -368,7 +368,7 @@ export const ChannelList = forwardRef<
         if (channels.length === 0) {
           setLoading(true);
         }
-        
+
         const response = await channelService.getChannels(0, {
           search: searchTerm,
           favoritesOnly: activeTab === "favorites",
@@ -401,7 +401,7 @@ export const ChannelList = forwardRef<
       } else {
         setSearchTerm(term);
       }
-      
+
       // Only set loading, don't clear channels
       setLoading(true);
       if (containerRef.current) {
