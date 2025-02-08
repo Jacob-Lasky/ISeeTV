@@ -1,9 +1,9 @@
+import csv
 import math
 import os
 import xml.etree.ElementTree as ET
 from collections.abc import AsyncGenerator
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 from typing import TypedDict
 
@@ -17,6 +17,8 @@ logger = Logger(
     os.environ.get("LOG_LEVEL", "INFO"),
     color="LIGHT_GREEN",
 )
+
+DATA_DIRECTORY = os.environ.get("DATA_DIRECTORY", "/app/data")
 
 
 class EPGChannelDict(TypedDict):
@@ -56,9 +58,8 @@ class EPGService:
         logger.info(f"Downloading EPG from {url}")
 
         # Setup paths and save file
-        data_dir = os.path.join(Path(__file__).resolve().parents[3], "data")
-        epg_file = os.path.join(data_dir, "epg_content.xml")
-        os.makedirs(data_dir, exist_ok=True)
+        epg_file = os.path.join(DATA_DIRECTORY, "epg_content.xml")
+        os.makedirs(DATA_DIRECTORY, exist_ok=True)
 
         try:
             async for progress in stream_download(url, self.content_length, epg_file):
@@ -78,6 +79,42 @@ class EPGService:
     ) -> tuple[list[EPGChannelDict], list[EPGProgramDict]]:
         """Parse EPG XML and return channel and program data"""
         logger.info(f"Parsing EPG file: {file_path}")
+
+        parse_failures_file = os.path.join(DATA_DIRECTORY, "epg_parse_failures.csv")
+        parse_failure_count = 0
+        if os.path.exists(parse_failures_file):
+            os.remove(parse_failures_file)
+            with open(parse_failures_file, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(
+                    [
+                        "channel_id",
+                        "start",
+                        "end",
+                        "title",
+                        "description",
+                        "category",
+                        "reason",
+                    ]
+                )
+
+        channel_id_failures_file = os.path.join(
+            DATA_DIRECTORY, "epg_channel_id_failures.csv"
+        )
+        channel_id_failure_count = 0
+        if os.path.exists(channel_id_failures_file):
+            os.remove(channel_id_failures_file)
+            with open(channel_id_failures_file, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(
+                    [
+                        "failed_channel_id",
+                        "failed_display_name",
+                        "existing_channel_id",
+                        "existing_display_name",
+                        "reason",
+                    ]
+                )
 
         try:
             tree = ET.parse(file_path)
@@ -109,9 +146,36 @@ class EPGService:
                             }
                         )
                     else:
-                        logger.warning(
+                        logger.debug(
                             f"Duplicate channel ID: {channel_id} | Display Name: {display_name}"
                         )
+                        existing_channel_id = channel_id  # this doesn't feel right but it's how it is defined
+                        existing_display_name = [
+                            c["display_name"]
+                            for c in channels
+                            if c["channel_id"] == channel_id
+                        ][0]
+                        with open(channel_id_failures_file, "a", newline="") as f:
+                            writer = csv.writer(f)
+                            writer.writerow(
+                                [
+                                    channel_id,
+                                    display_name,
+                                    existing_channel_id,
+                                    existing_display_name,
+                                    "duplicate",
+                                ]
+                            )
+                        channel_id_failure_count += 1
+                else:
+                    logger.debug(f"No display name found for channel ID: {channel_id}")
+                    with open(channel_id_failures_file, "a", newline="") as f:
+                        writer = csv.writer(f)
+                        writer.writerow(
+                            [channel_id, "", "", "", "missing_display_name"]
+                        )
+                    parse_failure_count += 1
+                    continue
 
             # Parse programs
             programs: list[EPGProgramDict] = []
@@ -151,8 +215,47 @@ class EPGService:
                             }
                         )
                     except ValueError as e:
-                        logger.error(f"Failed to parse datetime: {e}")
+                        logger.debug(f"Failed to parse datetime: {e}")
+                        with open(parse_failures_file, "a", newline="") as f:
+                            writer = csv.writer(f)
+                            writer.writerow(
+                                [
+                                    channel_id,
+                                    start_str,
+                                    end_str,
+                                    title_elem.text,
+                                    description,
+                                    category,
+                                    "bad_datetime",
+                                ]
+                            )
+                        parse_failure_count += 1
                         continue
+                else:
+                    logger.debug(f"Missing required fields for program: {program}")
+                    with open(parse_failures_file, "a", newline="") as f:
+                        writer = csv.writer(f)
+                        writer.writerow(
+                            [
+                                channel_id,
+                                start_str,
+                                end_str,
+                                title_elem.text if title_elem else "",
+                                description,
+                                category,
+                                "missing_fields",
+                            ]
+                        )
+                    parse_failure_count += 1
+                    continue
+
+            logger.info(f"Parsed {len(channels)} channels and {len(programs)} programs")
+            logger.warning(
+                f"- {parse_failure_count} parse failures. See details at: {parse_failures_file}"
+            )
+            logger.warning(
+                f"- {channel_id_failure_count} channel ID failures. See details at: {channel_id_failures_file}"
+            )
 
             return channels, programs
 

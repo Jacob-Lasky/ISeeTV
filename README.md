@@ -69,8 +69,11 @@ If you're thinking about contributing to this repo in any way, I want you to! I 
 ## Linting
 - While in the frontend directory, run:
   - to check linting issues: `docker run --rm -v $(pwd):/app -w /app node:22 npm run lint`
-  - to fix linting issues: `docker run --rm -v $(pwd):/app -w /app node:22 npm run lint -- --fix`
+    - to fix most linting issues: `docker run --rm -v $(pwd):/app -w /app node:22 npm run lint -- --fix`
 - While in the backend directory, run:
-  - `poetry run mypy .`
-  - `poetry run ruff check .`
-  - `poetry run black .`
+  - check for type errors: `poetry run mypy .`
+    - to fix most type errors, you'll need to manually edit the files
+  - check for linting issues: `poetry run ruff check .`
+    - to fix most linting issues: `poetry run ruff check . --fix`
+  - check for formatting issues: `poetry run black --check .`
+    - to fix most formatting issues: `poetry run black .`

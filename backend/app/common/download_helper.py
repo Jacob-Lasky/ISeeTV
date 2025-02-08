@@ -46,7 +46,7 @@ async def stream_download(
                 if not response.ok:
                     raise Exception(f"HTTP {response.status}: {response.reason}")
 
-                total = expected_size or response.content_length or 0
+                total = expected_size or response.content_length or 10**9
 
                 async for chunk in response.content.iter_chunked(8192):
                     chunk_count += 1
@@ -56,11 +56,12 @@ async def stream_download(
                     # Only yield progress if percentage has changed
                     current_progress = int((total_bytes / total) * 100) if total else 0
                     if current_progress > last_progress:
-                        yield {
-                            "type": "progress",
-                            "current": total_bytes,
-                            "total": total,
-                        }
+                        progress_response = ProgressDict(
+                            type="progress",
+                            current=total_bytes,
+                            total=total,
+                        )
+                        yield progress_response
                         last_progress = current_progress
 
         logger.info(

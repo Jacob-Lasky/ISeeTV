@@ -366,7 +366,7 @@ async def refresh_epg(
 
     except Exception as e:
         logger.error(f"Failed to refresh EPG: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(status_code=500, detail=f"Failed to refresh EPG: {str(e)}")
 
 
 @app.get("/channels")
@@ -464,7 +464,9 @@ async def toggle_favorite(
         return ChannelResponse.model_validate(channel)
     except Exception as e:
         logger.error(f"Failed to update favorite status: {str(e)}")
-        raise HTTPException(status_code=500, detail="Failed to update favorite status")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to update favorite status: {str(e)}"
+        )
 
 
 m3u_service = M3UService(config=load_config())
@@ -652,7 +654,9 @@ async def save_settings(request: Request) -> dict[str, Any]:
 
     except Exception as e:
         logger.error(f"Failed to save settings: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500, detail=f"Failed to save settings: {str(e)}"
+        )
 
 
 @app.get("/settings")
@@ -675,7 +679,9 @@ async def get_settings() -> dict[str, Any]:
         }
     except Exception as e:
         logger.error(f"Failed to load settings: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500, detail=f"Failed to load settings: {str(e)}"
+        )
 
 
 @app.on_event("shutdown")
@@ -733,7 +739,9 @@ async def hard_reset_channels(db: AsyncSession = Depends(get_db)) -> StreamingRe
 
     except Exception as e:
         logger.error(f"Failed to hard reset channels: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500, detail=f"Failed to hard reset channels: {str(e)}"
+        )
 
 
 async def update_last_watched(
@@ -764,7 +772,9 @@ async def update_last_watched(
         return {"status": "success"}
     except Exception as e:
         logger.error(f"Failed to update last watched: {str(e)}")
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=500, detail=f"Failed to update last watched: {str(e)}"
+        )
 
 
 @app.post("/channels/{channel_id}/clear_last_watched")

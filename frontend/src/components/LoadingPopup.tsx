@@ -41,7 +41,7 @@ export const LoadingPopup = ({
         )}
         {epgProgress && (
           <>
-            <Typography>Loading EPG Data...</Typography>
+            <Typography>Loading EPG Data (this may take a while)...</Typography>
             <LinearProgress
               variant="determinate"
               value={(epgProgress.current / epgProgress.total) * 100}
