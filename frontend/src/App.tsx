@@ -54,6 +54,7 @@ export default function App() {
   const [epgProgress, setEpgProgress] = useState<ProgressData | null>(null);
   const channelListRef = useRef<{ refresh: () => Promise<void> }>(null);
   const [programs, setPrograms] = useState<Record<string, Program[]>>({});
+  const [programsLoading, setProgramsLoading] = useState(true);
 
   // Create theme based on settings
   const theme = createTheme({
@@ -78,7 +79,6 @@ export default function App() {
         setSettings({
           ...defaultSettings,
           ...loadedSettings,
-          // Use config timezone if available, otherwise use browser timezone
           timezone: loadedSettings.timezone || getUserTimezone(),
         });
 
@@ -87,8 +87,27 @@ export default function App() {
           return;
         }
 
-        // Fetch initial programs
-        // start time and end time are based now + guideStartHour and now + guideEndHour
+        // Only fetch programs if we need to update
+        if (loadedSettings.updateOnStart) {
+          await channelService.refreshM3U(
+            loadedSettings.m3uUrl,
+            loadedSettings.m3uUpdateInterval,
+            false,
+            handleM3uProgress,
+          );
+
+          if (loadedSettings.epgUrl) {
+            await channelService.refreshEPG(
+              loadedSettings.epgUrl,
+              loadedSettings.epgUpdateInterval,
+              false,
+              handleEpgProgress,
+            );
+          }
+        }
+
+        // Fetch programs after potential refresh
+        setProgramsLoading(true);
         const startTimeDate = getTodayOffsetDate(settings.guideStartHour);
         const endTimeDate = getTodayOffsetDate(settings.guideEndHour);
         const startTime = format(startTimeDate, "yyyy-MM-dd'T'HH:mm:ss");
@@ -102,26 +121,10 @@ export default function App() {
           settings.timezone,
         );
         setPrograms(programData);
+        setProgramsLoading(false);
 
-        if (loadedSettings.updateOnStart) {
-          await channelService.refreshM3U(
-            loadedSettings.m3uUrl,
-            loadedSettings.m3uUpdateInterval,
-            false,
-            handleM3uProgress,
-          );
-          await channelListRef.current?.refresh();
-
-          if (loadedSettings.epgUrl) {
-            await channelService.refreshEPG(
-              loadedSettings.epgUrl,
-              loadedSettings.epgUpdateInterval,
-              false,
-              handleEpgProgress,
-            );
-          }
-        }
       } catch (error) {
+        setProgramsLoading(false);
         console.error("Failed to initialize app:", error);
         setSettings((prev) => ({
           ...defaultSettings,
@@ -277,6 +280,7 @@ export default function App() {
               settings={settings}
               timezone={settings.timezone}
               isMobile={isMobile}
+              programsLoading={programsLoading}
             />
           </Box>
 

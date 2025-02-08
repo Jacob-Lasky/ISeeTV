@@ -122,6 +122,7 @@ interface ChannelListProps {
   settings?: Settings;
   isMobile?: boolean;
   setChannelListOpen?: (open: boolean) => void;
+  programsLoading?: boolean;
 }
 
 interface ProgramDialogProps {
@@ -155,6 +156,9 @@ interface ProgramItemProps {
 interface ChannelItemProps {
   channel: PlanbyChannel;
 }
+
+// Add this near the top of the file, outside the component
+const SEARCH_DELAY = 2000; // 2 seconds delay for single character
 
 const ProgramDialog = ({ program, onClose, onWatch }: ProgramDialogProps) => {
   if (!program) return null;
@@ -251,6 +255,7 @@ export const ChannelList = forwardRef<
       settings,
       isMobile,
       setChannelListOpen,
+      programsLoading,
     },
     ref,
   ) => {
@@ -305,6 +310,7 @@ export const ChannelList = forwardRef<
       useState<PlanbyProgram | null>(null);
     const [selectedChannelDialog, setSelectedChannelDialog] =
       useState<PlanbyChannel | null>(null);
+    const searchTimeoutRef = useRef<Window['setTimeout']>();
 
     // Move planbyTheme inside the component to access theme
     const planbyTheme = useMemo(
@@ -355,10 +361,14 @@ export const ChannelList = forwardRef<
       [theme],
     );
 
-    // Modify loadChannels to always load channels
+    // Modify loadChannels to not clear channels immediately
     const loadChannels = useCallback(async () => {
       try {
-        setLoading(true);
+        // Don't set loading if we already have channels (prevents flash)
+        if (channels.length === 0) {
+          setLoading(true);
+        }
+        
         const response = await channelService.getChannels(0, {
           search: searchTerm,
           favoritesOnly: activeTab === "favorites",
@@ -371,21 +381,41 @@ export const ChannelList = forwardRef<
       } finally {
         setLoading(false);
       }
-    }, [searchTerm, activeTab]);
+    }, [searchTerm, activeTab, channels.length]);
 
     // Update the effect to load channels on mount and when dependencies change
     useEffect(() => {
       loadChannels();
     }, [searchTerm, activeTab, loadChannels]);
 
-    // Handle search with debounce
+    // Update handleSearch to not clear channels immediately
     const handleSearch = useCallback((term: string) => {
-      setSearchTerm(term);
+      if (searchTimeoutRef.current) {
+        clearTimeout(searchTimeoutRef.current);
+      }
+
+      if (term.length === 1) {
+        searchTimeoutRef.current = setTimeout(() => {
+          setSearchTerm(term);
+        }, SEARCH_DELAY);
+      } else {
+        setSearchTerm(term);
+      }
+      
+      // Only set loading, don't clear channels
       setLoading(true);
-      setChannels([]);
       if (containerRef.current) {
         containerRef.current.scrollTop = 0;
       }
+    }, []);
+
+    // Clean up timeout on unmount
+    useEffect(() => {
+      return () => {
+        if (searchTimeoutRef.current) {
+          clearTimeout(searchTimeoutRef.current);
+        }
+      };
     }, []);
 
     // Add tab change handler
@@ -436,48 +466,51 @@ export const ChannelList = forwardRef<
       [channels],
     );
 
-    // Convert programs to Planby format
+    // Update the planbyPrograms memo to handle loading state
     const planbyPrograms = useMemo<PlanbyProgram[]>(() => {
       const allPrograms: PlanbyProgram[] = [];
       const now = new Date();
       const startTime = getTodayOffsetDate(settings?.guideStartHour ?? -1);
 
-      Object.entries(programs).forEach(([channelId, channelPrograms]) => {
-        const channel = channels.find((c) => c.channel_id === channelId);
-        if (!channel) return;
+      try {
+        Object.entries(programs).forEach(([channelId, channelPrograms]) => {
+          const channel = channels.find((c) => c.channel_id === channelId);
+          if (!channel) return;
 
-        channelPrograms.forEach((program) => {
-          const startDate = toZonedTime(new Date(program.start), timezone);
-          const endDate = toZonedTime(new Date(program.end), timezone);
+          channelPrograms.forEach((program) => {
+            const startDate = toZonedTime(new Date(program.start), timezone);
+            const endDate = toZonedTime(new Date(program.end), timezone);
 
-          // Calculate position data
-          const durationMs = endDate.getTime() - startDate.getTime();
-          const durationMinutes = durationMs / (1000 * 60);
-          const width = (durationMinutes / 30) * TIME_BLOCK_WIDTH;
-          const left =
-            ((startDate.getTime() - startTime.getTime()) / (1000 * 60 * 30)) *
-            TIME_BLOCK_WIDTH;
+            // Calculate position data
+            const durationMs = endDate.getTime() - startDate.getTime();
+            const durationMinutes = durationMs / (1000 * 60);
+            const width = (durationMinutes / 30) * TIME_BLOCK_WIDTH;
+            const left =
+              ((startDate.getTime() - startTime.getTime()) / (1000 * 60 * 30)) *
+              TIME_BLOCK_WIDTH;
 
-          allPrograms.push({
-            id: program.id,
-            title: program.title,
-            since: startDate.toISOString(),
-            till: endDate.toISOString(),
-            channelUuid: channelId,
-            image: "https://via.placeholder.com/150",
-            description: program.description || "No description available",
-            category: channel.group || program.category || "Uncategorized",
-            isLive: startDate <= now && endDate >= now,
-            position: {
-              top: channels.findIndex((c) => c.channel_id === channelId) * 70,
-              height: 70,
-              width,
-              left,
-            },
+            allPrograms.push({
+              id: program.id,
+              title: program.title,
+              since: startDate.toISOString(),
+              till: endDate.toISOString(),
+              channelUuid: channelId,
+              image: "https://via.placeholder.com/150",
+              description: program.description || "No description available",
+              category: channel.group || program.category || "Uncategorized",
+              isLive: startDate <= now && endDate >= now,
+              position: {
+                top: channels.findIndex((c) => c.channel_id === channelId) * 70,
+                height: 70,
+                width,
+                left,
+              },
+            });
           });
         });
-      });
-      return allPrograms;
+        return allPrograms;
+      } finally {
+      }
     }, [programs, channels, timezone, settings?.guideStartHour]);
 
     // Update where we create the dates
@@ -849,7 +882,7 @@ export const ChannelList = forwardRef<
         </Box>
 
         {/* Update the loading state display */}
-        {loading && (
+        {(loading || programsLoading) && (
           <Box
             sx={{
               position: "absolute",
@@ -861,7 +894,7 @@ export const ChannelList = forwardRef<
               justifyContent: "center",
               alignItems: "center",
               bgcolor: "rgba(0, 0, 0, 0.3)",
-              zIndex: 1001, // Above the channel list content
+              zIndex: 1001,
             }}
           >
             <CircularProgress />

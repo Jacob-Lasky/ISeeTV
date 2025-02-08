@@ -51,7 +51,7 @@ export const channelService = {
       ...(params.recentOnly && { recent_only: "true" }),
     });
 
-    console.log(
+    console.debug(
       "Fetching channels with params:",
       Object.fromEntries(searchParams.entries()),
     );
@@ -385,7 +385,7 @@ export const channelService = {
         return {};
       }
 
-      console.log(
+      console.debug(
         "Total programs fetched:",
         Object.values(programData).flat().length,
       );
