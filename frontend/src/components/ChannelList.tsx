@@ -32,7 +32,7 @@ import { Channel } from '../models/Channel';
 import { channelService } from '../services/channelService';
 import { useNavigate } from 'react-router-dom';
 import { format } from 'date-fns';
-import { utcToZonedTime } from 'date-fns-tz';
+import { toZonedTime } from 'date-fns-tz';
 import { Epg, Layout, useEpg, useProgram, ProgramBox, ProgramContent, ProgramFlex, ProgramStack, ProgramTitle, ProgramText, ChannelBox, ProgramImage } from 'planby';
 import { useTheme } from '@mui/material/styles';
 import { formatTimeWithTimezone, getTodayOffsetDate } from '../utils/dateUtils';
@@ -388,8 +388,8 @@ export const ChannelList = forwardRef<{ refresh: () => Promise<void> }, ChannelL
       if (!channel) return;
 
       channelPrograms.forEach(program => {
-        const startDate = utcToZonedTime(new Date(program.start), timezone);
-        const endDate = utcToZonedTime(new Date(program.end), timezone);
+        const startDate = toZonedTime(new Date(program.start), timezone);
+        const endDate = toZonedTime(new Date(program.end), timezone);
         
         // Calculate position data
         const durationMs = endDate.getTime() - startDate.getTime();
