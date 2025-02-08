@@ -34,6 +34,7 @@ data/m3u_content.txt
 data/epg_content.xml
 *.fuse_hidden*
 /data/segments/
+data/*.csv
 
 # Deveopment
 backend/dev.py

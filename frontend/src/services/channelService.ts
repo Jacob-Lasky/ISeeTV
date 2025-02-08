@@ -190,7 +190,12 @@ export const channelService = {
                 onProgress?.(0, { type: "complete" });
               }
             } catch (e) {
-              console.warn("Failed to parse line:", line, "with error:", e);
+              console.debug(
+                "This can safely be ignored. Failed to parse download-progress line:",
+                line,
+                "with error:",
+                e,
+              );
             }
           }
         }

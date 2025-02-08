@@ -1,9 +1,9 @@
+import csv
 import math
 import os
 import xml.etree.ElementTree as ET
 from collections.abc import AsyncGenerator
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 from typing import TypedDict
 
@@ -80,17 +80,23 @@ class EPGService:
         """Parse EPG XML and return channel and program data"""
         logger.info(f"Parsing EPG file: {file_path}")
 
-        # create CSV files for bad EPG lines
-        # one will be parse failures, the other will be channel id failures
-        # if the files already exist, remove them
-
         parse_failures_file = os.path.join(DATA_DIRECTORY, "epg_parse_failures.csv")
         parse_failure_count = 0
         if os.path.exists(parse_failures_file):
             os.remove(parse_failures_file)
-            # create a new file and write the header
-            with open(parse_failures_file, "w") as f:
-                f.write("channel_id,start,end,title,description,category,reason\n")
+            with open(parse_failures_file, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(
+                    [
+                        "channel_id",
+                        "start",
+                        "end",
+                        "title",
+                        "description",
+                        "category",
+                        "reason",
+                    ]
+                )
 
         channel_id_failures_file = os.path.join(
             DATA_DIRECTORY, "epg_channel_id_failures.csv"
@@ -98,9 +104,17 @@ class EPGService:
         channel_id_failure_count = 0
         if os.path.exists(channel_id_failures_file):
             os.remove(channel_id_failures_file)
-            # create a new file and write the header
-            with open(channel_id_failures_file, "w") as f:
-                f.write("channel_id,display_name,reason\n")
+            with open(channel_id_failures_file, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(
+                    [
+                        "failed_channel_id",
+                        "failed_display_name",
+                        "existing_channel_id",
+                        "existing_display_name",
+                        "reason",
+                    ]
+                )
 
         try:
             tree = ET.parse(file_path)
@@ -135,13 +149,31 @@ class EPGService:
                         logger.debug(
                             f"Duplicate channel ID: {channel_id} | Display Name: {display_name}"
                         )
-                        with open(channel_id_failures_file, "a") as f:
-                            f.write(f"{channel_id},{display_name},'duplicate'\n")
+                        existing_channel_id = channel_id  # this doesn't feel right but it's how it is defined
+                        existing_display_name = [
+                            c["display_name"]
+                            for c in channels
+                            if c["channel_id"] == channel_id
+                        ][0]
+                        with open(channel_id_failures_file, "a", newline="") as f:
+                            writer = csv.writer(f)
+                            writer.writerow(
+                                [
+                                    channel_id,
+                                    display_name,
+                                    existing_channel_id,
+                                    existing_display_name,
+                                    "duplicate",
+                                ]
+                            )
                         channel_id_failure_count += 1
                 else:
                     logger.debug(f"No display name found for channel ID: {channel_id}")
-                    with open(parse_failures_file, "a") as f:
-                        f.write(f"'{channel_id}','','missing_display_name'\n")
+                    with open(channel_id_failures_file, "a", newline="") as f:
+                        writer = csv.writer(f)
+                        writer.writerow(
+                            [channel_id, "", "", "", "missing_display_name"]
+                        )
                     parse_failure_count += 1
                     continue
 
@@ -184,17 +216,35 @@ class EPGService:
                         )
                     except ValueError as e:
                         logger.debug(f"Failed to parse datetime: {e}")
-                        with open(parse_failures_file, "a") as f:
-                            f.write(
-                                f"{channel_id}, {start_str}, {end_str}, {title_elem.text}, {description}, {category},'bad_datetime'\n"
+                        with open(parse_failures_file, "a", newline="") as f:
+                            writer = csv.writer(f)
+                            writer.writerow(
+                                [
+                                    channel_id,
+                                    start_str,
+                                    end_str,
+                                    title_elem.text,
+                                    description,
+                                    category,
+                                    "bad_datetime",
+                                ]
                             )
                         parse_failure_count += 1
                         continue
                 else:
                     logger.debug(f"Missing required fields for program: {program}")
-                    with open(parse_failures_file, "a") as f:
-                        f.write(
-                            f"{channel_id}, {start_str}, {end_str}, {title_elem.text}, {description}, {category},'missing_fields'\n"
+                    with open(parse_failures_file, "a", newline="") as f:
+                        writer = csv.writer(f)
+                        writer.writerow(
+                            [
+                                channel_id,
+                                start_str,
+                                end_str,
+                                title_elem.text if title_elem else "",
+                                description,
+                                category,
+                                "missing_fields",
+                            ]
                         )
                     parse_failure_count += 1
                     continue

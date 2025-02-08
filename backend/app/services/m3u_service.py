@@ -1,10 +1,10 @@
+import csv
 import hashlib
 import math
 import os
 import re
 from collections.abc import AsyncGenerator
 from datetime import datetime
-from pathlib import Path
 from typing import Any
 from typing import TypedDict
 
@@ -111,19 +111,15 @@ class M3UService:
         channels: list[ChannelDict] = []
         current_channel: ChannelDict | None = None
 
-        # create CSV files for bad M3U lines
-        # will be for channel_id failures
-        # if the files already exist, remove them
-
         bad_channel_ids_file = os.path.join(
             DATA_DIRECTORY, "m3u_channel_id_failures.csv"
         )
         bad_channel_id_count = 0
         if os.path.exists(bad_channel_ids_file):
             os.remove(bad_channel_ids_file)
-            # create a new file and write the header
-            with open(bad_channel_ids_file, "w") as f:
-                f.write("channel_id,name,group,reason\n")
+            with open(bad_channel_ids_file, "w", newline="") as f:
+                writer = csv.writer(f)
+                writer.writerow(["channel_id", "name", "group", "reason", "url"])
 
         for line in lines:
             line = line.strip()
@@ -149,15 +145,20 @@ class M3UService:
                         }
                     else:
                         logger.debug(f"No channel_id found for channel: {name}")
-                        with open(bad_channel_ids_file, "a") as f:
-                            f.write(f"'',{name},{group},'missing_channel_id'\n")
-                        bad_channel_id_count += 1
+                        bad_channel_info = ["", name, group, "missing_channel_id"]
 
             elif line.startswith("http"):
                 if current_channel:
                     current_channel["url"] = line
                     channels.append(current_channel)
                     current_channel = None
+                    continue
+                elif bad_channel_info:
+                    bad_channel_info.append(line)
+                    bad_channel_id_count += 1
+                    with open(bad_channel_ids_file, "a", newline="") as f:
+                        writer = csv.writer(f)
+                        writer.writerow(bad_channel_info)
 
             elif (
                 line.startswith("#EXTM3U")
