@@ -53,11 +53,6 @@ warn_return_any = true
 strict_optional = true
 exclude = ["dev.py", "_dev.py"]
 
-[tool.poetry.scripts]
-lint = "poetry run ruff check ."
-format = "poetry run black ."
-typecheck = "poetry run mypy ."
-
 [build-system]
 requires = ["poetry-core"]
 build-backend = "poetry.core.masonry.api"

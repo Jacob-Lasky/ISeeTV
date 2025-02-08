@@ -1,0 +1,47 @@
+# This workflow is used to run linting and formatting checks on the codebase.
+# It is triggered when a pull request is created or updated.
+
+name: Linting
+
+on:
+  push:
+    branches:
+      - master
+  pull_request:
+    branches:
+      - master
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Install Python dependencies
+        run: |
+          pip install poetry
+          cd backend
+          poetry install --no-interaction --no-ansi
+
+      - name: Install Frontend dependencies
+        run: |
+          cd frontend
+          npm ci
+
+      - name: Run linting
+        run: |
+          cd backend
+          poetry run mypy .
+          poetry run ruff check .
+          poetry run black --check .
+
+      - name: Run linting
+        run: |
+          cd frontend
+          npm run lint
