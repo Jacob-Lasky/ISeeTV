@@ -127,8 +127,8 @@ def check_config_file() -> None:
             {
                 "m3u_url": "",
                 "epg_url": "",
-                "epg_update_interval": 24,
-                "m3u_update_interval": 24,
+                "epg_update_interval": 12,
+                "m3u_update_interval": 12,
                 "update_on_start": True,
                 "theme": "dark",
                 "guide_start_hour": -1,  # Default 1 hour back

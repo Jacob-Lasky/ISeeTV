@@ -5,24 +5,26 @@
   "dependencies": {
     "@mui/icons-material": "^6.4.3",
     "@mui/material": "^6.4.3",
-    "planby": "^1.1.7",
     "date-fns": "^4.1.0",
     "date-fns-tz": "^3.2.0",
     "hls.js": "^1.5.20",
+    "planby": "^1.1.7",
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "react-router-dom": "^7.1.3"
   },
   "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.23.0",
+    "@typescript-eslint/parser": "^8.23.0",
     "@vitejs/plugin-react": "^4.3.4",
+    "eslint": "^8.0.0",
+    "eslint-config-prettier": "^10.0.1",
+    "eslint-plugin-prettier": "^5.2.3",
+    "eslint-plugin-react": "^7.37.4",
+    "eslint-plugin-react-hooks": "^5.1.0",
     "typescript": "^5.7.3",
     "vite": "^5.0.0",
-    "vite-tsconfig-paths": "^5.1.4",
-    "eslint": "^8.0.0",
-    "@typescript-eslint/parser": "^8.23.0",
-    "@typescript-eslint/eslint-plugin": "^8.23.0",
-    "eslint-plugin-react": "^7.37.4",
-    "eslint-plugin-react-hooks": "^5.1.0"
+    "vite-tsconfig-paths": "^5.1.4"
   },
   "scripts": {
     "start": "vite",

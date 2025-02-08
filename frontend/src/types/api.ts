@@ -5,4 +5,4 @@ export interface ChannelGroup {
 
 export interface ProgressCallback {
   (loaded: number, total: number): void;
-} 
+}

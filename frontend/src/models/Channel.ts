@@ -14,4 +14,4 @@ export interface ChannelResponse {
   total: number;
   skip: number;
   limit: number;
-} 
+}

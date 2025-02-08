@@ -1,18 +1,18 @@
-import { Settings } from '../models/Settings';
+import { Settings } from "../models/Settings";
+import { getUserTimezone } from "../utils/dateUtils";
+const SETTINGS_KEY = "iseetv_settings";
 
-const SETTINGS_KEY = 'iseetv_settings';
-
-const defaultSettings: Settings = {
-  m3uUrl: '',
-  m3uUpdateInterval: 24,
-  epgUrl: '',
-  epgUpdateInterval: 24,
+export const defaultSettings: Settings = {
+  m3uUrl: "",
+  m3uUpdateInterval: 12,
+  epgUrl: "",
+  epgUpdateInterval: 12,
   updateOnStart: true,
-  theme: 'system',
+  theme: "system",
   recentDays: 3,
   guideStartHour: -2,
   guideEndHour: 12,
-  timezone: 'America/New_York',
+  timezone: getUserTimezone(),
 };
 
 export const settingsService = {
@@ -28,5 +28,5 @@ export const settingsService = {
   shouldShowSettings: (): boolean => {
     const settings = settingsService.getSettings();
     return !settings.m3uUrl;
-  }
-}; 
+  },
+};

@@ -67,7 +67,9 @@ If you're thinking about contributing to this repo in any way, I want you to! I 
 
 
 ## Linting
-- While in the frontend directory, run `docker run --rm -v $(pwd):/app -w /app node:22 npm run lint`
+- While in the frontend directory, run:
+  - to check linting issues: `docker run --rm -v $(pwd):/app -w /app node:22 npm run lint`
+  - to fix linting issues: `docker run --rm -v $(pwd):/app -w /app node:22 npm run lint -- --fix`
 - While in the backend directory, run:
   - `poetry run mypy .`
   - `poetry run ruff check .`

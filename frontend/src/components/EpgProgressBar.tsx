@@ -1,4 +1,4 @@
-import { Box, Typography, LinearProgress } from '@mui/material';
+import { Box, Typography, LinearProgress } from "@mui/material";
 
 interface ProgressData {
   current: number;
@@ -6,16 +6,20 @@ interface ProgressData {
   message?: string;
 }
 
-export const ProgressBar = ({ progress }: { progress: ProgressData | null }) => {
+export const ProgressBar = ({
+  progress,
+}: {
+  progress: ProgressData | null;
+}) => {
   if (!progress) return null;
 
   return (
     <Box
       sx={{
-        position: 'fixed',
+        position: "fixed",
         bottom: 16,
         right: 16,
-        bgcolor: 'background.paper',
+        bgcolor: "background.paper",
         borderRadius: 1,
         p: 2,
         boxShadow: 3,
@@ -23,7 +27,8 @@ export const ProgressBar = ({ progress }: { progress: ProgressData | null }) => 
       }}
     >
       <Typography variant="body2" sx={{ mb: 1 }}>
-        {progress.message || `EPG: ${Math.round((progress.current / progress.total) * 100)}%`}
+        {progress.message ||
+          `EPG: ${Math.round((progress.current / progress.total) * 100)}%`}
       </Typography>
       <LinearProgress
         variant="determinate"
