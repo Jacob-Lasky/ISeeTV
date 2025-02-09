@@ -22,7 +22,6 @@ The ISeeTV project seeks to build a docker-based IPTV client for desktop and mob
 | [DVR Capabilities](https://github.com/Jacob-Lasky/ISeeTV/milestone/3) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/3?label=) |
 | [v2.0.0 Release - Other Tasks](https://github.com/Jacob-Lasky/ISeeTV/milestone/4) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/4?label=) |
 | [xTeVe-like filtering and restreaming](https://github.com/Jacob-Lasky/ISeeTV/milestone/5) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/5?label=) |
-| [File-based themes and settings](https://github.com/Jacob-Lasky/ISeeTV/milestone/9) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/9?label=) |
 
 <!-- END MILESTONES -->
 
@@ -43,6 +42,12 @@ The ISeeTV project seeks to build a docker-based IPTV client for desktop and mob
 
 <!-- START COMPLETED -->
 <!-- END COMPLETED -->
+| Milestone | Progress |
+|-----------|----------|
+
+| Milestone | Progress |
+|-----------|----------|
+
 
 ## Known Bugs
 - When the EPG goes past the 12am mark (00:00), it counts upwards starting at 25. This is a limitation added by the Planby library. I will be transitioning out of this library but I wanted to get something working before I built my own EPG handler.
