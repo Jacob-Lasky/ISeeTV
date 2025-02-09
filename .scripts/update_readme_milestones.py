@@ -17,7 +17,7 @@ headers = {
 
 def get_milestones():
     """Fetch all milestones from the repository."""
-    url = f"https://api.github.com/repos/{REPO}/milestones"
+    url = f"https://api.github.com/repos/{REPO}/milestones?state=all"
     response = requests.get(url, headers=headers)
     response.raise_for_status()
     return response.json()
@@ -29,7 +29,6 @@ def group_milestones_by_version(milestones):
     version_pattern = r"v(\d+\.\d+\.\d+)"
 
     for milestone in milestones:
-        logger.info(f"Processing milestone: {milestone['title']}")
         # Extract version from title (v1.0.0, v2.0.0, etc.)
         match = re.search(version_pattern, milestone["title"])
         if match:
@@ -87,14 +86,14 @@ def update_readme(milestones):
         for milestone in version_groups[version]:
             logger.info(f"Processing milestone: {milestone['title']}")
             if milestone["state"] == "closed":
-                logger.info(f"Milestone is closed: {milestone['title']}")
+                logger.info(f"- Milestone is closed")
                 progress_badge = f"![Progress](https://img.shields.io/github/milestones/progress-percent/{REPO}/{milestone['number']}?label=&green)"
                 milestone_link = f"[{milestone['title']}](https://github.com/{REPO}/milestone/{milestone['number']})"
                 closed_milestones_content.append(
                     f"| {milestone_link} | {progress_badge} |\n"
                 )
             else:
-                logger.info(f"Milestone is open: {milestone['title']}")
+                logger.info(f"- Milestone is open")
                 formatted_title = format_milestone_title(milestone["title"])
                 progress_badge = f"![Progress](https://img.shields.io/github/milestones/progress-percent/{REPO}/{milestone['number']}?label=)"
                 milestone_link = f"[{formatted_title}](https://github.com/{REPO}/milestone/{milestone['number']})"
