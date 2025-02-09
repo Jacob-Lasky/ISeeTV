@@ -46,41 +46,59 @@ def format_milestone_title(title):
     return re.sub(version_pattern, "", title)
 
 
+def format_milestone_info(milestone, is_closed=False):
+    """Format milestone information into table row format."""
+    formatted_title = format_milestone_title(milestone["title"])
+    label_param = "&green" if is_closed else ""
+    progress_badge = f"![Progress](https://img.shields.io/github/milestones/progress-percent/{REPO}/{milestone['number']}?label={label_param})"
+    milestone_link = f"[{formatted_title}](https://github.com/{REPO}/milestone/{milestone['number']})"
+    return f"| {milestone_link} | {progress_badge} |\n"
+
+
 def update_readme(milestones):
     """Update the README.md file with milestone tables grouped by version."""
     with open("README.md", "r") as file:
         content = file.readlines()
 
-    start_marker = "<!-- START MILESTONES -->\n"
-    end_marker = "<!-- END MILESTONES -->\n"
-    start_index = content.index(start_marker) + 1
-    end_index = content.index(end_marker)
+    # Update milestones section
+    open_start_index = content.index("<!-- START MILESTONES -->\n") + 1
+    open_end_index = content.index("<!-- END MILESTONES -->\n")
+    completed_start_index = content.index("<!-- START COMPLETED -->\n") + 1
+    completed_end_index = content.index("<!-- END COMPLETED -->\n")
 
     # Group milestones by version
     version_groups = group_milestones_by_version(milestones)
 
-    # Build the new content
-    new_content = []
+    # Build the milestones content
+    open_milestones_content = []
+    closed_milestones_content = []
+
     for version in sorted(version_groups.keys()):
         if version == "unknown":
             continue
 
-        new_content.append(f"### {version}\n")
-        new_content.append("| Milestone | Progress |\n")
-        new_content.append("|-----------|----------|\n")
+        for content_list in [open_milestones_content, closed_milestones_content]:
+            content_list.extend(
+                [
+                    f"### {version}\n",
+                    "| Milestone | Progress |\n",
+                    "|-----------|----------|\n",
+                ]
+            )
 
         for milestone in version_groups[version]:
-            formatted_title = format_milestone_title(milestone["title"])
-            progress_badge = f"![Progress](https://img.shields.io/github/milestones/progress-percent/{REPO}/{milestone['number']}?label={'&green' if milestone['state'] == 'closed' else ''})"
-            milestone_link = f"[{formatted_title}](https://github.com/{REPO}/milestone/{milestone['number']})"
-            new_content.append(f"| {milestone_link} | {progress_badge} |\n")
+            if milestone["state"] == "closed":
+                closed_milestones_content.append(format_milestone_info(milestone, True))
+            else:
+                open_milestones_content.append(format_milestone_info(milestone, False))
 
-        new_content.append("\n")  # Add blank line between versions
+        open_milestones_content.append("\n")
+        closed_milestones_content.append("\n")
 
-    # Replace content between markers
-    content[start_index:end_index] = new_content
+    # Replace content
+    content[open_start_index:open_end_index] = open_milestones_content
+    content[completed_start_index:completed_end_index] = closed_milestones_content
 
-    # Write the updated README back to disk
     with open("README.md", "w") as file:
         file.writelines(content)
 
