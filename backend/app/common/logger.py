@@ -13,6 +13,7 @@ class ColorFormatter(logging.Formatter):
         "GREEN": "38;5;28m",  # Darker green
         "LIGHT_BLUE": "38;5;117m",  # Light blue
         "BLUE": "38;5;25m",  # Darker blue
+        "PINK": "38;5;198m",  # Pink
     }
 
     START = "\x1b["
@@ -43,7 +44,14 @@ class Logger:
         verbose: str,  # Changed from bool to str since we're getting it from env
         log_level: str,
         color: Literal[
-            "GREY", "YELLOW", "RED", "LIGHT_GREEN", "GREEN", "LIGHT_BLUE", "BLUE"
+            "GREY",
+            "YELLOW",
+            "RED",
+            "LIGHT_GREEN",
+            "GREEN",
+            "LIGHT_BLUE",
+            "BLUE",
+            "PINK",
         ] = "GREY",
     ) -> None:
         self.logger = logging.getLogger(name)

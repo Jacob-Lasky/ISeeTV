@@ -262,3 +262,12 @@ class EPGService:
         except Exception as e:
             logger.error(f"Failed to parse EPG file: {str(e)}")
             raise
+
+    async def scheduled_update(self) -> None:
+        """Run a scheduled update of EPG content"""
+        from app.main import refresh_epg
+
+        try:
+            await refresh_epg(url=self.url, interval=self.update_interval, force=True)
+        except Exception as e:
+            logger.error(f"Scheduled EPG update failed: {e}")

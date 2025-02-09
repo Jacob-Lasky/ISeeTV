@@ -36,6 +36,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # Local imports
 from app import models
 from app.common.logger import Logger
+from app.scheduler import start_scheduler
 
 from .database import AsyncSessionLocal
 from .database import get_db
@@ -163,6 +164,14 @@ async def startup_event() -> None:
                 await db.commit()
             except Exception as e:
                 raise HTTPException(status_code=500, detail=str(e))
+
+    m3u_service = M3UService(config)
+    epg_service = EPGService(config)
+    scheduler = start_scheduler(
+        m3u_service.scheduled_update, epg_service.scheduled_update
+    )
+
+    app.state.scheduler = scheduler
 
 
 @app.get("/")
@@ -499,6 +508,7 @@ async def toggle_favorite(
 
 
 m3u_service = M3UService(config=load_config())
+epg_service = EPGService(config=load_config())
 
 
 @app.get("/channels/groups")
@@ -659,12 +669,14 @@ async def get_hls_segment(channel_id: str, segment_path: str) -> FileResponse:
 
 @app.post("/settings/save")
 async def save_settings(request: Request) -> dict[str, Any]:
-    """Save settings to config file"""
-    logger.info("Saving settings")
     try:
         data = await request.json()
-        logger.debug(f"Saving settings: {data}")
         config = load_config()
+
+        # Check if intervals changed
+        intervals_changed = data.get("m3uUpdateInterval") != config.get(
+            "m3u_update_interval"
+        ) or data.get("epgUpdateInterval") != config.get("epg_update_interval")
 
         # Update config with new settings
         config["m3u_url"] = data.get("m3uUrl", config.get("m3u_url"))
@@ -680,6 +692,14 @@ async def save_settings(request: Request) -> dict[str, Any]:
         config["use_24_hour"] = data.get("use24Hour", True)
 
         save_config(config)
+
+        # Reschedule jobs if intervals changed
+        if intervals_changed and hasattr(app.state, "scheduler"):
+            app.state.scheduler.shutdown()
+            app.state.scheduler = start_scheduler(
+                m3u_service.scheduled_update, epg_service.scheduled_update
+            )
+
         return {"status": "success"}
 
     except Exception as e:
@@ -721,6 +741,9 @@ def cleanup_temp_dirs() -> None:
     cleanup_all_channel_resources()
     if os.path.exists(SEGMENTS_DIR):
         shutil.rmtree(SEGMENTS_DIR)
+
+    if hasattr(app.state, "scheduler"):
+        app.state.scheduler.shutdown()
 
 
 @app.post("/channels/hard-reset")
