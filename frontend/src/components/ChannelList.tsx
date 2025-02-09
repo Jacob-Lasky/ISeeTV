@@ -917,16 +917,6 @@ export const ChannelList = forwardRef<
               <Tab label="Favorites" value="favorites" />
               <Tab label="Recent" value="recent" />
             </Tabs>
-            <IconButton
-              onClick={() => setEpgExpanded(!epgExpanded)}
-              sx={{
-                borderRadius: "4px 0 0 4px",
-                bgcolor: "background.paper",
-                "&:hover": { bgcolor: "action.hover" },
-              }}
-            >
-              {epgExpanded ? <ChevronLeft /> : <ChevronRight />}
-            </IconButton>
           </Box>
         </Box>
 
@@ -943,28 +933,45 @@ export const ChannelList = forwardRef<
             height: containerHeight,
           }}
         >
-          {/* Add overlay text */}
+          {/* Update overlay text and add guide toggle */}
           <Box
             sx={{
               position: "absolute",
               top: 0,
               left: 0,
               height: 60,
+              width: epgExpanded ? 300 : "100%", // Fixed width when expanded
               zIndex: 1000,
               display: "flex",
               alignItems: "center",
+              justifyContent: "space-between",
               px: 2,
               color: "text.primary",
               pointerEvents: "none",
-              // Hide when guide is expanded on mobile
-              opacity: isMobile && epgExpanded ? 0 : 1,
-              visibility: isMobile && epgExpanded ? "hidden" : "visible",
+              opacity: isMobile ? 0 : 1, // Only hide for mobile
+              visibility: isMobile ? "hidden" : "visible",
+              bgcolor: "background.paper", // Add background
+              borderBottom: 1,
+              borderColor: "divider",
             }}
           >
             <Stack>
               <Typography>{channels.length} Channels</Typography>
               <Typography>{planbyPrograms.length} Programs</Typography>
             </Stack>
+            {!isMobile && (
+              <Button
+                onClick={() => setEpgExpanded(!epgExpanded)}
+                sx={{ 
+                  pointerEvents: "auto",
+                  minWidth: 140, // Fixed width to accommodate both text states
+                }}
+                variant="outlined"
+                size="small"
+              >
+                {epgExpanded ? "Collapse Guide" : "Expand Guide"}
+              </Button>
+            )}
           </Box>
           <Epg {...getEpgProps()}>
             <Layout
