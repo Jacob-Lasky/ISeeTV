@@ -28,9 +28,9 @@ from sqlalchemy import and_
 from sqlalchemy import delete
 from sqlalchemy import func
 from sqlalchemy import insert
+from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy import update
-from sqlalchemy import or_
 from sqlalchemy.ext.asyncio import AsyncSession
 
 # Local imports
@@ -411,12 +411,14 @@ async def get_channels(
                         )
                     )
 
-                program_subquery = program_query.distinct().subquery()
+                # Execute the subquery to get channel IDs
+                program_result = await db.execute(program_query)
+                matching_channel_ids = [row[0] for row in program_result.fetchall()]
 
                 query = query.where(
                     or_(
                         models.Channel.name.ilike(f"%{search}%"),
-                        models.Channel.channel_id.in_(program_subquery),
+                        models.Channel.channel_id.in_(matching_channel_ids),
                     )
                 )
             else:

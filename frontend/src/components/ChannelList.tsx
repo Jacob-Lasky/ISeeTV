@@ -414,7 +414,10 @@ export const ChannelList = forwardRef<
       [theme],
     );
 
-    // Update loadChannels dependencies
+    // Add this near other refs
+    const loadChannelsRef = useRef(async () => {});
+
+    // Update loadChannels to store the function in the ref
     const loadChannels = useCallback(async () => {
       try {
         if (channels.length === 0) {
@@ -439,12 +442,24 @@ export const ChannelList = forwardRef<
       } finally {
         setLoading(false);
       }
-    }, [searchTerm, activeTab, searchIncludePrograms, settings?.guideStartHour, settings?.guideEndHour]);
+    }, [
+      searchTerm,
+      activeTab,
+      searchIncludePrograms,
+      settings?.guideStartHour,
+      settings?.guideEndHour,
+      channels.length,
+    ]);
 
-    // Update the effect to only watch for searchTerm and activeTab changes
+    // Store the latest version of loadChannels in the ref
     useEffect(() => {
-      loadChannels();
-    }, [searchTerm, activeTab]);
+      loadChannelsRef.current = loadChannels;
+    }, [loadChannels]);
+
+    // Update the effect to use the ref
+    useEffect(() => {
+      loadChannelsRef.current();
+    }, [searchTerm, activeTab, searchIncludePrograms]);
 
     // Update handleSearch to not clear channels immediately
     const handleSearch = useCallback((term: string) => {
@@ -693,15 +708,22 @@ export const ChannelList = forwardRef<
     }, [channelListOpen, epgExpanded, isMobile]);
 
     // Custom Program component using Material-UI
-    const ProgramItem = ({ program, searchTerm, searchIncludePrograms, ...rest }: ProgramItemProps) => {
+    const ProgramItem = ({
+      program,
+      searchTerm,
+      searchIncludePrograms,
+      ...rest
+    }: ProgramItemProps) => {
       const { styles, isLive } = useProgram({ program, ...rest });
       const { data } = program;
       const { title, since, till, description } = data;
 
-      const isMatch = searchTerm && searchIncludePrograms && (
-        title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        (description && description.toLowerCase().includes(searchTerm.toLowerCase()))
-      );
+      const isMatch =
+        searchTerm &&
+        searchIncludePrograms &&
+        (title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (description &&
+            description.toLowerCase().includes(searchTerm.toLowerCase())));
 
       const sinceTime = formatTimeWithTimezone(
         new Date(since),
@@ -714,7 +736,8 @@ export const ChannelList = forwardRef<
         settings?.use24Hour ? "HH:mm" : "h:mm a",
       );
 
-      const outlineColor = theme.palette.mode === "dark" ? "#2196f3" : "#000000";
+      const outlineColor =
+        theme.palette.mode === "dark" ? "#2196f3" : "#000000";
 
       return (
         <ProgramBox
@@ -722,8 +745,8 @@ export const ChannelList = forwardRef<
           style={{
             ...styles.position,
             outline: isMatch ? `2px solid ${outlineColor}` : undefined,
-            outlineOffset: isMatch ? '-4px' : undefined,
-            borderRadius: isMatch ? '10px' : undefined,
+            outlineOffset: isMatch ? "-4px" : undefined,
+            borderRadius: isMatch ? "10px" : undefined,
             zIndex: isMatch ? 1 : undefined,
           }}
           onClick={() => setSelectedProgram(data)}
@@ -838,29 +861,8 @@ export const ChannelList = forwardRef<
 
     // Update the callback
     const handleToggleSearchPrograms = useCallback(() => {
-      setSearchIncludePrograms(prev => {
-        const newValue = !prev;
-        // If there's a search term, trigger a new search using the new value
-        if (searchTerm) {
-          setTimeout(() => {
-            const startDate = getTodayOffsetDate(settings?.guideStartHour ?? -1);
-            const endDate = getTodayOffsetDate(settings?.guideEndHour ?? 12);
-
-            channelService.getChannels(0, {
-              search: searchTerm,
-              favoritesOnly: activeTab === "favorites",
-              recentOnly: activeTab === "recent",
-              includePrograms: newValue,  // Use the new value directly
-              startTime: startDate.toISOString(),
-              endTime: endDate.toISOString(),
-            }).then(response => {
-              setChannels(response.items);
-            });
-          }, 0);
-        }
-        return newValue;
-      });
-    }, [searchTerm, activeTab, settings?.guideStartHour, settings?.guideEndHour]);
+      setSearchIncludePrograms((prev) => !prev);
+    }, []);
 
     return (
       <Paper
@@ -882,7 +884,11 @@ export const ChannelList = forwardRef<
             <TextField
               fullWidth
               size="small"
-              placeholder={searchIncludePrograms ? "Search channels & programs..." : "Search channels..."}
+              placeholder={
+                searchIncludePrograms
+                  ? "Search channels & programs..."
+                  : "Search channels..."
+              }
               onChange={(e) => handleSearch(e.target.value)}
               slotProps={{
                 input: {
@@ -894,8 +900,14 @@ export const ChannelList = forwardRef<
                 },
               }}
             />
-            <Tooltip title={searchIncludePrograms ? "Currently searching channels & programs" : "Currently searching channels only"}>
-              <IconButton 
+            <Tooltip
+              title={
+                searchIncludePrograms
+                  ? "Currently searching channels & programs"
+                  : "Currently searching channels only"
+              }
+            >
+              <IconButton
                 onClick={handleToggleSearchPrograms}
                 size="small"
                 color={searchIncludePrograms ? "primary" : "default"}
