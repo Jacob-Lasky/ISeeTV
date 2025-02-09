@@ -258,7 +258,11 @@ export default function App() {
               bottom: 0,
               width: isMobile ? "100%" : "auto",
               minWidth: isMobile ? "100%" : 300,
-              maxWidth: channelListOpen ? (isMobile ? "100%" : "80vw") : 0,
+              maxWidth: channelListOpen 
+                ? isMobile 
+                  ? "100%" // Full width on mobile
+                  : "80vw"  // Desktop max width
+                : 0,
               transform: channelListOpen ? "none" : "translateX(-100%)",
               transition: theme.transitions.create(["transform", "max-width"], {
                 easing: theme.transitions.easing.sharp,
@@ -286,7 +290,11 @@ export default function App() {
           <Box
             sx={{
               position: "absolute",
-              left: channelListOpen ? (isMobile ? "100vw" : 300) : 0,
+              left: channelListOpen 
+                ? isMobile 
+                  ? "100vw"  // Push completely off screen on mobile when list open
+                  : 300      // Desktop offset
+                : 0,
               right: 0,
               top: 0,
               bottom: 0,

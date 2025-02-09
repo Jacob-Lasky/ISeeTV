@@ -654,13 +654,11 @@ export const ChannelList = forwardRef<
       width: epgWidth,
       height: containerHeight,
       itemHeight: 80,
-      // Adjust sidebar width when expanded on mobile
-      sidebarWidth:
-        isMobile && epgExpanded
-          ? window.innerWidth * 0.25 // 1/4 of screen width when expanded
-          : isMobile
-            ? window.innerWidth
-            : 300,
+      sidebarWidth: isMobile 
+        ? epgExpanded 
+          ? window.innerWidth * 0.25  // Mobile expanded
+          : window.innerWidth         // Mobile collapsed
+        : 300, // Desktop always 300
       theme: planbyTheme,
       isBaseTimeFormat: !settings?.use24Hour,
       isSidebar: true,
@@ -671,40 +669,25 @@ export const ChannelList = forwardRef<
       endDate: formattedEndDate,
     });
 
-    // Keep the resize effects after
+    // Update the width calculation effect
     useEffect(() => {
       const updateWidth = () => {
         setEpgWidth(
           channelListOpen
             ? epgExpanded
               ? isMobile
-                ? window.innerWidth // Full width on mobile
-                : Math.min(
-                    window.innerWidth * (EXPANDED_WIDTH_PERCENTAGE / 100),
-                    1200,
-                  )
-              : 300 + SCROLLBAR_WIDTH
-            : 0,
+                ? window.innerWidth // Mobile expanded
+                : window.innerWidth - 300 // Desktop expanded - full remaining width
+              : isMobile 
+                ? 0  // Mobile collapsed
+                : 300 // Desktop collapsed
+            : 0
         );
       };
 
       window.addEventListener("resize", updateWidth);
+      updateWidth(); // Call immediately on mount/update
       return () => window.removeEventListener("resize", updateWidth);
-    }, [channelListOpen, epgExpanded, isMobile]);
-
-    useEffect(() => {
-      setEpgWidth(
-        channelListOpen
-          ? epgExpanded
-            ? isMobile
-              ? window.innerWidth // Full width on mobile
-              : Math.min(
-                  window.innerWidth * (EXPANDED_WIDTH_PERCENTAGE / 100),
-                  1200,
-                )
-            : 300 + SCROLLBAR_WIDTH
-          : 0,
-      );
     }, [channelListOpen, epgExpanded, isMobile]);
 
     // Custom Program component using Material-UI
