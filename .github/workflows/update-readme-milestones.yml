@@ -1,7 +1,7 @@
 name: Update README Milestones
 on:
   milestone:
-    types: [created, edited, deleted, closed]
+    types: [created, edited, deleted, opened, closed]
 permissions:
   contents: write
   pull-requests: write
