@@ -90,6 +90,9 @@ def update_readme_for_open_milestones(milestones):
     # Replace milestones content
     logger.info(f"Updating milestones content")
     content[open_start_index:open_end_index] = open_milestones_content
+    # Write the updated README back to disk
+    with open("README.md", "w") as file:
+        file.writelines(content)
 
 
 def update_readme_for_completed_milestones(milestones):
@@ -109,6 +112,7 @@ def update_readme_for_completed_milestones(milestones):
 
     for milestone in milestones:
         if milestone["state"] == "closed":
+            logger.info(f"Processing milestone: {milestone['title']}")
             logger.info(f"- Milestone is closed")
             progress_badge = f"![Progress](https://img.shields.io/github/milestones/progress-percent/{REPO}/{milestone['number']}?label=&color=green)"
             milestone_link = f"[{milestone['title']}](https://github.com/{REPO}/milestone/{milestone['number']})"
