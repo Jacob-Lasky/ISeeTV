@@ -8,6 +8,9 @@ interface GetChannelsParams {
   group?: string;
   favoritesOnly?: boolean;
   recentOnly?: boolean;
+  includePrograms?: boolean;
+  startTime?: string;
+  endTime?: string;
 }
 
 interface GetChannelsResponse {
@@ -49,6 +52,9 @@ export const channelService = {
       ...(params.search && { search: params.search }),
       ...(params.favoritesOnly && { favorites_only: "true" }),
       ...(params.recentOnly && { recent_only: "true" }),
+      ...(params.includePrograms && { include_programs: "true" }),
+      ...(params.startTime && { start_time: params.startTime }),
+      ...(params.endTime && { end_time: params.endTime }),
     });
 
     console.debug(

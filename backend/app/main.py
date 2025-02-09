@@ -28,6 +28,7 @@ from sqlalchemy import and_
 from sqlalchemy import delete
 from sqlalchemy import func
 from sqlalchemy import insert
+from sqlalchemy import or_
 from sqlalchemy import select
 from sqlalchemy import update
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -375,33 +376,70 @@ async def get_channels(
     search: Optional[str] = None,
     favorites_only: bool = False,
     recent_only: bool = False,
+    include_programs: bool = False,
+    start_time: Optional[str] = None,
+    end_time: Optional[str] = None,
     db: AsyncSession = Depends(get_db),
 ) -> dict[str, Any]:
     try:
         logger.debug(
-            f"Getting channels with params: limit={limit}, recent_only={recent_only}"
+            f"Getting channels with params: limit={limit}, recent_only={recent_only}, "
+            f"include_programs={include_programs}, time_range={start_time} to {end_time}"
         )
 
-        query = select(models.Channel).order_by(
-            models.Channel.group, models.Channel.name
-        )
+        # Start with base channel query
+        query = select(models.Channel)
 
         if search:
-            query = query.where(models.Channel.name.ilike(f"%{search}%"))
+            if include_programs:
+                # Search in both channel names and program descriptions
+                program_query = select(models.Program.channel_id).where(
+                    or_(
+                        models.Program.title.ilike(f"%{search}%"),
+                        models.Program.description.ilike(f"%{search}%"),
+                    )
+                )
+
+                # Add time range filter if provided
+                if start_time and end_time:
+                    start_dt = datetime.fromisoformat(start_time.replace("Z", "+00:00"))
+                    end_dt = datetime.fromisoformat(end_time.replace("Z", "+00:00"))
+                    program_query = program_query.where(
+                        and_(
+                            models.Program.start_time >= start_dt,
+                            models.Program.end_time <= end_dt,
+                        )
+                    )
+
+                # Execute the subquery to get channel IDs
+                program_result = await db.execute(program_query)
+                matching_channel_ids = [row[0] for row in program_result.fetchall()]
+
+                query = query.where(
+                    or_(
+                        models.Channel.name.ilike(f"%{search}%"),
+                        models.Channel.channel_id.in_(matching_channel_ids),
+                    )
+                )
+            else:
+                # Original channel name only search
+                query = query.where(models.Channel.name.ilike(f"%{search}%"))
+
+        # Rest of the filtering remains the same
         if favorites_only:
             query = query.where(models.Channel.is_favorite)
         if recent_only:
             config = load_config()
             recent_days = config.get("recent_days", 3)
             recent_cutoff = datetime.now(timezone.utc) - timedelta(days=recent_days)
-
-            logger.debug(f"Filtering for channels watched since: {recent_cutoff}")
-
             query = (
                 query.where(models.Channel.last_watched.isnot(None))
                 .where(models.Channel.last_watched >= recent_cutoff)
                 .order_by(models.Channel.last_watched.desc())
             )
+        else:
+            # Default ordering
+            query = query.order_by(models.Channel.group, models.Channel.name)
 
         # Get total count
         count_result = await db.execute(
@@ -415,15 +453,6 @@ async def get_channels(
         # Execute the query
         result = await db.execute(query)
         channels = result.scalars().all()
-
-        # Debug logging
-        logger.debug(f"Query returned {len(channels)} channels")
-        if channels:
-            logger.debug(
-                f"Groups in this page: {sorted(set(c.group for c in channels))}"  # type: ignore
-            )
-            logger.debug(f"First channel: {channels[0].name}")
-            logger.debug(f"Last channel: {channels[-1].name}")
 
         return {
             "items": [ChannelResponse.model_validate(channel) for channel in channels],

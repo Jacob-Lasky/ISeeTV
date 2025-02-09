@@ -29,6 +29,7 @@ import GitHubIcon from "@mui/icons-material/GitHub";
 import RedditIcon from "@mui/icons-material/Reddit";
 import { getUserTimezone } from "../utils/dateUtils";
 import { defaultSettings } from "../services/settingsService";
+import CloseIcon from "@mui/icons-material/Close";
 
 // Add timezone list - these are IANA timezone names
 const TIMEZONES = Intl.supportedValuesOf("timeZone");
@@ -197,8 +198,23 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       fullWidth
       disableEscapeKeyDown={!formState.m3uUrl}
     >
-      <DialogTitle>Settings</DialogTitle>
-      <DialogContent>
+      <DialogTitle>
+        Settings
+        {formState.m3uUrl && (
+          <IconButton
+            aria-label="close"
+            onClick={onClose}
+            sx={{
+              position: "absolute",
+              right: 8,
+              top: 8,
+            }}
+          >
+            <CloseIcon />
+          </IconButton>
+        )}
+      </DialogTitle>
+      <DialogContent sx={{ height: "80vh", overflow: "auto" }}>
         <Tabs
           value={activeTab}
           onChange={(_, newValue) => setActiveTab(newValue)}

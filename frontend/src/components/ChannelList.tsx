@@ -26,6 +26,7 @@ import {
   DialogContent,
   DialogActions,
   Button,
+  Tooltip,
 } from "@mui/material";
 import {
   Search as SearchIcon,
@@ -35,6 +36,7 @@ import {
   ChevronRight,
   ChevronLeft,
   Close as CloseIcon,
+  CalendarMonth as CalendarIcon,
 } from "@mui/icons-material";
 import { Channel } from "../models/Channel";
 import { channelService } from "../services/channelService";
@@ -150,7 +152,8 @@ interface ProgramItemProps {
   isBaseTimeFormat?: boolean;
   isMobile?: boolean;
   isLine?: boolean;
-  // Add other known props as needed
+  searchTerm?: string;
+  searchIncludePrograms?: boolean;
 }
 
 interface ChannelItemProps {
@@ -158,7 +161,7 @@ interface ChannelItemProps {
 }
 
 // Add this near the top of the file, outside the component
-const SEARCH_DELAY = 2000; // 2 seconds delay for single character
+const SEARCH_DEBOUNCE = 500; // 500ms debounce
 
 const ProgramDialog = ({
   program,
@@ -360,6 +363,7 @@ export const ChannelList = forwardRef<
     const [selectedChannelDialog, setSelectedChannelDialog] =
       useState<PlanbyChannel | null>(null);
     const searchTimeoutRef = useRef<Window["setTimeout"]>();
+    const [searchIncludePrograms, setSearchIncludePrograms] = useState(false);
 
     // Move planbyTheme inside the component to access theme
     const planbyTheme = useMemo(
@@ -410,18 +414,26 @@ export const ChannelList = forwardRef<
       [theme],
     );
 
-    // Modify loadChannels to not clear channels immediately
+    // Add this near other refs
+    const loadChannelsRef = useRef(async () => {});
+
+    // Update loadChannels to store the function in the ref
     const loadChannels = useCallback(async () => {
       try {
-        // Don't set loading if we already have channels (prevents flash)
         if (channels.length === 0) {
           setLoading(true);
         }
+
+        const startDate = getTodayOffsetDate(settings?.guideStartHour ?? -1);
+        const endDate = getTodayOffsetDate(settings?.guideEndHour ?? 12);
 
         const response = await channelService.getChannels(0, {
           search: searchTerm,
           favoritesOnly: activeTab === "favorites",
           recentOnly: activeTab === "recent",
+          includePrograms: searchIncludePrograms,
+          startTime: startDate.toISOString(),
+          endTime: endDate.toISOString(),
         });
 
         setChannels(response.items);
@@ -430,12 +442,24 @@ export const ChannelList = forwardRef<
       } finally {
         setLoading(false);
       }
-    }, [searchTerm, activeTab, channels.length]);
+    }, [
+      searchTerm,
+      activeTab,
+      searchIncludePrograms,
+      settings?.guideStartHour,
+      settings?.guideEndHour,
+      channels.length,
+    ]);
 
-    // Update the effect to load channels on mount and when dependencies change
+    // Store the latest version of loadChannels in the ref
     useEffect(() => {
-      loadChannels();
-    }, [searchTerm, activeTab, loadChannels]);
+      loadChannelsRef.current = loadChannels;
+    }, [loadChannels]);
+
+    // Update the effect to use the ref
+    useEffect(() => {
+      loadChannelsRef.current();
+    }, [searchTerm, activeTab, searchIncludePrograms]);
 
     // Update handleSearch to not clear channels immediately
     const handleSearch = useCallback((term: string) => {
@@ -443,19 +467,13 @@ export const ChannelList = forwardRef<
         clearTimeout(searchTimeoutRef.current);
       }
 
-      if (term.length === 1) {
-        searchTimeoutRef.current = setTimeout(() => {
-          setSearchTerm(term);
-        }, SEARCH_DELAY);
-      } else {
+      searchTimeoutRef.current = setTimeout(() => {
         setSearchTerm(term);
-      }
-
-      // Only set loading, don't clear channels
-      setLoading(true);
-      if (containerRef.current) {
-        containerRef.current.scrollTop = 0;
-      }
+        setLoading(true);
+        if (containerRef.current) {
+          containerRef.current.scrollTop = 0;
+        }
+      }, SEARCH_DEBOUNCE);
     }, []);
 
     // Clean up timeout on unmount
@@ -690,11 +708,22 @@ export const ChannelList = forwardRef<
     }, [channelListOpen, epgExpanded, isMobile]);
 
     // Custom Program component using Material-UI
-    const ProgramItem = ({ program, ...rest }: ProgramItemProps) => {
+    const ProgramItem = ({
+      program,
+      searchTerm,
+      searchIncludePrograms,
+      ...rest
+    }: ProgramItemProps) => {
       const { styles, isLive } = useProgram({ program, ...rest });
-
       const { data } = program;
-      const { title, since, till } = data;
+      const { title, since, till, description } = data;
+
+      const isMatch =
+        searchTerm &&
+        searchIncludePrograms &&
+        (title.toLowerCase().includes(searchTerm.toLowerCase()) ||
+          (description &&
+            description.toLowerCase().includes(searchTerm.toLowerCase())));
 
       const sinceTime = formatTimeWithTimezone(
         new Date(since),
@@ -706,10 +735,20 @@ export const ChannelList = forwardRef<
         timezone,
         settings?.use24Hour ? "HH:mm" : "h:mm a",
       );
+
+      const outlineColor =
+        theme.palette.mode === "dark" ? "#2196f3" : "#000000";
+
       return (
         <ProgramBox
           width={styles.width}
-          style={styles.position}
+          style={{
+            ...styles.position,
+            outline: isMatch ? `2px solid ${outlineColor}` : undefined,
+            outlineOffset: isMatch ? "-4px" : undefined,
+            borderRadius: isMatch ? "10px" : undefined,
+            zIndex: isMatch ? 1 : undefined,
+          }}
           onClick={() => setSelectedProgram(data)}
         >
           <ProgramContent width={styles.width} isLive={isLive}>
@@ -820,6 +859,11 @@ export const ChannelList = forwardRef<
       );
     };
 
+    // Update the callback
+    const handleToggleSearchPrograms = useCallback(() => {
+      setSearchIncludePrograms((prev) => !prev);
+    }, []);
+
     return (
       <Paper
         elevation={3}
@@ -834,14 +878,17 @@ export const ChannelList = forwardRef<
               display: "flex",
               alignItems: "center",
               gap: 1,
-              // Add margin-right when mobile and channel list is open
-              mr: isMobile && channelListOpen ? 5 : 0, // Add space for collapse button
+              mr: isMobile && channelListOpen ? 5 : 0,
             }}
           >
             <TextField
               fullWidth
               size="small"
-              placeholder="Search channels..."
+              placeholder={
+                searchIncludePrograms
+                  ? "Search channels & programs..."
+                  : "Search channels..."
+              }
               onChange={(e) => handleSearch(e.target.value)}
               slotProps={{
                 input: {
@@ -853,6 +900,21 @@ export const ChannelList = forwardRef<
                 },
               }}
             />
+            <Tooltip
+              title={
+                searchIncludePrograms
+                  ? "Currently searching channels & programs"
+                  : "Currently searching channels only"
+              }
+            >
+              <IconButton
+                onClick={handleToggleSearchPrograms}
+                size="small"
+                color={searchIncludePrograms ? "primary" : "default"}
+              >
+                <CalendarIcon />
+              </IconButton>
+            </Tooltip>
             {onOpenSettings && (
               <IconButton onClick={onOpenSettings} size="small">
                 <SettingsIcon />
@@ -928,6 +990,8 @@ export const ChannelList = forwardRef<
                 <ProgramItem
                   key={program.data.id}
                   program={program}
+                  searchTerm={searchTerm}
+                  searchIncludePrograms={searchIncludePrograms}
                   {...rest}
                 />
               )}
