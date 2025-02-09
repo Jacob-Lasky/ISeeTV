@@ -16,6 +16,7 @@ requests = "^2.32.3"
 aiosqlite = "^0.21.0"
 watchgod = "^0.8.2"
 python-ffmpeg-video-streaming = "^0.1.16"
+apscheduler = "^3.11.0"
 
 [tool.poetry.group.dev.dependencies]
 ruff = "^0.9.5"

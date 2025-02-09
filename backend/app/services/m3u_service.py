@@ -184,3 +184,12 @@ class M3UService:
             key, value = match.groups()
             attrs[key] = value
         return attrs
+
+    async def scheduled_update(self) -> None:
+        """Run a scheduled update of M3U content"""
+        from app.main import refresh_m3u
+
+        try:
+            await refresh_m3u(url=self.url, interval=self.update_interval, force=True)
+        except Exception as e:
+            logger.error(f"Scheduled M3U update failed: {e}")
