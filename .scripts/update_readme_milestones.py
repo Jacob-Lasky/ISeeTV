@@ -72,8 +72,8 @@ def update_readme_for_open_milestones(milestones):
             continue
 
         open_milestones_content.append(f"### {version}\n")
-        open_milestones_content.append("| Milestone | Progress |\n")
-        open_milestones_content.append("|-----------|----------|\n")
+        open_milestones_content.append("| Milestone | Progress | # Issues Left |\n")
+        open_milestones_content.append("|-----------|----------|--------------|\n")
 
         for milestone in version_groups[version]:
             logger.info(f"Processing milestone: {milestone['title']}")
@@ -83,7 +83,7 @@ def update_readme_for_open_milestones(milestones):
                 progress_badge = f"![Progress](https://img.shields.io/github/milestones/progress-percent/{REPO}/{milestone['number']}?label=)"
                 milestone_link = f"[{formatted_title}](https://github.com/{REPO}/milestone/{milestone['number']})"
                 open_milestones_content.append(
-                    f"| {milestone_link} | {progress_badge} |\n"
+                    f"| {milestone_link} | {progress_badge} | {milestone['open_issues']} |\n"
                 )
 
         open_milestones_content.append("\n")
@@ -104,8 +104,8 @@ def update_readme_for_completed_milestones(milestones):
     closed_milestones_content = []
 
     # don't want version labels in the closed milestones content
-    closed_milestones_content.append("| Milestone | Progress |\n")
-    closed_milestones_content.append("|-----------|----------|\n")
+    closed_milestones_content.append("| Milestone | Progress | # Issues Closed |\n")
+    closed_milestones_content.append("|-----------|----------|----------------|\n")
 
     for milestone in milestones:
         if milestone["state"] == "closed":
@@ -113,7 +113,7 @@ def update_readme_for_completed_milestones(milestones):
             progress_badge = f"![Progress](https://img.shields.io/github/milestones/progress-percent/{REPO}/{milestone['number']}?label=&color=green)"
             milestone_link = f"[{milestone['title']}](https://github.com/{REPO}/milestone/{milestone['number']})"
             closed_milestones_content.append(
-                f"| {milestone_link} | {progress_badge} |\n"
+                f"| {milestone_link} | {progress_badge} | {milestone['closed_issues']} |\n"
             )
 
     closed_milestones_content.append("\n")
