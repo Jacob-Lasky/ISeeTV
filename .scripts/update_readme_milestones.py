@@ -29,6 +29,7 @@ def group_milestones_by_version(milestones):
     version_pattern = r"v(\d+\.\d+\.\d+)"
 
     for milestone in milestones:
+        logger.info(f"Processing milestone: {milestone['title']}")
         # Extract version from title (v1.0.0, v2.0.0, etc.)
         match = re.search(version_pattern, milestone["title"])
         if match:
