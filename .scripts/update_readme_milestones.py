@@ -3,6 +3,10 @@ import os
 import re
 import logging
 
+logging.basicConfig(level=logging.INFO)
+
+logger = logging.getLogger(__name__)
+
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 REPO = "Jacob-Lasky/ISeeTV"
 headers = {
@@ -71,7 +75,7 @@ def update_readme(milestones):
     closed_milestones_content.append("|-----------|----------|\n")
 
     for version in sorted(version_groups.keys()):
-        logging.info(f"Processing version: {version}")
+        logger.info(f"Processing version: {version}")
         if version == "unknown":
             continue
 
@@ -80,16 +84,16 @@ def update_readme(milestones):
         open_milestones_content.append("|-----------|----------|\n")
 
         for milestone in version_groups[version]:
-            logging.info(f"Processing milestone: {milestone['title']}")
+            logger.info(f"Processing milestone: {milestone['title']}")
             if milestone["state"] == "closed":
-                logging.info(f"Milestone is closed: {milestone['title']}")
+                logger.info(f"Milestone is closed: {milestone['title']}")
                 progress_badge = f"![Progress](https://img.shields.io/github/milestones/progress-percent/{REPO}/{milestone['number']}?label=&green)"
                 milestone_link = f"[{milestone['title']}](https://github.com/{REPO}/milestone/{milestone['number']})"
                 closed_milestones_content.append(
                     f"| {milestone_link} | {progress_badge} |\n"
                 )
             else:
-                logging.info(f"Milestone is open: {milestone['title']}")
+                logger.info(f"Milestone is open: {milestone['title']}")
                 formatted_title = format_milestone_title(milestone["title"])
                 progress_badge = f"![Progress](https://img.shields.io/github/milestones/progress-percent/{REPO}/{milestone['number']}?label=)"
                 milestone_link = f"[{formatted_title}](https://github.com/{REPO}/milestone/{milestone['number']})"
@@ -100,7 +104,7 @@ def update_readme(milestones):
         open_milestones_content.append("\n")
         closed_milestones_content.append("\n")
     # Replace milestones content
-    logging.info(f"Updating milestones content")
+    logger.info(f"Updating milestones content")
     content[open_start_index:open_end_index] = open_milestones_content
     content[completed_start_index:completed_end_index] = closed_milestones_content
 
