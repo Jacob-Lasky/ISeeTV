@@ -71,7 +71,7 @@ def update_readme(milestones):
 
         for milestone in version_groups[version]:
             formatted_title = format_milestone_title(milestone["title"])
-            progress_badge = f"![Progress](https://img.shields.io/github/milestones/progress-percent/{REPO}/{milestone['number']}?label=)"
+            progress_badge = f"![Progress](https://img.shields.io/github/milestones/progress-percent/{REPO}/{milestone['number']}?label={'&green' if milestone['state'] == 'closed' else ''})"
             milestone_link = f"[{formatted_title}](https://github.com/{REPO}/milestone/{milestone['number']})"
             new_content.append(f"| {milestone_link} | {progress_badge} |\n")
 
