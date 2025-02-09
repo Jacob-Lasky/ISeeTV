@@ -847,6 +847,20 @@ export const ChannelList = forwardRef<
       setSearchIncludePrograms((prev) => !prev);
     }, []);
 
+    // Add this effect near other useEffect hooks
+    useEffect(() => {
+      if (isMobile) {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+          e.preventDefault();
+          e.returnValue = "Are you sure you want to refresh? It may take a while to reload the channels and programs.";
+          return e.returnValue;
+        };
+
+        window.addEventListener("beforeunload", handleBeforeUnload);
+        return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+      }
+    }, [isMobile]);
+
     return (
       <Paper
         elevation={3}
@@ -940,7 +954,7 @@ export const ChannelList = forwardRef<
               top: 0,
               left: 0,
               height: 60,
-              width: epgExpanded ? 300 : "100%", // Fixed width when expanded
+              width: 300, // Always keep width at 300px
               zIndex: 1000,
               display: "flex",
               alignItems: "center",
@@ -948,9 +962,9 @@ export const ChannelList = forwardRef<
               px: 2,
               color: "text.primary",
               pointerEvents: "none",
-              opacity: isMobile ? 0 : 1, // Only hide for mobile
+              opacity: isMobile ? 0 : 1,
               visibility: isMobile ? "hidden" : "visible",
-              bgcolor: "background.paper", // Add background
+              bgcolor: "background.paper",
               borderBottom: 1,
               borderColor: "divider",
             }}
