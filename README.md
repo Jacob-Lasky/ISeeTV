@@ -10,19 +10,19 @@ The ISeeTV project seeks to build a docker-based IPTV client for desktop and mob
 ## Planned Features:
 <!-- START MILESTONES -->
 ### v1.0.0
-| Milestone | Progress |
-|-----------|----------|
-| [v1.0.0 Release - Other Tasks](https://github.com/Jacob-Lasky/ISeeTV/milestone/1) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/1?label=) |
-| [Mobile](https://github.com/Jacob-Lasky/ISeeTV/milestone/8) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/8?label=) |
+| Milestone | Progress | # Issues Left |
+|-----------|----------|--------------|
+| [v1.0.0 Release - Other Tasks](https://github.com/Jacob-Lasky/ISeeTV/milestone/1) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/1?label=) | 7 |
+| [Mobile](https://github.com/Jacob-Lasky/ISeeTV/milestone/8) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/8?label=) | 4 |
 
 ### v2.0.0
-| Milestone | Progress |
-|-----------|----------|
-| [User Management](https://github.com/Jacob-Lasky/ISeeTV/milestone/2) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/2?label=) |
-| [DVR Capabilities](https://github.com/Jacob-Lasky/ISeeTV/milestone/3) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/3?label=) |
-| [v2.0.0 Release - Other Tasks](https://github.com/Jacob-Lasky/ISeeTV/milestone/4) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/4?label=) |
-| [xTeVe-like filtering and restreaming](https://github.com/Jacob-Lasky/ISeeTV/milestone/5) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/5?label=) |
-| [File-based themes and settings](https://github.com/Jacob-Lasky/ISeeTV/milestone/9) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/9?label=) |
+| Milestone | Progress | # Issues Left |
+|-----------|----------|--------------|
+| [User Management](https://github.com/Jacob-Lasky/ISeeTV/milestone/2) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/2?label=) | 4 |
+| [DVR Capabilities](https://github.com/Jacob-Lasky/ISeeTV/milestone/3) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/3?label=) | 2 |
+| [v2.0.0 Release - Other Tasks](https://github.com/Jacob-Lasky/ISeeTV/milestone/4) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/4?label=) | 9 |
+| [xTeVe-like filtering and restreaming](https://github.com/Jacob-Lasky/ISeeTV/milestone/5) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/5?label=) | 5 |
+| [File-based themes and settings](https://github.com/Jacob-Lasky/ISeeTV/milestone/9) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/9?label=) | 1 |
 
 <!-- END MILESTONES -->
 
@@ -32,6 +32,7 @@ The ISeeTV project seeks to build a docker-based IPTV client for desktop and mob
 |-------|-----------|
 | [full screen video display, no need to have scrolling](https://github.com/Jacob-Lasky/ISeeTV/issues/87) | v1.0.0 - Mobile |
 | [Fully expand sidebar](https://github.com/Jacob-Lasky/ISeeTV/issues/84) | v1.0.0 - Mobile |
+| [CRON for updating M3U and EPG](https://github.com/Jacob-Lasky/ISeeTV/issues/110) | v1.0.0 Release - Other Tasks |
 <!-- END TICKETS -->
 
 ## Completed Features
@@ -39,7 +40,6 @@ The ISeeTV project seeks to build a docker-based IPTV client for desktop and mob
 | Milestone | Progress | # Issues Closed |
 |-----------|----------|----------------|
 | [v1.0.0 - EPG Parsing](https://github.com/Jacob-Lasky/ISeeTV/milestone/6) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/6?label=&color=green) | 9 |
-| [v2.0.0 - File-based themes and settings](https://github.com/Jacob-Lasky/ISeeTV/milestone/9) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/9?label=&color=green) | 0 |
 
 <!-- END COMPLETED -->
 
