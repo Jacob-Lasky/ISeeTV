@@ -22,6 +22,7 @@ The ISeeTV project seeks to build a docker-based IPTV client for desktop and mob
 | [DVR Capabilities](https://github.com/Jacob-Lasky/ISeeTV/milestone/3) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/3?label=) |
 | [v2.0.0 Release - Other Tasks](https://github.com/Jacob-Lasky/ISeeTV/milestone/4) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/4?label=) |
 | [xTeVe-like filtering and restreaming](https://github.com/Jacob-Lasky/ISeeTV/milestone/5) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/5?label=) |
+| [File-based themes and settings](https://github.com/Jacob-Lasky/ISeeTV/milestone/9) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/9?label=) |
 
 <!-- END MILESTONES -->
 
@@ -32,6 +33,14 @@ The ISeeTV project seeks to build a docker-based IPTV client for desktop and mob
 <!-- END TICKETS -->
 
 ## Completed Features
+### v1.0.0
+| Milestone | Progress |
+|-----------|----------|
+
+### v2.0.0
+| Milestone | Progress |
+|-----------|----------|
+
 <!-- START COMPLETED -->
 <!-- END COMPLETED -->
 
