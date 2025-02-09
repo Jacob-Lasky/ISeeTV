@@ -32,7 +32,6 @@ The ISeeTV project seeks to build a docker-based IPTV client for desktop and mob
 |-------|-----------|
 | [full screen video display, no need to have scrolling](https://github.com/Jacob-Lasky/ISeeTV/issues/87) | v1.0.0 - Mobile |
 | [Fully expand sidebar](https://github.com/Jacob-Lasky/ISeeTV/issues/84) | v1.0.0 - Mobile |
-| [CRON for updating M3U and EPG](https://github.com/Jacob-Lasky/ISeeTV/issues/110) | v1.0.0 Release - Other Tasks |
 <!-- END TICKETS -->
 
 ## Completed Features
