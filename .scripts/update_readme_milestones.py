@@ -60,7 +60,7 @@ def update_readme(milestones):
     open_start_index = content.index("<!-- START MILESTONES -->\n") + 1
     open_end_index = content.index("<!-- END MILESTONES -->\n")
 
-    completed_start_index = content.index("<!-- START COMPLETED -->\n") + 1
+    completed_start_index = content.index("<!-- START COMPLETED -->\n")
     completed_end_index = content.index("<!-- END COMPLETED -->\n")
 
     # Group milestones by version

@@ -34,8 +34,8 @@ The ISeeTV project seeks to build a docker-based IPTV client for desktop and mob
 ## Completed Features
 <!-- START COMPLETED -->
 | Milestone | Progress |
-| Milestone | Progress |
 |-----------|----------|
+<!-- END COMPLETED -->
 
 
 
