@@ -36,13 +36,13 @@ from sqlalchemy.ext.asyncio import AsyncSession
 # Local imports
 from app import models
 from app.common.logger import Logger
+from app.scheduler import start_scheduler
 
 from .database import AsyncSessionLocal
 from .database import get_db
 from .services.epg_service import EPGService
 from .services.m3u_service import M3UService
 from .video_helpers import process_video
-from app.scheduler import start_scheduler
 
 logger = Logger(
     name="ISeeTV-Backend",
@@ -508,6 +508,7 @@ async def toggle_favorite(
 
 
 m3u_service = M3UService(config=load_config())
+epg_service = EPGService(config=load_config())
 
 
 @app.get("/channels/groups")
