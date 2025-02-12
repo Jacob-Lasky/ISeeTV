@@ -47,6 +47,8 @@ interface SettingsModalProps {
     current: number,
     total: number | { type: "complete" },
   ) => void;
+  channelCount?: number;
+  programCount?: number;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -56,6 +58,8 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onSave,
   onM3uProgress,
   onEpgProgress,
+  channelCount = 0,
+  programCount = 0,
 }) => {
   const [formState, setFormState] = useState<Settings>({
     ...defaultSettings,
@@ -198,16 +202,17 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       fullWidth
       disableEscapeKeyDown={!formState.m3uUrl}
     >
-      <DialogTitle>
-        Settings
+      <DialogTitle sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+        <Box sx={{ flexGrow: 1 }}>Settings</Box>
+        <Typography variant="body2" color="text.secondary">
+          {channelCount} Channels • {programCount} Programs
+        </Typography>
         {formState.m3uUrl && (
           <IconButton
             aria-label="close"
             onClick={onClose}
             sx={{
-              position: "absolute",
-              right: 8,
-              top: 8,
+              ml: 1,
             }}
           >
             <CloseIcon />

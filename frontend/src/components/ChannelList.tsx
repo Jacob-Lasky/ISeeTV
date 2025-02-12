@@ -59,6 +59,7 @@ import {
 import { useTheme } from "@mui/material/styles";
 import { formatTimeWithTimezone, getTodayOffsetDate } from "../utils/dateUtils";
 import { Settings } from "../models/Settings";
+import { SettingsModal } from "./SettingsModal";
 
 const TIME_BLOCK_WIDTH = 150;
 const HEADER_HEIGHT = 48;
@@ -364,6 +365,7 @@ export const ChannelList = forwardRef<
       useState<PlanbyChannel | null>(null);
     const searchTimeoutRef = useRef<Window["setTimeout"]>();
     const [searchIncludePrograms, setSearchIncludePrograms] = useState(true);
+    const [settingsOpen, setSettingsOpen] = useState(false);
 
     // Move planbyTheme inside the component to access theme
     const planbyTheme = useMemo(
@@ -913,7 +915,10 @@ export const ChannelList = forwardRef<
               </IconButton>
             </Tooltip>
             {onOpenSettings && (
-              <IconButton onClick={onOpenSettings} size="small">
+              <IconButton 
+                onClick={() => setSettingsOpen(true)} 
+                size="small"
+              >
                 <SettingsIcon />
               </IconButton>
             )}
@@ -954,38 +959,38 @@ export const ChannelList = forwardRef<
               top: 0,
               left: 0,
               height: 60,
-              width: 300, // Always keep width at 300px
+              width: isMobile 
+                ? epgExpanded 
+                  ? window.innerWidth * 0.25  // Match the mobile expanded channel container width
+                  : "100%"                    // Full width when not expanded
+                : 300,                        // Desktop width
               zIndex: 1000,
               display: "flex",
               alignItems: "center",
-              justifyContent: "space-between",
+              justifyContent: "center",
               px: 2,
               color: "text.primary",
-              pointerEvents: "none",
-              opacity: isMobile ? 0 : 1,
-              visibility: isMobile ? "hidden" : "visible",
               bgcolor: "background.paper",
               borderBottom: 1,
               borderColor: "divider",
             }}
           >
-            <Stack>
-              <Typography>{channels.length} Channels</Typography>
-              <Typography>{planbyPrograms.length} Programs</Typography>
-            </Stack>
-            {!isMobile && (
-              <Button
-                onClick={() => setEpgExpanded(!epgExpanded)}
-                sx={{ 
-                  pointerEvents: "auto",
-                  minWidth: 140, // Fixed width to accommodate both text states
-                }}
-                variant="outlined"
-                size="small"
-              >
-                {epgExpanded ? "Collapse Guide" : "Expand Guide"}
-              </Button>
-            )}
+            <Button
+              onClick={() => setEpgExpanded(!epgExpanded)}
+              sx={{ 
+                width: "100%",
+                maxWidth: isMobile 
+                  ? epgExpanded 
+                    ? window.innerWidth * 0.25
+                    : "none"
+                  : 300,
+                pointerEvents: "auto",
+              }}
+              variant="outlined"
+              size="small"
+            >
+              {epgExpanded ? "Collapse Guide" : "Expand Guide"}
+            </Button>
           </Box>
           <Epg {...getEpgProps()}>
             <Layout
@@ -1062,6 +1067,22 @@ export const ChannelList = forwardRef<
               ?.isFavorite || false
           }
         />
+
+        {onOpenSettings && (
+          <SettingsModal
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            settings={settings || defaultSettings}
+            onSave={async (newSettings) => {
+              setSettingsOpen(false);
+              if (onOpenSettings) {
+                onOpenSettings();
+              }
+            }}
+            channelCount={channels.length}
+            programCount={planbyPrograms.length}
+          />
+        )}
       </Paper>
     );
   },
