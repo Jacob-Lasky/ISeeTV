@@ -363,7 +363,7 @@ export const ChannelList = forwardRef<
     const [selectedChannelDialog, setSelectedChannelDialog] =
       useState<PlanbyChannel | null>(null);
     const searchTimeoutRef = useRef<Window["setTimeout"]>();
-    const [searchIncludePrograms, setSearchIncludePrograms] = useState(false);
+    const [searchIncludePrograms, setSearchIncludePrograms] = useState(true);
 
     // Move planbyTheme inside the component to access theme
     const planbyTheme = useMemo(
