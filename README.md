@@ -13,14 +13,14 @@ The ISeeTV project seeks to build a docker-based IPTV client for desktop and mob
 | Milestone | Progress | # Issues Left |
 |-----------|----------|--------------|
 | [v1.0.0 Release - Other Tasks](https://github.com/Jacob-Lasky/ISeeTV/milestone/1) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/1?label=) | 7 |
-| [Mobile](https://github.com/Jacob-Lasky/ISeeTV/milestone/8) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/8?label=) | 4 |
+| [Basic Mobile Functionality](https://github.com/Jacob-Lasky/ISeeTV/milestone/8) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/8?label=) | 3 |
 
 ### v2.0.0
 | Milestone | Progress | # Issues Left |
 |-----------|----------|--------------|
 | [User Management](https://github.com/Jacob-Lasky/ISeeTV/milestone/2) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/2?label=) | 4 |
 | [DVR Capabilities](https://github.com/Jacob-Lasky/ISeeTV/milestone/3) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/3?label=) | 2 |
-| [v2.0.0 Release - Other Tasks](https://github.com/Jacob-Lasky/ISeeTV/milestone/4) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/4?label=) | 9 |
+| [v2.0.0 Release - Other Tasks](https://github.com/Jacob-Lasky/ISeeTV/milestone/4) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/4?label=) | 15 |
 | [xTeVe-like filtering and restreaming](https://github.com/Jacob-Lasky/ISeeTV/milestone/5) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/5?label=) | 5 |
 | [File-based themes and settings](https://github.com/Jacob-Lasky/ISeeTV/milestone/9) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/9?label=) | 1 |
 
