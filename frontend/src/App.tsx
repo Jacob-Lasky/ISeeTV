@@ -71,9 +71,9 @@ export default function App() {
   // Move useMediaQuery after theme creation
   const isMobile = useMediaQuery(theme.breakpoints.down("sm"));
 
-  // Combine initial data loading into one effect
+  // Split the effects
   useEffect(() => {
-    const initializeApp = async () => {
+    const loadSettings = async () => {
       try {
         const loadedSettings = await channelService.getSettings();
         setSettings({
@@ -84,47 +84,9 @@ export default function App() {
 
         if (!loadedSettings.m3uUrl) {
           setSettingsOpen(true);
-          return;
         }
-
-        // Only fetch programs if we need to update
-        if (loadedSettings.updateOnStart) {
-          await channelService.refreshM3U(
-            loadedSettings.m3uUrl,
-            loadedSettings.m3uUpdateInterval,
-            false,
-            handleM3uProgress,
-          );
-
-          if (loadedSettings.epgUrl) {
-            await channelService.refreshEPG(
-              loadedSettings.epgUrl,
-              loadedSettings.epgUpdateInterval,
-              false,
-              handleEpgProgress,
-            );
-          }
-        }
-
-        // Fetch programs after potential refresh
-        setProgramsLoading(true);
-        const startTimeDate = getTodayOffsetDate(settings.guideStartHour);
-        const endTimeDate = getTodayOffsetDate(settings.guideEndHour);
-        const startTime = format(startTimeDate, "yyyy-MM-dd'T'HH:mm:ss");
-        const endTime = format(endTimeDate, "yyyy-MM-dd'T'HH:mm:ss");
-        console.debug("Fetching programs between", startTime, "and", endTime);
-        console.debug("Converting programs to timezone:", settings.timezone);
-        const programData = await channelService.getPrograms(
-          null,
-          startTimeDate,
-          endTimeDate,
-          settings.timezone,
-        );
-        setPrograms(programData);
-        setProgramsLoading(false);
       } catch (error) {
-        setProgramsLoading(false);
-        console.error("Failed to initialize app:", error);
+        console.error("Failed to load settings:", error);
         setSettings((prev) => ({
           ...defaultSettings,
           ...prev,
@@ -134,8 +96,38 @@ export default function App() {
       }
     };
 
-    initializeApp();
-  }, [settings.guideStartHour, settings.guideEndHour, settings.timezone]);
+    loadSettings();
+  }, []); // Only run once on mount
+
+  useEffect(() => {
+    const loadPrograms = async () => {
+      if (!settings.m3uUrl) return;
+
+      try {
+        setProgramsLoading(true);
+        const startTimeDate = getTodayOffsetDate(settings.guideStartHour);
+        const endTimeDate = getTodayOffsetDate(settings.guideEndHour);
+        const startTime = format(startTimeDate, "yyyy-MM-dd'T'HH:mm:ss");
+        const endTime = format(endTimeDate, "yyyy-MM-dd'T'HH:mm:ss");
+        console.debug("Fetching programs between", startTime, "and", endTime);
+        console.debug("Converting programs to timezone:", settings.timezone);
+        
+        const programData = await channelService.getPrograms(
+          null,
+          startTimeDate,
+          endTimeDate,
+          settings.timezone,
+        );
+        setPrograms(programData);
+      } catch (error) {
+        console.error("Failed to load programs:", error);
+      } finally {
+        setProgramsLoading(false);
+      }
+    };
+
+    loadPrograms();
+  }, [settings.guideStartHour, settings.guideEndHour, settings.timezone, settings.m3uUrl]);
 
   // Add system theme listener
   useEffect(() => {
