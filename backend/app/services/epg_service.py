@@ -26,6 +26,7 @@ class EPGChannelDict(TypedDict):
     display_name: str
     icon: str | None
     is_primary: bool
+    source: str
 
 
 class EPGProgramDict(TypedDict):
@@ -35,6 +36,7 @@ class EPGProgramDict(TypedDict):
     title: str
     description: str | None
     category: str | None
+    source: str
 
 
 class EPGService:
@@ -79,6 +81,7 @@ class EPGService:
     ) -> tuple[list[EPGChannelDict], list[EPGProgramDict]]:
         """Parse EPG XML and return channel and program data"""
         logger.info(f"Parsing EPG file: {file_path}")
+        source = os.path.basename(file_path)
 
         parse_failures_file = os.path.join(DATA_DIRECTORY, "epg_parse_failures.csv")
         parse_failure_count = 0
@@ -143,6 +146,7 @@ class EPGService:
                                     else None
                                 ),
                                 "is_primary": True,  # First occurrence is primary
+                                "source": source,
                             }
                         )
                     else:
@@ -212,6 +216,7 @@ class EPGService:
                                 "title": title_elem.text,
                                 "description": description,
                                 "category": category,
+                                "source": source,
                             }
                         )
                     except ValueError as e:

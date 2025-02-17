@@ -4,7 +4,8 @@ export interface Channel {
   url: string;
   group: string;
   logo?: string;
-  isFavorite?: boolean;
+  isFavorite: boolean;
+  source?: string;
   lastWatched?: Date;
   is_missing: boolean;
 }
