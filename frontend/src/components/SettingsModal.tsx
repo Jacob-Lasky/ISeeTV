@@ -356,6 +356,27 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                 fullWidth
                 helperText="Days to show in Recent tab"
               />
+                <TextField
+                  label="Program Retention"
+                  type="number"
+                  value={formState.programRetentionHours}
+                  onChange={(e) =>
+                    setFormState({
+                      ...formState,
+                      programRetentionHours: Math.max(
+                        1,
+                        Math.min(24, Number(e.target.value)),
+                      ),
+                    })
+                  }
+                  inputProps={{
+                    min: 1,
+                    max: 24,
+                    step: 1,
+                  }}
+                  fullWidth
+                  helperText="Hours to keep ended programs"
+                />
               <TextField
                 label="Guide Start Hour"
                 type="number"

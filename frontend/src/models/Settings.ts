@@ -10,4 +10,5 @@ export interface Settings {
   guideEndHour: number;
   timezone?: string;
   use24Hour: boolean;
+  programRetentionHours: number;
 }

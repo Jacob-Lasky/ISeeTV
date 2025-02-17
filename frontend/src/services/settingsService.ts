@@ -14,6 +14,7 @@ export const defaultSettings: Settings = {
   guideEndHour: 12,
   timezone: getUserTimezone(),
   use24Hour: true,
+  programRetentionHours: 2,
 };
 
 export const settingsService = {

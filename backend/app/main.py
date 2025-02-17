@@ -151,25 +151,39 @@ async def startup_event() -> None:
     logger.info("ISeeTV backend starting up...")
     check_config_file()
     config = load_config()
-    if "m3u_url" in config:
-        async with AsyncSessionLocal() as db:
-            try:
-                m3u_service = M3UService(config=load_config())
-                await refresh_m3u(
-                    url=config["m3u_url"],
-                    interval=m3u_service.update_interval,
-                    force=False,
-                    db=db,
-                )
-                await db.commit()
-            except Exception as e:
-                raise HTTPException(status_code=500, detail=str(e))
+
+    update_on_start = config.get("update_on_start", True)
+
+    if update_on_start:
+        if "m3u_url" in config:
+            async with AsyncSessionLocal() as db:
+                try:
+                    m3u_service = M3UService(config=load_config())
+                    # if we have 0 rows in the channel table, we need to force the refresh
+                    result = await db.execute(select(models.Channel))
+                    force_refresh = len(result.fetchall()) == 0
+                    if force_refresh:
+                        logger.info("No channels found, forcing M3U refresh")
+
+                    await refresh_m3u(
+                        url=config["m3u_url"],
+                        interval=m3u_service.update_interval,
+                        force=force_refresh,
+                        db=db,
+                    )
+                    await db.commit()
+                except Exception as e:
+                    raise HTTPException(status_code=500, detail=str(e))
 
     m3u_service = M3UService(config)
     epg_service = EPGService(config)
     scheduler = start_scheduler(
-        m3u_service.scheduled_update, epg_service.scheduled_update
+        m3u_service.scheduled_update,
+        epg_service.scheduled_update,
     )
+
+    # Clean up old programs
+    await cleanup_old_programs()
 
     app.state.scheduler = scheduler
 
@@ -377,6 +391,35 @@ async def refresh_epg(
     except Exception as e:
         logger.error(f"Failed to refresh EPG: {str(e)}")
         raise HTTPException(status_code=500, detail=f"Failed to refresh EPG: {str(e)}")
+
+
+@app.post("/programs/cleanup")
+async def cleanup_old_programs_endpoint(
+    retention_hours: int | None = None, db: AsyncSession = Depends(get_db)
+) -> None:
+    """Clean up old programs"""
+    if retention_hours is None:
+        config = load_config()
+        retention_hours = config.get("program_retention_hours", 2)
+    logger.info(
+        f"Cleaning up old programs based on a retention of {retention_hours} hours"
+    )
+
+    try:
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=retention_hours)
+        await db.execute(
+            delete(models.Program).where(models.Program.end_time < cutoff_time)
+        )
+        await db.commit()
+        logger.info("Cleaned up old programs")
+    except Exception as e:
+        logger.error(f"Failed to clean up old programs: {e}")
+
+
+async def cleanup_old_programs() -> None:
+    """Clean up old programs on startup"""
+    async with AsyncSessionLocal() as db:
+        await cleanup_old_programs_endpoint(db=db)
 
 
 @app.get("/channels")
@@ -690,6 +733,7 @@ async def save_settings(request: Request) -> dict[str, Any]:
         config["guide_end_hour"] = data.get("guideEndHour", 12)
         config["timezone"] = data.get("timezone", None)
         config["use_24_hour"] = data.get("use24Hour", True)
+        config["program_retention_hours"] = data.get("programRetentionHours", 2)
 
         save_config(config)
 
@@ -727,6 +771,7 @@ async def get_settings() -> dict[str, Any]:
             "guideEndHour": config.get("guide_end_hour", 12),
             "timezone": config.get("timezone", None),
             "use24Hour": config.get("use_24_hour", True),
+            "programRetentionHours": config.get("program_retention_hours", 2),
         }
     except Exception as e:
         logger.error(f"Failed to load settings: {str(e)}")
@@ -865,9 +910,15 @@ async def get_programs(
     """Get programs for specified channels in a time range"""
     logger.debug(f"Will convert all programs to timezone: {to_timezone}")
     try:
+        # Get retention hours from config
+        config = load_config()
+        retention_hours = config.get("program_retention_hours", 2)
+
         # Convert string dates to datetime objects with explicit UTC timezone
         start_dt = datetime.fromisoformat(start.replace("Z", "+00:00"))
         end_dt = datetime.fromisoformat(end.replace("Z", "+00:00"))
+        # Calculate cutoff time using configured retention
+        cutoff_time = datetime.now(timezone.utc) - timedelta(hours=retention_hours)
 
         logger.debug(f"Fetching programs between {start_dt} and {end_dt}")
 
@@ -889,6 +940,8 @@ async def get_programs(
                     ),
                     models.Program.start_time >= start_dt,
                     models.Program.end_time <= end_dt,
+                    # Add filter for programs that haven't ended more than 2 hours ago
+                    models.Program.end_time >= cutoff_time,
                 )
             )
             .order_by(models.Program.start_time)
