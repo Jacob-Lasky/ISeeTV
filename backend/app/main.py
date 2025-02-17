@@ -199,7 +199,7 @@ async def refresh_m3u(
 ) -> StreamingResponse:
     logger.info("Checking if M3U needs to be refreshed")
     try:
-        m3u_service = M3UService(config=load_config())
+        m3u_service = M3UService(load_config())
         needs_refresh = force or m3u_service.calculate_hours_since_update() >= interval
 
         logger.debug(f"Needs refresh: {needs_refresh}")
@@ -208,11 +208,20 @@ async def refresh_m3u(
             logger.info(f"Starting M3U refresh from {url}")
 
             async def m3u_progress_stream() -> AsyncGenerator[bytes, None]:
-                # First download the M3U and get the file path
+                # Download M3U
                 async for progress in m3u_service.download(url):
                     yield json.dumps(progress).encode() + b"\n"
 
                 # After download is complete, process the file
+                yield json.dumps(
+                    {
+                        "type": "progress",
+                        "current": 100,
+                        "total": 100,
+                        "message": f"Parsing M3U file...",
+                    }
+                ).encode() + b"\n"
+
                 channels, new_channel_ids = await m3u_service.read_and_parse(
                     m3u_service.file
                 )
@@ -237,7 +246,16 @@ async def refresh_m3u(
                     if channel["channel_id"] in favorites:
                         channel["is_favorite"] = favorites[channel["channel_id"]]
 
-                # Insert or update channels
+                # Insert new channels
+                yield json.dumps(
+                    {
+                        "type": "progress",
+                        "current": 100,
+                        "total": 100,
+                        "message": f"Inserting {len(channels)} channels into database...",
+                    }
+                ).encode() + b"\n"
+
                 for channel in channels:
                     stmt = (
                         insert(models.Channel)
@@ -257,13 +275,7 @@ async def refresh_m3u(
                 config["m3u_content_length"] = m3u_service.content_length
                 save_config(config)
 
-                # Final message after everything is done
-                yield json.dumps(
-                    {
-                        "type": "complete",
-                        "message": f"Found {len(new_channel_ids)} new channels in the M3U",
-                    }
-                ).encode() + b"\n"
+                yield json.dumps({"type": "complete"}).encode() + b"\n"
 
             return StreamingResponse(
                 m3u_progress_stream(), media_type="text/event-stream"
@@ -296,45 +308,51 @@ async def refresh_epg(
             async def epg_progress_stream() -> AsyncGenerator[bytes, None]:
                 # Download EPG
                 async for progress in epg_service.download(url):
-                    # Check if progress is a tuple or dict
-                    if isinstance(progress, tuple):
-                        current, total = progress
-                        yield json.dumps(
-                            {
-                                "type": "progress",
-                                "current": current,
-                                "total": total,
-                                "message": "Downloading EPG file...",
-                            }
-                        ).encode() + b"\n"
-                    else:
-                        # If it's not a tuple, assume it's already formatted correctly
-                        yield json.dumps(progress).encode() + b"\n"
+                    yield json.dumps(progress).encode() + b"\n"
 
-                # Parse and store EPG data
-                channels, programs = await epg_service.read_and_parse(epg_service.file)
-
-                # Clear existing EPG data
-                logger.info("Clearing existing EPG data")
+                # Parse EPG data
                 yield json.dumps(
                     {
                         "type": "progress",
-                        "current": 0,
-                        "total": len(programs),
+                        "current": 100,
+                        "total": 100,
+                        "message": "Parsing EPG file...",
+                    }
+                ).encode() + b"\n"
+                channels, programs = await epg_service.read_and_parse(epg_service.file)
+                source = os.path.basename(epg_service.file)
+
+                # Clean up existing EPG data for this source
+                logger.info(f"Cleaning existing EPG data for source: {source}")
+                yield json.dumps(
+                    {
+                        "type": "progress",
+                        "current": 100,
+                        "total": 100,
                         "message": "Clearing existing EPG data...",
                     }
                 ).encode() + b"\n"
 
-                await db.execute(delete(models.EPGChannel))
-                await db.execute(delete(models.Program))
+                await db.execute(
+                    delete(models.EPGChannel).where(models.EPGChannel.source == source)
+                )
+                await db.execute(
+                    delete(models.Program).where(models.Program.source == source)
+                )
+
+                # Clean up old programs
+                cutoff = datetime.now(timezone.utc) - timedelta(hours=24)
+                await db.execute(
+                    delete(models.Program).where(models.Program.end_time < cutoff)
+                )
 
                 # Insert new data
                 logger.info("Inserting new EPG data")
                 yield json.dumps(
                     {
                         "type": "progress",
-                        "current": 0,
-                        "total": len(programs),
+                        "current": 100,
+                        "total": 100,
                         "message": "Inserting EPG channels...",
                     }
                 ).encode() + b"\n"
@@ -344,13 +362,13 @@ async def refresh_epg(
 
                 logger.info(f"Inserting {len(programs)} EPG programs")
                 for i, program in enumerate(programs, 1):
-                    if i % 1000 == 0:  # Update progress every 1000 programs
+                    if i % 100 == 0:  # Update progress every 100 programs
                         yield json.dumps(
                             {
                                 "type": "progress",
                                 "current": i,
                                 "total": len(programs),
-                                "message": f"Inserting program data ({i}/{len(programs)})...",
+                                "message": f"Inserting program data into database ({int(i / len(programs) * 100)}%)...",
                             }
                         ).encode() + b"\n"
                     await db.execute(insert(models.Program).values(**program))
@@ -359,8 +377,8 @@ async def refresh_epg(
                 yield json.dumps(
                     {
                         "type": "progress",
-                        "current": len(programs),
-                        "total": len(programs),
+                        "current": 100,
+                        "total": 100,
                         "message": "Finalizing EPG update...",
                     }
                 ).encode() + b"\n"

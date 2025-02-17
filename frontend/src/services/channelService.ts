@@ -116,7 +116,7 @@ export const channelService = {
     url: string,
     interval: number,
     force: boolean = false,
-    onProgress?: ProgressCallback,
+    onProgress?: (current: number, total: number | ProgressMessage) => void,
   ): Promise<void> {
     const response = await fetch(
       `${API_URL}/m3u/refresh?url=${encodeURIComponent(url)}&interval=${interval}&force=${force}`,
@@ -128,34 +128,53 @@ export const channelService = {
     }
 
     const reader = response.body?.getReader();
+    if (!reader) {
+      throw new Error('No reader available');
+    }
+
     const decoder = new TextDecoder();
+    let buffer = '';
+    
+    try {
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
 
-    if (reader) {
-      try {
-        while (true) {
-          const { done, value } = await reader.read();
-          if (done) break;
-
-          const chunk = decoder.decode(value);
-          const lines = chunk.split("\n");
-
-          for (const line of lines) {
-            if (!line) continue;
-            try {
-              const data = JSON.parse(line);
-              if (data.type === "progress" && onProgress) {
-                onProgress(data.current, data.total);
-              } else if (data.type === "complete") {
-                onProgress?.(0, { type: "complete" });
-              }
-            } catch (e) {
-              console.warn("Failed to parse line:", line, "with error:", e);
+        buffer += decoder.decode(value, { stream: true });
+        
+        // Split by newlines and process complete messages
+        const lines = buffer.split('\n');
+        // Keep the last (potentially incomplete) line in the buffer
+        buffer = lines.pop() || '';
+        
+        for (const line of lines) {
+          if (!line.trim()) continue;
+          
+          try {
+            const data = JSON.parse(line);
+            if (onProgress) {
+              onProgress(data.current, data);
             }
+          } catch (e) {
+            console.debug('Failed to parse line:', line, 'with error:', e);
           }
         }
-      } finally {
-        reader.releaseLock();
       }
+      
+      // Process any remaining data
+      buffer += decoder.decode();
+      if (buffer.trim()) {
+        try {
+          const data = JSON.parse(buffer);
+          if (onProgress) {
+            onProgress(data.current, data);
+          }
+        } catch (e) {
+          console.debug('Failed to parse remaining buffer:', buffer, 'with error:', e);
+        }
+      }
+    } finally {
+      reader.releaseLock();
     }
   },
 
@@ -190,10 +209,8 @@ export const channelService = {
             if (!line) continue;
             try {
               const data = JSON.parse(line);
-              if (data.type === "progress" && onProgress) {
-                onProgress(data.current, data.total);
-              } else if (data.type === "complete") {
-                onProgress?.(0, { type: "complete" });
+              if (onProgress) {
+                onProgress(data.current, data);
               }
             } catch (e) {
               console.debug(

@@ -1022,8 +1022,14 @@ export const ChannelList = forwardRef<
               }}
               variant="outlined"
               size="small"
+              disabled={!settings?.epgUrl}
             >
-              {epgExpanded ? "Collapse Guide" : "Expand Guide"}
+              {settings?.epgUrl 
+                ? epgExpanded 
+                  ? "Collapse Guide" 
+                  : "Expand Guide"
+                : "No EPG Provided"
+              }
             </Button>
           </Box>
           <Epg {...getEpgProps()}>
@@ -1106,7 +1112,7 @@ export const ChannelList = forwardRef<
           <SettingsModal
             open={settingsOpen}
             onClose={() => setSettingsOpen(false)}
-            settings={settings || defaultSettings}
+            settings={settings}
             onSave={async (newSettings) => {
               setSettingsOpen(false);
               if (onOpenSettings) {
@@ -1115,6 +1121,7 @@ export const ChannelList = forwardRef<
             }}
             channelCount={channels.length}
             programCount={planbyPrograms.length}
+            onProgramReset={handleProgramReset}
           />
         )}
       </Paper>
