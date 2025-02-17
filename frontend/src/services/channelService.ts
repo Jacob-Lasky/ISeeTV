@@ -413,4 +413,36 @@ export const channelService = {
       throw new Error("Failed to clear last watched time");
     }
   },
+
+  hardResetPrograms: async (onProgress?: (current: number, total: number | { type: "complete" }) => void) => {
+    const response = await fetch(`${API_URL}/programs/hard-reset`, {
+      method: "POST",
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed to reset programs");
+    }
+
+    if (onProgress) {
+      const reader = response.body?.getReader();
+      if (!reader) return;
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) break;
+
+        const text = new TextDecoder().decode(value);
+        const events = text.split("\n").filter(Boolean);
+
+        for (const event of events) {
+          const data = JSON.parse(event);
+          if (data.type === "progress") {
+            onProgress(data.current, data.total);
+          } else if (data.type === "complete") {
+            onProgress(0, { type: "complete" });
+          }
+        }
+      }
+    }
+  },
 };

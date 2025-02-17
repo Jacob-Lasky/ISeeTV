@@ -863,6 +863,40 @@ export const ChannelList = forwardRef<
       }
     }, [isMobile]);
 
+    // Add this near the top of the file
+    const handleProgramReset = async () => {
+      try {
+        const response = await fetch("/api/programs/hard-reset", {
+          method: "POST",
+        });
+        
+        if (!response.ok) {
+          throw new Error("Failed to reset programs");
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) return;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const text = new TextDecoder().decode(value);
+          const events = text.split("\n").filter(Boolean);
+
+          for (const event of events) {
+            const data = JSON.parse(event);
+            if (data.type === "complete") {
+              // Refresh the guide after reset is complete
+              await refresh();
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to reset programs:", error);
+      }
+    };
+
     return (
       <Paper
         elevation={3}

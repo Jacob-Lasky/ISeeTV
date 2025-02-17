@@ -995,3 +995,65 @@ async def get_programs(
         raise HTTPException(
             status_code=500, detail=f"Failed to fetch programs: {str(e)}"
         )
+
+
+@app.post("/programs/hard-reset")
+async def hard_reset_programs(db: AsyncSession = Depends(get_db)) -> StreamingResponse:
+    """Drop all programs and recreate from EPG"""
+    try:
+        # Delete all programs and EPG channels
+        await db.execute(delete(models.Program))
+        await db.execute(delete(models.EPGChannel))
+        await db.commit()
+
+        # Get EPG URL from config
+        config = load_config()
+        if not config.get("epg_url"):
+            raise HTTPException(status_code=400, detail="No EPG URL configured")
+
+        # Refresh EPG to recreate programs
+        epg_service = EPGService(config=config)
+
+        async def event_stream() -> AsyncGenerator[bytes, None]:
+            yield json.dumps(
+                {"type": "progress", "message": "Deleting programs..."}
+            ).encode() + b"\n"
+
+            # Start EPG refresh
+            async for progress in epg_service.download(config["epg_url"]):
+                yield json.dumps(progress).encode() + b"\n"
+
+            # Process the EPG file
+            channels, programs = await epg_service.read_and_parse(epg_service.file)
+
+            # Insert EPG channels
+            for channel in channels:
+                await db.execute(insert(models.EPGChannel).values(**channel))
+
+            # Insert programs
+            total_programs = len(programs)
+            for i, program in enumerate(programs, 1):
+                await db.execute(insert(models.Program).values(**program))
+                if i % 1000 == 0:  # Update progress every 1000 programs
+                    yield json.dumps(
+                        {
+                            "type": "progress",
+                            "current": i,
+                            "total": total_programs,
+                            "message": f"Inserting programs ({i}/{total_programs})...",
+                        }
+                    ).encode() + b"\n"
+
+            await db.commit()
+
+            yield json.dumps(
+                {"type": "complete", "message": "Program reset complete"}
+            ).encode() + b"\n"
+
+        return StreamingResponse(event_stream(), media_type="text/event-stream")
+
+    except Exception as e:
+        logger.error(f"Failed to hard reset programs: {str(e)}")
+        raise HTTPException(
+            status_code=500, detail=f"Failed to hard reset programs: {str(e)}"
+        )

@@ -49,6 +49,15 @@ interface SettingsModalProps {
   ) => void;
   channelCount?: number;
   programCount?: number;
+onProgramReset?: () => Promise<void>;
+}
+
+// First, let's define a proper type for the progress message
+interface ProgressMessage {
+  type: 'progress' | 'complete';
+  current?: number;
+  total?: number;
+  message?: string;
 }
 
 export const SettingsModal: React.FC<SettingsModalProps> = ({
@@ -60,6 +69,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
   onEpgProgress,
   channelCount = 0,
   programCount = 0,
+  onProgramReset,
 }) => {
   const [formState, setFormState] = useState<Settings>({
     ...defaultSettings,
@@ -180,6 +190,51 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       );
     } finally {
       setIsResetting(false);
+    }
+  };
+
+  const handleProgramReset = async () => {
+    if (!window.confirm(
+      "Are you sure you want to perform a hard reset? This will delete all programs and reload them from the EPG."
+    )) {
+      return;
+    }
+
+    setIsResetting(true);
+    setResetError(null);
+    setProgressDialog({
+      open: true,
+      title: 'Resetting Programs',
+      message: 'Preparing to reset...',
+    });
+
+    try {
+      await channelService.hardResetPrograms((current, total) => {
+        if ('type' in total && total.type === 'complete') {
+          setProgressDialog(prev => ({
+            ...prev,
+            open: false,
+          }));
+        } else {
+          setProgressDialog(prev => ({
+            ...prev,
+            message: `Inserting programs (${current}/${total})...`,
+            progress: (current / (total as number)) * 100,
+          }));
+        }
+        // Still call the original progress handler if it exists
+        onEpgProgress?.(current, total);
+      });
+    } catch (error) {
+      setResetError(
+        error instanceof Error ? error.message : "Failed to reset programs"
+      );
+    } finally {
+      setIsResetting(false);
+      setProgressDialog(prev => ({
+        ...prev,
+        open: false,
+      }));
     }
   };
 
@@ -486,14 +541,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               </Typography>
               <Typography paragraph>
                 If you are experiencing issues, you can perform a hard reset
-                which will delete all channels and reload them from your M3U
-                file.
+                  which will delete all channels/programs and reload them from
+                  your M3U/EPG file.
               </Typography>
               {resetError && (
                 <Alert severity="error" sx={{ mb: 2 }}>
                   {resetError}
                 </Alert>
               )}
+                <Stack direction="row" spacing={2}>
               <Button
                 variant="contained"
                 color="error"
@@ -503,6 +559,15 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
               >
                 {isResetting ? "Resetting..." : "Hard Reset Channels"}
               </Button>
+                  <Button
+                    variant="contained"
+                    color="error"
+                    onClick={handleProgramReset}
+                    disabled={!formState.epgUrl || isResetting}
+                  >
+                    Hard Reset Programs
+                  </Button>
+                </Stack>
             </Box>
           </Stack>
         </TabPanel>
