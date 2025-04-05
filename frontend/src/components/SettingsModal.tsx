@@ -555,7 +555,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
 
               {/* Add Timezone Selection */}
               <Autocomplete
-                value={formState.timezone}
+                value={formState.timezone || getUserTimezone()}
                 onChange={(_, newValue) => {
                   setFormState((prev) => ({
                     ...prev,
@@ -570,6 +570,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
                     helperText="Defaults to browser timezone if not set"
                   />
                 )}
+                disableClearable
               />
 
               <FormControlLabel
