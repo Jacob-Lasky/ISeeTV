@@ -919,8 +919,8 @@ export const ChannelList = forwardRef<
               size="small"
               placeholder={
                 searchIncludePrograms
-                  ? "Search channels & programs..."
-                  : "Search channels..."
+                  ? "Search..."
+                  : "Search..."
               }
               onChange={(e) => handleSearch(e.target.value)}
               slotProps={{
