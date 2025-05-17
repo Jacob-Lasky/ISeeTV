@@ -7,45 +7,9 @@ The ISeeTV project seeks to build a docker-based IPTV client for desktop and mob
 - Easy to deploy
 - Easy to contribute
 
-## Planned Features:
-<!-- START MILESTONES -->
-### v1.0.0
-| Milestone | Progress | # Issues Left |
-|-----------|----------|--------------|
-| [v1.0.0 Release - Other Tasks](https://github.com/Jacob-Lasky/ISeeTV/milestone/1) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/1?label=) | 7 |
-| [Basic Mobile Functionality](https://github.com/Jacob-Lasky/ISeeTV/milestone/8) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/8?label=) | 3 |
-| [Basic User Management](https://github.com/Jacob-Lasky/ISeeTV/milestone/10) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/10?label=) | 0 |
-
-### v2.0.0
-| Milestone | Progress | # Issues Left |
-|-----------|----------|--------------|
-| [Advanced User Management](https://github.com/Jacob-Lasky/ISeeTV/milestone/2) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/2?label=) | 4 |
-| [DVR Capabilities](https://github.com/Jacob-Lasky/ISeeTV/milestone/3) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/3?label=) | 2 |
-| [v2.0.0 Release - Other Tasks](https://github.com/Jacob-Lasky/ISeeTV/milestone/4) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/4?label=) | 15 |
-| [xTeVe-like filtering and restreaming](https://github.com/Jacob-Lasky/ISeeTV/milestone/5) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/5?label=) | 5 |
-| [File-based themes and settings](https://github.com/Jacob-Lasky/ISeeTV/milestone/9) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/9?label=) | 1 |
-
-<!-- END MILESTONES -->
-
-## In-Progress issues
-<!-- START TICKETS -->
-| Title | Milestone |
-|-------|-----------|
-| [full screen video display, no need to have scrolling](https://github.com/Jacob-Lasky/ISeeTV/issues/87) | v1.0.0 - Basic Mobile Functionality |
-| [Fully expand sidebar](https://github.com/Jacob-Lasky/ISeeTV/issues/84) | v1.0.0 - Basic Mobile Functionality |
-| [complete linting](https://github.com/Jacob-Lasky/ISeeTV/issues/124) | v1.0.0 Release - Other Tasks |
-<!-- END TICKETS -->
-
-## Completed Features
-<!-- START COMPLETED -->
-| Milestone | Progress | # Issues Closed |
-|-----------|----------|----------------|
-| [v1.0.0 - EPG Parsing](https://github.com/Jacob-Lasky/ISeeTV/milestone/6) | ![Progress](https://img.shields.io/github/milestones/progress-percent/Jacob-Lasky/ISeeTV/6?label=&color=green) | 9 |
-
-<!-- END COMPLETED -->
-
-
-
+## Project Roadmap
+Check out the project roadmap here:
+- https://github.com/users/Jacob-Lasky/projects/6/views/1
 
 ## Known Bugs
 - When the EPG goes past the 12am mark (00:00), it counts upwards starting at 25. This is a limitation added by the Planby library. I will be transitioning out of this library but I wanted to get something working before I built my own EPG handler.
