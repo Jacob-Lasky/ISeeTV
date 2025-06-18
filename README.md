@@ -2,7 +2,7 @@
 
 <hr></hr>
 
-The ISeeTV project seeks to build a docker-based IPTV client for desktop and mobile browsers. The spirit of the project is to be:
+The ISeeTV project seeks to build a docker-based IPTV proxy and client for desktop and mobile browsers. The spirit of the project is to be:
 - Easy to use
 - Easy to deploy
 - Easy to contribute
@@ -10,6 +10,23 @@ The ISeeTV project seeks to build a docker-based IPTV client for desktop and mob
 ## Project Roadmap
 Check out the project roadmap here:
 - https://github.com/users/Jacob-Lasky/projects/6/views/1
+
+# Guide and Channel proxy
+## Major Focus
+As I've continued working on this project, I realize that I'm working on two distinct features; an EPG/M3U proxy similar to xTeVe and a video-player. The aspect that is missing from other proxies is that TV is dynamic and program-based. Sure, channels can be an important indicator of my interest in the show. BBC always has news playing, ESPN always has sports playing. But what if I want to watch a top-25 NCAA football or basketball matchup? It might be playing on my local news station, on ESPN, CBS or even some channel I've never seen. I want to be able to filter the channels I reveal to an IPTV player based on a channel name or a program name. And I want to do this dynamically so that my guide is 'on demand' and easy to scroll through instead of full of fluff that simply adds noise.
+
+Today, my focus is on fleshing out the proxy while maintaining ISeeTV's spirit of ease. My plans for this phase of the project are on the roadmap but broadly can be broken down into the following pieces:
+- [ ] Strong foundational database design
+- [ ] UI for managing IPTV streams
+- [ ] Powerful built-in filters for creating M3U playlists
+- [ ] Plugin-based filters for ever more fine-tuned refining of playlists
+- [ ] Easily editable final M3U
+- [ ] Explorable inital M3U, filtered M3U and final M3U
+
+As an aside, the video player is a much more difficult challenge and there are tons of different tools that do this well - although not as a self-hosted client, which is why I still see value in that side of the project.
+
+# Video Player and UI
+The development of this is currently on hold as I flesh out the M3U proxy. The video player works. It isn't beautiful and is loaded with bugs. But it's in an MVP for my purposes!
 
 ## Known Bugs
 - When the EPG goes past the 12am mark (00:00), it counts upwards starting at 25. This is a limitation added by the Planby library. I will be transitioning out of this library but I wanted to get something working before I built my own EPG handler.
