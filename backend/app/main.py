@@ -56,6 +56,7 @@ CONFIG_FILE = os.path.join(DATA_DIRECTORY, "config.json")
 
 
 app = FastAPI()
+last_cleanup_time = None
 
 
 # Configure CORS
@@ -131,6 +132,8 @@ def check_config_file() -> None:
                 "epg_url": "",
                 "epg_update_interval": 12,
                 "m3u_update_interval": 12,
+                "m3u_update_time": "00:00",
+                "epg_update_time": "00:00",
                 "update_on_start": True,
                 "theme": "dark",
                 "guide_start_hour": -1,  # Default 1 hour back
@@ -416,8 +419,19 @@ async def cleanup_old_programs_endpoint(
     retention_hours: int | None = None, db: AsyncSession = Depends(get_db)
 ) -> None:
     """Clean up old programs"""
+    config = load_config()
+    current_time = datetime.now(timezone.utc)
+    
+    # Get last cleanup time from config
+    last_cleanup_str = config.get("last_program_cleanup")
+    if last_cleanup_str:
+        last_cleanup_time = datetime.fromisoformat(last_cleanup_str).replace(tzinfo=timezone.utc)
+        # Skip if last cleanup was less than an hour ago
+        if (current_time - last_cleanup_time).total_seconds() < 3600:
+            logger.info("Skipping program cleanup - last cleanup was less than an hour ago")
+            return
+        
     if retention_hours is None:
-        config = load_config()
         retention_hours = config.get("program_retention_hours", 2)
     logger.info(
         f"Cleaning up old programs based on a retention of {retention_hours} hours"
@@ -429,6 +443,9 @@ async def cleanup_old_programs_endpoint(
             delete(models.Program).where(models.Program.end_time < cutoff_time)
         )
         await db.commit()
+        # Update config with new cleanup time
+        config["last_program_cleanup"] = current_time.isoformat()
+        save_config(config)
         logger.info("Cleaned up old programs")
     except Exception as e:
         logger.error(f"Failed to clean up old programs: {e}")
@@ -436,8 +453,23 @@ async def cleanup_old_programs_endpoint(
 
 async def cleanup_old_programs() -> None:
     """Clean up old programs on startup"""
+    config = load_config()
+    current_time = datetime.now(timezone.utc)
+    
+    # Get last cleanup time from config
+    last_cleanup_str = config.get("last_program_cleanup")
+    if last_cleanup_str:
+        last_cleanup_time = datetime.fromisoformat(last_cleanup_str).replace(tzinfo=timezone.utc)
+        # Skip if last cleanup was less than an hour ago
+        if (current_time - last_cleanup_time).total_seconds() < 3600:
+            logger.info("Skipping program cleanup - last cleanup was less than an hour ago")
+            return
+    
     async with AsyncSessionLocal() as db:
         await cleanup_old_programs_endpoint(db=db)
+        # Update config with new cleanup time
+        config["last_program_cleanup"] = current_time.isoformat()
+        save_config(config)
 
 
 @app.get("/channels")
@@ -457,8 +489,55 @@ async def get_channels(
             f"include_programs={include_programs}, time_range={start_time} to {end_time}"
         )
 
+        # Load config for filtering settings
+        config = load_config()
+        channel_filter_type = config.get("channelFilterType", "none")
+        channel_filter_patterns = config.get("channelFilterPatterns", [])
+        program_filter_patterns = config.get("programFilterPatterns", [])
+
         # Start with base channel query
         query = select(models.Channel)
+
+        # Apply channel name filtering
+        if channel_filter_type != "none" and channel_filter_patterns:
+            # Convert patterns to SQL LIKE patterns
+            sql_patterns = [p.replace("*", "%") for p in channel_filter_patterns]
+            
+            # Create OR conditions for each pattern
+            pattern_conditions = [
+                models.Channel.name.ilike(pattern) for pattern in sql_patterns
+            ]
+            
+            if channel_filter_type == "whitelist":
+                # Only include channels matching patterns
+                query = query.where(or_(*pattern_conditions))
+            else:  # blacklist
+                # Exclude channels matching patterns
+                query = query.where(not_(or_(*pattern_conditions)))
+
+        # Apply program-based filtering if needed
+        if program_filter_patterns:
+            # Convert patterns to SQL LIKE patterns
+            sql_patterns = [p.replace("*", "%") for p in program_filter_patterns]
+            
+            # Create a subquery to find channels with matching programs
+            program_query = select(models.Program.channel_id).where(
+                or_(
+                    *[models.Program.title.ilike(pattern) for pattern in sql_patterns]
+                )
+            )
+            
+            # Get channel IDs with matching programs
+            program_result = await db.execute(program_query)
+            matching_channel_ids = [row[0] for row in program_result.fetchall()]
+            
+            # Apply the same filtering logic as channel names
+            if channel_filter_type == "whitelist":
+                # Only include channels with matching programs
+                query = query.where(models.Channel.channel_id.in_(matching_channel_ids))
+            else:  # blacklist
+                # Exclude channels with matching programs
+                query = query.where(not_(models.Channel.channel_id.in_(matching_channel_ids)))
 
         if search:
             if include_programs:
@@ -611,6 +690,28 @@ os.makedirs(SEGMENTS_DIR, exist_ok=True)
 app.mount("/segments", StaticFiles(directory=SEGMENTS_DIR), name="segments")
 
 
+async def get_current_program(channel_id: str, db: AsyncSession) -> str:
+    """Get the current program title for a channel"""
+    current_time = datetime.now(timezone.utc)
+    logger.info(f"Getting current program for channel {channel_id} at {current_time}")
+    result = await db.execute(
+        select(models.Program)
+        .where(
+            and_(
+                models.Program.channel_id == channel_id,
+                models.Program.start_time <= current_time,
+                models.Program.end_time > current_time
+            )
+        )
+    )
+    program = result.scalar_one_or_none()
+    if program:
+        logger.info(f"Found current program: {program.title}")
+        return program.title
+    logger.info("No current program found, using 'unknown'")
+    return "unknown"
+
+
 @app.get("/stream/{channel_id}")
 async def stream_channel(
     channel_id: str,
@@ -632,14 +733,20 @@ async def stream_channel(
     # update last watched
     await update_last_watched(channel_id, db, datetime.now(timezone.utc))
 
+    # Get current program title for the stream file name
+    current_program = await get_current_program(channel_id, db)
+    safe_program_name = "".join(c if c.isalnum() else "_" for c in current_program)
+    logger.info(f"Using program name for stream: {safe_program_name}")
     output_m3u8 = os.path.join(channel_dir, m3u8_name)
+    output_ts = os.path.join(channel_dir, f"{safe_program_name}.ts")
+    logger.info(f"Stream file will be: {output_ts}")
 
-    if not os.path.exists(output_m3u8):
+    if not os.path.exists(output_ts):
         logger.info(f"Created channel directory: {channel_dir}")
 
         # Start the video processing
         ffmpeg_process, monitor = await process_video(
-            stream_url, channel_dir, m3u8_name, channel_id
+            stream_url, channel_dir, m3u8_name, channel_id, safe_program_name
         )
         STREAM_RESOURCES[channel_id] = {
             "dir": channel_dir,
@@ -654,12 +761,11 @@ async def stream_channel(
                 logger.info(f"Cleaning up existing channel {existing_channel}")
                 cleanup_channel_resources(existing_channel)
 
-        # Wait for the manifest to be ready
-        # However, if the channel directory is deleted, this indicates that the stream was stopped
+        # Wait for the stream.ts file to be ready
         x = 0
         while True:
             logger.info(
-                f"Waiting for manifest creation for channel {channel_id}{'.' * ((x%3) + 1)}"
+                f"Waiting for stream creation for channel {channel_id}{'.' * ((x%3) + 1)}"
             )
             if not os.path.exists(channel_dir):
                 msg = "Channel directory not found, likely the stream was manually stopped"
@@ -668,17 +774,27 @@ async def stream_channel(
                     status_code=404,
                     detail=msg,
                 )
-            elif os.path.exists(output_m3u8):
+            elif os.path.exists(output_ts) and os.path.getsize(output_ts) > 0:
+                logger.info(f"Stream file {output_ts} is ready")
                 break
             else:
                 await asyncio.sleep(1)
                 x += 1
                 if x > timeout:
-                    raise TimeoutError(
-                        f"Manifest creation timedout for channel {channel_id}"
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Stream creation timedout for channel {channel_id}"
                     )
 
-    return FileResponse(output_m3u8, media_type="application/vnd.apple.mpegurl")
+    # Set appropriate headers for streaming
+    headers = {
+        "Cache-Control": "no-cache, no-store, must-revalidate",
+        "Pragma": "no-cache",
+        "Expires": "0",
+        "Content-Type": "video/MP2T",
+    }
+    
+    return FileResponse(output_ts, media_type="video/MP2T", headers=headers)
 
 
 def remove_channel_directory(channel_dir: str) -> None:
@@ -752,6 +868,11 @@ async def save_settings(request: Request) -> dict[str, Any]:
         config["timezone"] = data.get("timezone", None)
         config["use_24_hour"] = data.get("use24Hour", True)
         config["program_retention_hours"] = data.get("programRetentionHours", 2)
+        
+        # Save channel filter settings
+        config["channelFilterType"] = data.get("channelFilterType", "none")
+        config["channelFilterPatterns"] = data.get("channelFilterPatterns", [])
+        config["programFilterPatterns"] = data.get("programFilterPatterns", [])
 
         save_config(config)
 
@@ -790,6 +911,9 @@ async def get_settings() -> dict[str, Any]:
             "timezone": config.get("timezone", None),
             "use24Hour": config.get("use_24_hour", True),
             "programRetentionHours": config.get("program_retention_hours", 2),
+            "channelFilterType": config.get("channelFilterType", "none"),
+            "channelFilterPatterns": config.get("channelFilterPatterns", []),
+            "programFilterPatterns": config.get("programFilterPatterns", []),
         }
     except Exception as e:
         logger.error(f"Failed to load settings: {str(e)}")

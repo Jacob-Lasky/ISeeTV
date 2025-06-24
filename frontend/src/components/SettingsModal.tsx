@@ -20,6 +20,9 @@ import {
   Tab,
   Alert,
   Autocomplete,
+  Checkbox,
+  ListItemText,
+  Chip,
 } from "@mui/material";
 import { Settings } from "../models/Settings";
 import RefreshIcon from "@mui/icons-material/Refresh";
@@ -31,6 +34,7 @@ import { getUserTimezone } from "../utils/dateUtils";
 import { defaultSettings } from "../services/settingsService";
 import CloseIcon from "@mui/icons-material/Close";
 import { ProgressDialog } from './ProgressDialog';
+import { ChannelGroup } from "../types/api";
 
 // Add timezone list - these are IANA timezone names
 const TIMEZONES = Intl.supportedValuesOf("timeZone");
@@ -42,11 +46,11 @@ interface SettingsModalProps {
   onSave: (settings: Settings) => Promise<void>;
   onM3uProgress?: (
     current: number,
-    total: number | { type: "complete" },
+    total: number | ProgressMessage,
   ) => void;
   onEpgProgress?: (
     current: number,
-    total: number | { type: "complete" },
+    total: number | ProgressMessage,
   ) => void;
   channelCount?: number;
   programCount?: number;
@@ -94,7 +98,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     open: boolean;
     title: string;
     message: string;
-    progress?: number;
+    progress?: number | undefined;
   }>({
     open: false,
     title: '',
@@ -102,12 +106,47 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
     progress: undefined,
   });
 
+  // Add state for channel groups
+  const [channelGroups, setChannelGroups] = useState<ChannelGroup[]>([]);
+  const [newChannelFilterPattern, setNewChannelFilterPattern] = useState("");
+  const [newProgramFilterPattern, setNewProgramFilterPattern] = useState("");
+  const [categorySearch, setCategorySearch] = useState("");
+
+  // Add useEffect to fetch channel groups
+  useEffect(() => {
+    const fetchChannelGroups = async () => {
+      try {
+        const groups = await channelService.getGroups();
+        setChannelGroups(groups);
+        
+        // Enable all categories by default if no patterns exist
+        if (formState.channelFilterPatterns.length === 0) {
+          const groupNames = groups.map(group => group.name);
+          setFormState({ 
+            ...formState, 
+            channelFilterPatterns: groupNames 
+          });
+        }
+      } catch (error) {
+        console.error("Failed to fetch channel groups:", error);
+      }
+    };
+    
+    fetchChannelGroups();
+  }, []);
+
+  // Filter categories based on search
+  const filteredCategories = channelGroups.filter(group => 
+    group.name.toLowerCase().includes(categorySearch.toLowerCase())
+  );
+
   const handleM3uRefreshClick = async () => {
     setLoading(true);
     setProgressDialog({
       open: true,
       title: 'Refreshing M3U',
       message: 'Preparing to refresh...',
+      progress: undefined,
     });
 
     try {
@@ -166,6 +205,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
       open: true,
       title: 'Refreshing EPG',
       message: 'Preparing to refresh...',
+      progress: undefined,
     });
 
     try {
@@ -244,7 +284,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         ...formState,
         guideStartHour: Number(formState.guideStartHour),
         guideEndHour: Number(formState.guideEndHour),
-        timezone: formState.timezone,
+        timezone: formState.timezone || getUserTimezone(),
       };
       await onSave(updatedSettings);
       onClose();
@@ -366,6 +406,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
             sx={{ borderBottom: 1, borderColor: "divider", mb: 2 }}
           >
             <Tab label="Settings" />
+            <Tab label="Filters" />
             <Tab label="Help" />
           </Tabs>
 
@@ -602,6 +643,240 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
           <TabPanel value={activeTab} index={1}>
             <Stack spacing={3}>
               <Typography variant="h6" gutterBottom>
+                Channel Categories
+              </Typography>
+              
+              <FormControl fullWidth>
+                <InputLabel>Channel Categories</InputLabel>
+                <Select
+                  multiple
+                  value={formState.channelFilterPatterns.filter(pattern => 
+                    channelGroups.some(group => group.name === pattern)
+                  )}
+                  onChange={(e) => {
+                    const selectedGroups = e.target.value as string[];
+                    const otherPatterns = formState.channelFilterPatterns.filter(
+                      pattern => !channelGroups.some(group => group.name === pattern)
+                    );
+                    setFormState({ 
+                      ...formState, 
+                      channelFilterPatterns: [...otherPatterns, ...selectedGroups] 
+                    });
+                  }}
+                  renderValue={(selected) => (
+                    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5 }}>
+                      {(selected as string[]).map((value) => (
+                        <Chip 
+                          key={value} 
+                          label={value} 
+                          onDelete={() => {
+                            const newPatterns = formState.channelFilterPatterns.filter(p => p !== value);
+                            setFormState({ ...formState, channelFilterPatterns: newPatterns });
+                          }}
+                        />
+                      ))}
+                    </Box>
+                  )}
+                  MenuProps={{
+                    PaperProps: {
+                      style: {
+                        maxHeight: 400,
+                      },
+                    },
+                  }}
+                >
+                  <Box sx={{ p: 1, position: 'sticky', top: 0, bgcolor: 'background.paper', zIndex: 1 }}>
+                    <TextField
+                      fullWidth
+                      size="small"
+                      placeholder="Search categories..."
+                      value={categorySearch}
+                      onChange={(e) => setCategorySearch(e.target.value)}
+                      onClick={(e) => e.stopPropagation()}
+                      onKeyDown={(e) => e.stopPropagation()}
+                      onMouseDown={(e) => e.stopPropagation()}
+                      onFocus={(e) => e.stopPropagation()}
+                      onBlur={(e) => e.stopPropagation()}
+                      InputProps={{
+                        onKeyDown: (e) => e.stopPropagation(),
+                        onMouseDown: (e) => e.stopPropagation(),
+                        onClick: (e) => e.stopPropagation(),
+                      }}
+                    />
+                  </Box>
+                  {filteredCategories.map((group) => (
+                    <MenuItem 
+                      key={group.name} 
+                      value={group.name}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        const isSelected = formState.channelFilterPatterns.includes(group.name);
+                        const newPatterns = isSelected
+                          ? formState.channelFilterPatterns.filter(p => p !== group.name)
+                          : [...formState.channelFilterPatterns, group.name];
+                        setFormState({ ...formState, channelFilterPatterns: newPatterns });
+                      }}
+                      sx={{ pointerEvents: 'auto' }}
+                    >
+                      <Checkbox 
+                        checked={formState.channelFilterPatterns.includes(group.name)} 
+                        checkedIcon={<CloseIcon />}
+                        onClick={(e) => e.stopPropagation()}
+                        sx={{ pointerEvents: 'auto' }}
+                      />
+                      <ListItemText primary={group.name} secondary={`${group.count} channels`} />
+                    </MenuItem>
+                  ))}
+                </Select>
+                <Box sx={{ display: 'flex', justifyContent: 'space-between', mt: 1 }}>
+                  <Typography variant="caption" color="text.secondary">
+                    Categories with an X will be included
+                  </Typography>
+                  <Button 
+                    size="small" 
+                    onClick={() => {
+                      // Add all categories
+                      const allGroupNames = channelGroups.map(group => group.name);
+                      setFormState({ 
+                        ...formState, 
+                        channelFilterPatterns: allGroupNames 
+                      });
+                    }}
+                  >
+                    Select All
+                  </Button>
+                </Box>
+              </FormControl>
+
+              <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+                Channel Filtering
+              </Typography>
+              
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Add regex patterns to filter channels. Channels matching these patterns will be shown.
+              </Typography>
+              
+              <Box sx={{ mb: 2 }}>
+                {formState.channelFilterPatterns
+                  .filter(pattern => !channelGroups.some(group => group.name === pattern))
+                  .map((pattern, index) => (
+                    <Box key={index} sx={{ display: 'flex', mb: 1 }}>
+                      <TextField
+                        fullWidth
+                        value={pattern}
+                        onChange={(e) => {
+                          const newPatterns = [...formState.channelFilterPatterns];
+                          newPatterns[index] = e.target.value;
+                          setFormState({ ...formState, channelFilterPatterns: newPatterns });
+                        }}
+                        placeholder="Enter regex pattern (e.g., 'BBC.*', 'CNN.*')"
+                        size="small"
+                        sx={{ mr: 1 }}
+                      />
+                      <IconButton 
+                        color="error" 
+                        onClick={() => {
+                          const newPatterns = formState.channelFilterPatterns.filter((_, i) => i !== index);
+                          setFormState({ ...formState, channelFilterPatterns: newPatterns });
+                        }}
+                      >
+                        <CloseIcon />
+                      </IconButton>
+                    </Box>
+                  ))}
+              </Box>
+              
+              <Box sx={{ display: 'flex', mb: 2 }}>
+                <TextField
+                  fullWidth
+                  value={newChannelFilterPattern}
+                  onChange={(e) => setNewChannelFilterPattern(e.target.value)}
+                  placeholder="Enter new regex pattern"
+                  size="small"
+                  sx={{ mr: 1 }}
+                />
+                <Button 
+                  variant="contained" 
+                  onClick={() => {
+                    if (newChannelFilterPattern.trim()) {
+                      setFormState({ 
+                        ...formState, 
+                        channelFilterPatterns: [...formState.channelFilterPatterns, newChannelFilterPattern.trim()] 
+                      });
+                      setNewChannelFilterPattern("");
+                    }
+                  }}
+                >
+                  Add Filter
+                </Button>
+              </Box>
+
+              <Typography variant="h6" gutterBottom sx={{ mt: 2 }}>
+                Program Filtering
+              </Typography>
+              
+              <Typography variant="body2" color="text.secondary" sx={{ mb: 2 }}>
+                Add regex patterns to filter channels based on their programs.
+              </Typography>
+              
+              <Box sx={{ mb: 2 }}>
+                {formState.programFilterPatterns.map((pattern, index) => (
+                  <Box key={index} sx={{ display: 'flex', mb: 1 }}>
+                    <TextField
+                      fullWidth
+                      value={pattern}
+                      onChange={(e) => {
+                        const newPatterns = [...formState.programFilterPatterns];
+                        newPatterns[index] = e.target.value;
+                        setFormState({ ...formState, programFilterPatterns: newPatterns });
+                      }}
+                      placeholder="Enter regex pattern (e.g., 'News.*', 'Sports.*')"
+                      size="small"
+                      sx={{ mr: 1 }}
+                    />
+                    <IconButton 
+                      color="error" 
+                      onClick={() => {
+                        const newPatterns = formState.programFilterPatterns.filter((_, i) => i !== index);
+                        setFormState({ ...formState, programFilterPatterns: newPatterns });
+                      }}
+                    >
+                      <CloseIcon />
+                    </IconButton>
+                  </Box>
+                ))}
+              </Box>
+              
+              <Box sx={{ display: 'flex', mb: 2 }}>
+                <TextField
+                  fullWidth
+                  value={newProgramFilterPattern}
+                  onChange={(e) => setNewProgramFilterPattern(e.target.value)}
+                  placeholder="Enter new program regex pattern"
+                  size="small"
+                  sx={{ mr: 1 }}
+                />
+                <Button 
+                  variant="contained" 
+                  onClick={() => {
+                    if (newProgramFilterPattern.trim()) {
+                      setFormState({ 
+                        ...formState, 
+                        programFilterPatterns: [...formState.programFilterPatterns, newProgramFilterPattern.trim()] 
+                      });
+                      setNewProgramFilterPattern("");
+                    }
+                  }}
+                >
+                  Add Filter
+                </Button>
+              </Box>
+            </Stack>
+          </TabPanel>
+
+          <TabPanel value={activeTab} index={2}>
+            <Stack spacing={3}>
+              <Typography variant="h6" gutterBottom>
                 Community & Support
               </Typography>
               <Link
@@ -663,7 +938,7 @@ export const SettingsModal: React.FC<SettingsModalProps> = ({
         open={progressDialog.open}
         title={progressDialog.title}
         message={progressDialog.message}
-        progress={progressDialog.progress}
+        progress={progressDialog.progress || 0}
       />
     </>
   );

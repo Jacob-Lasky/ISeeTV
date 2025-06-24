@@ -1,6 +1,5 @@
 import React, { useState, useCallback, useEffect } from "react";
 import { Box, Paper, Avatar, Typography, IconButton } from "@mui/material";
-import Hls from "hls.js";
 import { Channel } from "../models/Channel";
 import { API_URL } from "../config/api";
 import { useParams, useNavigate } from "react-router-dom";
@@ -17,7 +16,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ channel }) => {
   const { channelId } = useParams();
   const navigate = useNavigate();
   const videoRef = React.useRef<HTMLVideoElement>(null);
-  const hlsRef = React.useRef<Hls | null>(null);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [isPlaying, setIsPlaying] = useState<boolean>(true);
 
@@ -33,10 +31,6 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ channel }) => {
 
   React.useEffect(() => {
     return () => {
-      if (hlsRef.current) {
-        hlsRef.current.destroy();
-        hlsRef.current = null;
-      }
       cleanupStream();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -45,63 +39,37 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ channel }) => {
   React.useEffect(() => {
     if (!videoRef.current) return;
 
-    if (hlsRef.current) {
-      hlsRef.current.destroy();
-      hlsRef.current = null;
-    }
-
     const timeoutId = setTimeout(async () => {
       try {
         await cleanupStream();
 
-        if (Hls.isSupported()) {
-          const video = videoRef.current;
-          if (!video) return;
+        const video = videoRef.current;
+        if (!video) return;
 
-          const proxyUrl = `${API_URL}/stream/${channel.channel_id}`;
-          const hls = new Hls({
-            // API reference: https://github.com/video-dev/hls.js/blob/master/docs/API.md
-            maxBufferLength: Infinity, // the maximum number of seconds to buffer
-            maxMaxBufferLength: Infinity,
-            backBufferLength: 120, // allow up to 120 seconds
-            frontBufferFlushThreshold: 60, // in-memory buffer flush threshold in seconds
-            manifestLoadingMaxRetry: 10,
-            manifestLoadingRetryDelay: 500, // retry every X milliseconds
-            levelLoadingMaxRetry: 5, // Retry level loading X times
-            enableWorker: true,
-            liveDurationInfinity: false, // Indicates it's a live stream, but cannot go forward in the stream if we've ever paused
-          });
-
-          hlsRef.current = hls;
-          hls.loadSource(proxyUrl);
-          hls.attachMedia(video);
-
-          hls.on(Hls.Events.MANIFEST_PARSED, () => {
-            video.play().catch((e) => {
-              console.warn("Autoplay prevented:", e);
-              setIsPlaying(false);
-            });
-          });
-
-          hls.on(Hls.Events.ERROR, (_, data) => {
-            console.warn("HLS error:", data);
-            if (data.fatal) {
-              setIsPlaying(false);
-              switch (data.type) {
-                case Hls.ErrorTypes.NETWORK_ERROR:
-                  console.warn("Network error, attempting recovery...");
-                  hls.startLoad();
-                  break;
-                case Hls.ErrorTypes.MEDIA_ERROR:
-                  console.warn("Media error, attempting recovery...");
-                  hls.recoverMediaError();
-                  break;
-                default:
-                  console.error("Fatal error:", data);
-                  hls.destroy();
-                  break;
-              }
-            }
+        // Use the stream.ts file directly
+        const streamUrl = `${API_URL}/stream/${channel.channel_id}`;
+        
+        // Set up video element for MPEG-TS streaming
+        video.src = streamUrl;
+        
+        // Add event listeners for better error handling
+        video.onloadeddata = () => {
+          console.log("Video data loaded successfully");
+          setIsPlaying(true);
+        };
+        
+        video.onerror = (e) => {
+          console.error("Video error:", e);
+          setErrorMessage("Failed to play video");
+          setIsPlaying(false);
+        };
+        
+        // Try to play the video
+        const playPromise = video.play();
+        if (playPromise !== undefined) {
+          playPromise.catch((e) => {
+            console.warn("Autoplay prevented:", e);
+            setIsPlaying(false);
           });
         }
       } catch (error) {
@@ -195,14 +163,24 @@ export const VideoPlayer: React.FC<VideoPlayerProps> = ({ channel }) => {
         <Box
           sx={{ display: "flex", alignItems: "center", gap: 2, flexGrow: 1 }}
         >
-          <Avatar
-            src={channel.logo}
-            alt={channel.name}
-            variant="square"
-            sx={{ width: 40, height: 40 }}
-          >
-            {channel.name[0]}
-          </Avatar>
+          {channel.logo ? (
+            <Avatar
+              src={channel.logo}
+              alt={channel.name}
+              variant="square"
+              sx={{ width: 40, height: 40 }}
+            >
+              {channel.name[0]}
+            </Avatar>
+          ) : (
+            <Avatar
+              alt={channel.name}
+              variant="square"
+              sx={{ width: 40, height: 40 }}
+            >
+              {channel.name[0]}
+            </Avatar>
+          )}
           <Typography variant="h6" component="div">
             {channel.name}
           </Typography>
