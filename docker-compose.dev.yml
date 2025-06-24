@@ -1,0 +1,29 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: frontend
+    working_dir: /app
+    command: npm run dev -- --host 0.0.0.0 --port 80
+    ports:
+      - "1313:80"
+    volumes:
+      - ./frontend:/app
+    environment:
+      - NODE_ENV=development
+      - VITE_BACKEND_URL=http://backend:1314
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: backend
+    working_dir: /app
+    command: uvicorn main:app --host 0.0.0.0 --port 1314 --reload
+    ports:
+      - "1314:1314"
+    volumes:
+      - ./backend:/app
+    environment:
+      - PYTHONUNBUFFERED=1

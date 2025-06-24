@@ -1,0 +1,17 @@
+# Frontend (Vite) Dev Image
+FROM node:22-slim AS frontend
+
+WORKDIR /app
+COPY frontend/package*.json ./
+RUN npm install
+COPY frontend/ ./
+
+# Backend (FastAPI) Dev Image
+FROM python:3.11-slim AS backend
+
+WORKDIR /app
+RUN pip install poetry==2.1.1
+COPY backend/pyproject.toml backend/poetry.lock* ./
+RUN poetry config virtualenvs.create false
+RUN poetry install --no-root --no-interaction
+COPY backend/ /app

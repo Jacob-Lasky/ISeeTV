@@ -1,7 +1,7 @@
 # Multi-stage build for ISeeTV frontend and backend
 
 # Stage 1: Build the Vue.js frontend
-FROM node:22-alpine AS frontend-builder
+FROM node:22-slim AS frontend-builder
 WORKDIR /app/frontend
 
 # Copy frontend files
@@ -11,7 +11,7 @@ RUN npm install
 # Copy the rest of the frontend code
 COPY frontend/ ./
 
-# Build the frontend
+# build the frontend
 RUN npm run build
 
 # Stage 2: Set up the Python backend

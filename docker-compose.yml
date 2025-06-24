@@ -8,4 +8,4 @@ services:
     restart: unless-stopped
     container_name: iseetv-app
     environment:
-      - NODE_ENV=development
+      - NODE_ENV=production
