@@ -26,17 +26,17 @@ Today, my focus is on fleshing out the proxy while maintaining ISeeTV's spirit o
 ## Running the project manually
 This is the standard way to run the project. It will build the frontend and backend and start the containers.
 
-1. Run `docker compose up` to start the containers.
+1. Run `docker compose up --build` to start the containers.
 2. Open `http://localhost:1313` in your browser.
 
 ## Running the project in development mode
 This enables hot reloading on the frontend and backend. It is not recommended for production use.
 
-1. Run `docker compose -f docker-compose.dev.yml up` to start the containers.
+1. Run `docker compose -f docker-compose.dev.yml up --build` to start the containers.
 2. Open `http://localhost:1313` in your browser.
 
 ## FAQ | Development | Feature Requests:
-If you're thinking about contributing to this repo in any way, I want you to! I welcome all ideas, feedback, questions and PRs. I had never used React before starting this project and recognize how difficult it is to jump into something new. I want us all to support each other as we build cool things together.
+If you're thinking about contributing to this repo in any way, I want you to! I welcome all ideas, feedback, questions and PRs. I had never used Vite/Vue/Typescript before starting this project and recognize how difficult it is to jump into something new. I want us all to support each other as we build cool things together.
 - General Development Guidelines
   - Ask tons of questions
   - Keep code tested
