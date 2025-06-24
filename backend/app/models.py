@@ -23,6 +23,7 @@ class Channel(Base):
     last_watched = Column(DateTime, nullable=True)
     created_at = Column(DateTime, default=datetime.datetime.now(datetime.UTC))
     is_missing = Column(Boolean, default=False)
+    source = Column(String, nullable=True)
 
 
 class EPGChannel(Base):
@@ -33,6 +34,7 @@ class EPGChannel(Base):
     display_name = Column(String, nullable=False)
     icon = Column(String)
     is_primary = Column(Boolean, default=False)
+    source = Column(String, nullable=True)
 
 
 class Program(Base):
@@ -46,3 +48,4 @@ class Program(Base):
     description = Column(String, nullable=False, default="No description available")
     category = Column(String, nullable=False, default="Uncategorized")
     created_at = Column(DateTime, default=func.now())
+    source = Column(String, nullable=True)

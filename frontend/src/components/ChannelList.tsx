@@ -59,6 +59,7 @@ import {
 import { useTheme } from "@mui/material/styles";
 import { formatTimeWithTimezone, getTodayOffsetDate } from "../utils/dateUtils";
 import { Settings } from "../models/Settings";
+import { SettingsModal } from "./SettingsModal";
 
 const TIME_BLOCK_WIDTH = 150;
 const HEADER_HEIGHT = 48;
@@ -363,7 +364,8 @@ export const ChannelList = forwardRef<
     const [selectedChannelDialog, setSelectedChannelDialog] =
       useState<PlanbyChannel | null>(null);
     const searchTimeoutRef = useRef<Window["setTimeout"]>();
-    const [searchIncludePrograms, setSearchIncludePrograms] = useState(false);
+    const [searchIncludePrograms, setSearchIncludePrograms] = useState(true);
+    const [settingsOpen, setSettingsOpen] = useState(false);
 
     // Move planbyTheme inside the component to access theme
     const planbyTheme = useMemo(
@@ -654,13 +656,11 @@ export const ChannelList = forwardRef<
       width: epgWidth,
       height: containerHeight,
       itemHeight: 80,
-      // Adjust sidebar width when expanded on mobile
-      sidebarWidth:
-        isMobile && epgExpanded
-          ? window.innerWidth * 0.25 // 1/4 of screen width when expanded
-          : isMobile
-            ? window.innerWidth
-            : 300,
+      sidebarWidth: isMobile 
+        ? epgExpanded 
+          ? window.innerWidth * 0.25  // Mobile expanded
+          : window.innerWidth         // Mobile collapsed
+        : 300, // Desktop always 300
       theme: planbyTheme,
       isBaseTimeFormat: !settings?.use24Hour,
       isSidebar: true,
@@ -671,40 +671,25 @@ export const ChannelList = forwardRef<
       endDate: formattedEndDate,
     });
 
-    // Keep the resize effects after
+    // Update the width calculation effect
     useEffect(() => {
       const updateWidth = () => {
         setEpgWidth(
           channelListOpen
             ? epgExpanded
               ? isMobile
-                ? window.innerWidth // Full width on mobile
-                : Math.min(
-                    window.innerWidth * (EXPANDED_WIDTH_PERCENTAGE / 100),
-                    1200,
-                  )
-              : 300 + SCROLLBAR_WIDTH
-            : 0,
+                ? window.innerWidth // Mobile expanded
+                : window.innerWidth - 300 // Desktop expanded - full remaining width
+              : isMobile 
+                ? 0  // Mobile collapsed
+                : 300 // Desktop collapsed
+            : 0
         );
       };
 
       window.addEventListener("resize", updateWidth);
+      updateWidth(); // Call immediately on mount/update
       return () => window.removeEventListener("resize", updateWidth);
-    }, [channelListOpen, epgExpanded, isMobile]);
-
-    useEffect(() => {
-      setEpgWidth(
-        channelListOpen
-          ? epgExpanded
-            ? isMobile
-              ? window.innerWidth // Full width on mobile
-              : Math.min(
-                  window.innerWidth * (EXPANDED_WIDTH_PERCENTAGE / 100),
-                  1200,
-                )
-            : 300 + SCROLLBAR_WIDTH
-          : 0,
-      );
     }, [channelListOpen, epgExpanded, isMobile]);
 
     // Custom Program component using Material-UI
@@ -864,6 +849,54 @@ export const ChannelList = forwardRef<
       setSearchIncludePrograms((prev) => !prev);
     }, []);
 
+    // Add this effect near other useEffect hooks
+    useEffect(() => {
+      if (isMobile) {
+        const handleBeforeUnload = (e: BeforeUnloadEvent) => {
+          e.preventDefault();
+          e.returnValue = "Are you sure you want to refresh? It may take a while to reload the channels and programs.";
+          return e.returnValue;
+        };
+
+        window.addEventListener("beforeunload", handleBeforeUnload);
+        return () => window.removeEventListener("beforeunload", handleBeforeUnload);
+      }
+    }, [isMobile]);
+
+    // Add this near the top of the file
+    const handleProgramReset = async () => {
+      try {
+        const response = await fetch("/api/programs/hard-reset", {
+          method: "POST",
+        });
+        
+        if (!response.ok) {
+          throw new Error("Failed to reset programs");
+        }
+
+        const reader = response.body?.getReader();
+        if (!reader) return;
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (done) break;
+
+          const text = new TextDecoder().decode(value);
+          const events = text.split("\n").filter(Boolean);
+
+          for (const event of events) {
+            const data = JSON.parse(event);
+            if (data.type === "complete") {
+              // Refresh the guide after reset is complete
+              await refresh();
+            }
+          }
+        }
+      } catch (error) {
+        console.error("Failed to reset programs:", error);
+      }
+    };
+
     return (
       <Paper
         elevation={3}
@@ -886,8 +919,8 @@ export const ChannelList = forwardRef<
               size="small"
               placeholder={
                 searchIncludePrograms
-                  ? "Search channels & programs..."
-                  : "Search channels..."
+                  ? "Search..."
+                  : "Search..."
               }
               onChange={(e) => handleSearch(e.target.value)}
               slotProps={{
@@ -916,7 +949,10 @@ export const ChannelList = forwardRef<
               </IconButton>
             </Tooltip>
             {onOpenSettings && (
-              <IconButton onClick={onOpenSettings} size="small">
+              <IconButton 
+                onClick={() => setSettingsOpen(true)} 
+                size="small"
+              >
                 <SettingsIcon />
               </IconButton>
             )}
@@ -934,16 +970,6 @@ export const ChannelList = forwardRef<
               <Tab label="Favorites" value="favorites" />
               <Tab label="Recent" value="recent" />
             </Tabs>
-            <IconButton
-              onClick={() => setEpgExpanded(!epgExpanded)}
-              sx={{
-                borderRadius: "4px 0 0 4px",
-                bgcolor: "background.paper",
-                "&:hover": { bgcolor: "action.hover" },
-              }}
-            >
-              {epgExpanded ? <ChevronLeft /> : <ChevronRight />}
-            </IconButton>
           </Box>
         </Box>
 
@@ -960,28 +986,51 @@ export const ChannelList = forwardRef<
             height: containerHeight,
           }}
         >
-          {/* Add overlay text */}
+          {/* Update overlay text and add guide toggle */}
           <Box
             sx={{
               position: "absolute",
               top: 0,
               left: 0,
               height: 60,
+              width: isMobile 
+                ? epgExpanded 
+                  ? window.innerWidth * 0.25  // Match the mobile expanded channel container width
+                  : "100%"                    // Full width when not expanded
+                : 300,                        // Desktop width
               zIndex: 1000,
               display: "flex",
               alignItems: "center",
+              justifyContent: "center",
               px: 2,
               color: "text.primary",
-              pointerEvents: "none",
-              // Hide when guide is expanded on mobile
-              opacity: isMobile && epgExpanded ? 0 : 1,
-              visibility: isMobile && epgExpanded ? "hidden" : "visible",
+              bgcolor: "background.paper",
+              borderBottom: 1,
+              borderColor: "divider",
             }}
           >
-            <Stack>
-              <Typography>{channels.length} Channels</Typography>
-              <Typography>{planbyPrograms.length} Programs</Typography>
-            </Stack>
+            <Button
+              onClick={() => setEpgExpanded(!epgExpanded)}
+              sx={{ 
+                width: "100%",
+                maxWidth: isMobile 
+                  ? epgExpanded 
+                    ? window.innerWidth * 0.25
+                    : "none"
+                  : 300,
+                pointerEvents: "auto",
+              }}
+              variant="outlined"
+              size="small"
+              disabled={!settings?.epgUrl}
+            >
+              {settings?.epgUrl 
+                ? epgExpanded 
+                  ? "Collapse Guide" 
+                  : "Expand Guide"
+                : "No EPG Provided"
+              }
+            </Button>
           </Box>
           <Epg {...getEpgProps()}>
             <Layout
@@ -1058,6 +1107,23 @@ export const ChannelList = forwardRef<
               ?.isFavorite || false
           }
         />
+
+        {onOpenSettings && (
+          <SettingsModal
+            open={settingsOpen}
+            onClose={() => setSettingsOpen(false)}
+            settings={settings}
+            onSave={async (newSettings) => {
+              setSettingsOpen(false);
+              if (onOpenSettings) {
+                onOpenSettings();
+              }
+            }}
+            channelCount={channels.length}
+            programCount={planbyPrograms.length}
+            onProgramReset={handleProgramReset}
+          />
+        )}
       </Paper>
     );
   },

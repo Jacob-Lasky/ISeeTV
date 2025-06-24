@@ -35,6 +35,7 @@ data/epg_content.xml
 *.fuse_hidden*
 /data/segments/
 data/*.csv
+data/sql_app.db-journal
 
 # Deveopment
 backend/dev.py

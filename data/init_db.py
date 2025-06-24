@@ -16,6 +16,7 @@ try:
     # os.remove("/app/data/sql_app.db")
 
     logger.info("Connecting to database...")
+    conn = None
     conn = sqlite3.connect("/app/data/sql_app.db")
     cursor = conn.cursor()
 
@@ -30,7 +31,8 @@ try:
             is_favorite INTEGER DEFAULT 0,
             last_watched TIMESTAMP,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
-            is_missing INTEGER DEFAULT 0
+            is_missing INTEGER DEFAULT 0,
+            source TEXT
         )"""
     )
 
@@ -98,6 +100,7 @@ try:
             display_name TEXT NOT NULL,
             icon TEXT,
             is_primary INTEGER DEFAULT 0,
+            source TEXT,
             FOREIGN KEY (channel_id) REFERENCES channels(channel_id)
         )
         """
@@ -113,6 +116,7 @@ try:
             title TEXT NOT NULL,
             description TEXT,
             category TEXT,
+            source TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (channel_id) REFERENCES channels(channel_id)
         )

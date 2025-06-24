@@ -10,4 +10,9 @@ export interface Settings {
   guideEndHour: number;
   timezone?: string;
   use24Hour: boolean;
+  programRetentionHours: number;
+  // Channel filtering settings
+  channelFilterType: "none" | "whitelist" | "blacklist";
+  channelFilterPatterns: string[];
+  programFilterPatterns: string[];
 }

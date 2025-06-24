@@ -14,6 +14,11 @@ export const defaultSettings: Settings = {
   guideEndHour: 12,
   timezone: getUserTimezone(),
   use24Hour: true,
+  programRetentionHours: 2,
+  // Default channel filtering settings
+  channelFilterType: "none",
+  channelFilterPatterns: [],
+  programFilterPatterns: [],
 };
 
 export const settingsService = {

@@ -16,9 +16,10 @@ logger = Logger(
 
 
 class ProgressDict(TypedDict):
-    type: Literal["progress"]
+    type: Literal["progress", "complete"]
     current: int
     total: int
+    message: str | None
 
 
 async def stream_download(
@@ -60,6 +61,7 @@ async def stream_download(
                             type="progress",
                             current=total_bytes,
                             total=total,
+                            message=f"Downloading... ({current_progress}%)",
                         )
                         yield progress_response
                         last_progress = current_progress

@@ -1,6 +1,7 @@
 import os
 import subprocess
 import threading
+import time
 from typing import Any
 from typing import Optional
 
@@ -31,10 +32,11 @@ def dict_to_ffmpeg_command(params: dict[str, Optional[str]]) -> list[str]:
 
 
 class StreamMonitor:
-    def __init__(self, process: subprocess.Popen[Any]) -> None:
+    def __init__(self, process: subprocess.Popen[Any], output_dir: str) -> None:
         self.process = process
         self.stop_flag = False
         self._thread: Optional[threading.Thread] = None
+        self.output_dir = output_dir
         self.logger = Logger(
             "ISeeTV-StreamMonitor",
             os.environ.get("VERBOSE", "false"),
@@ -79,14 +81,19 @@ class StreamMonitor:
 
 
 async def process_video(
-    stream_url: str, output_dir: str, m3u8_name: str, channel_id: str
+    stream_url: str, output_dir: str, m3u8_name: str, channel_id: str, program_name: str = "stream"
 ) -> tuple[subprocess.Popen[Any], StreamMonitor]:
     output_m3u8 = os.path.join(output_dir, m3u8_name)
+    output_ts = os.path.join(output_dir, f"{program_name}.ts")
+    logger.info(f"Processing video to output file: {output_ts}")
 
     # Get correct stream url
+    logger.info(f"Getting stream URL from: {stream_url}")
     response = requests.get(stream_url, allow_redirects=True)
     redirected_url = response.url
+    logger.info(f"Redirected to: {redirected_url}")
 
+    # Create a continuous stream.ts file
     ffmpeg_params: dict[str, Optional[str]] = {
         "-y": None,  # Overwrite output files
         "-i": redirected_url,
@@ -96,24 +103,21 @@ async def process_video(
         "-ar": "44100",  # Audio sample rate
         "-ac": "2",  # Stereo audio
         "-b:a": "128k",  # Audio bitrate
-        # HLS settings
-        "-f": "hls",
-        "-hls_time": "4",
-        "-hls_list_size": "0",
-        "-hls_flags": "append_list+omit_endlist",
-        "-hls_segment_filename": os.path.join(output_dir, "stream_%06d.ts"),
-        "-hls_base_url": f"/segments/{channel_id}/",
-        "-hls_segment_type": "mpegts",
+        # Output settings
+        "-f": "mpegts",
+        "-muxrate": "1000000",
+        "-mpegts_flags": "+resend_headers",
+        "-bsf:v": "h264_mp4toannexb",
         # Stream settings
         "-reconnect": "1",
         "-reconnect_streamed": "1",
         "-reconnect_delay_max": "10",
         # Output file
-        "output": output_m3u8,
+        "output": output_ts,
     }
 
     command_list = dict_to_ffmpeg_command(ffmpeg_params)
-    logger.debug(f"FFmpeg command: {command_list}")
+    logger.info(f"Starting FFmpeg with command: {' '.join(command_list)}")
 
     # Create process with full stderr logging
     process = subprocess.Popen(
@@ -122,9 +126,11 @@ async def process_video(
         stderr=subprocess.PIPE,
         universal_newlines=True,  # This helps with reading the output
     )
+    logger.info(f"FFmpeg process started with PID: {process.pid}")
 
     # Create and start monitor
-    monitor = StreamMonitor(process)
+    monitor = StreamMonitor(process, output_dir)
     monitor.start()
+    logger.info("Stream monitor started")
 
     return process, monitor

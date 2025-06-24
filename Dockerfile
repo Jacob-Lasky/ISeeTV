@@ -13,6 +13,9 @@ RUN curl -fsSL https://deb.nodesource.com/setup_22.x | bash - \
     && apt-get clean \
     && rm -rf /var/lib/apt/lists/*
 
+# Update NPM to specific version
+RUN npm install -g npm@11.1.0
+
 # Set up working directory
 WORKDIR /app
 

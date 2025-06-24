@@ -30,6 +30,7 @@ class ChannelDict(TypedDict):
     logo: str | None
     is_missing: bool
     is_favorite: bool
+    source: str
 
 
 class M3UService:
@@ -110,6 +111,7 @@ class M3UService:
         lines = content.split("\n")
         channels: list[ChannelDict] = []
         current_channel: ChannelDict | None = None
+        source = os.path.basename(self.file)  # Get filename for source
 
         bad_channel_ids_file = os.path.join(
             DATA_DIRECTORY, "m3u_channel_id_failures.csv"
@@ -142,6 +144,7 @@ class M3UService:
                             "url": "",  # Will be set when we get the URL line
                             "is_missing": False,
                             "is_favorite": False,
+                            "source": source,  # Add source
                         }
                     else:
                         logger.debug(f"No channel_id found for channel: {name}")
