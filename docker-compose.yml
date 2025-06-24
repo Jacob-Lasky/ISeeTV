@@ -7,8 +7,5 @@ services:
       - "1313:80"  # Map container port 80 to host port 1313
     restart: unless-stopped
     container_name: iseetv-app
-    volumes:
-      - ./nginx_logs:/var/log/nginx
-      - ./backend:/app/backend
     environment:
       - NODE_ENV=development

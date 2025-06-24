@@ -18,6 +18,9 @@ RUN npm run build
 FROM python:3.11-slim AS backend-builder
 WORKDIR /app/backend
 
+# Copy backend files
+COPY backend/ /app/backend/
+
 # Install Poetry
 RUN pip install poetry==2.1.1
 
@@ -73,7 +76,7 @@ RUN ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/
 RUN printf '%s\n' \
   '#!/bin/bash' \
   '# Start the backend API server' \
-  'cd /app/backend && python -m uvicorn main:app --host 0.0.0.0 --port 1314 --reload --reload-dir /app/backend &' \
+  'cd /app/backend && python -m uvicorn main:app --host 0.0.0.0 --port 1314 &' \
   '' \
   '# Start Nginx' \
   'nginx -g "daemon off;"' \
