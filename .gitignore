@@ -1,1 +1,4 @@
 *__pycache__*
+*.fuse_hidden*
+*node_modules*
+nginx_logs
