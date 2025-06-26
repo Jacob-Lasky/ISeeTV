@@ -9,7 +9,10 @@ readme = "README.md"
 requires-python = ">=3.11,<3.12"
 dependencies = [
     "fastapi (>=0.115.13,<0.116.0)",
-    "uvicorn (>=0.34.3,<0.35.0)"
+    "uvicorn (>=0.34.3,<0.35.0)",
+    "mypy (>=1.16.1,<2.0.0)",
+    "ruff (>=0.12.1,<0.13.0)",
+    "black (>=25.1.0,<26.0.0)"
 ]
 
 [tool.poetry]

@@ -45,8 +45,8 @@ If you're thinking about contributing to this repo in any way, I want you to! I 
 
 ## Linting
 - While in the frontend directory, run:
-  - to check linting issues: `docker run --rm -v $(pwd):/app -w /app node:22 npm run lint`
-    - to fix most linting issues: `docker run --rm -v $(pwd):/app -w /app node:22 npm run lint -- --fix`
+  - to check linting issues: `docker run --rm -v $(pwd):/app -w /app node:22-slim npm run format-and-lint`
+    - to fix most linting issues: `docker run --rm -v $(pwd):/app -w /app node:22-slim npm run format-and-lint -- --fix`
 - While in the backend directory, run:
   - check for type errors: `poetry run mypy .`
     - to fix most type errors, you'll need to manually edit the files
