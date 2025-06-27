@@ -35,6 +35,8 @@ This enables hot reloading on the frontend and backend. It is not recommended fo
 1. Run `docker compose -f docker-compose.dev.yml up --build` to start the containers.
 2. Open `http://localhost:1313` in your browser.
 
+Once running, API documentation can be found at `http://localhost:1314/docs`.
+
 ## FAQ | Development | Feature Requests:
 If you're thinking about contributing to this repo in any way, I want you to! I welcome all ideas, feedback, questions and PRs. I had never used Vite/Vue/Typescript before starting this project and recognize how difficult it is to jump into something new. I want us all to support each other as we build cool things together.
 - General Development Guidelines

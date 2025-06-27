@@ -4,8 +4,12 @@ services:
       context: .
       dockerfile: Dockerfile
     ports:
-      - "1313:80"  # Map container port 80 to host port 1313
+      - "1313:80"  # UI port
+      - "1314:1314"  # API port
     restart: unless-stopped
     container_name: iseetv-app
     environment:
       - NODE_ENV=production
+      - VITE_BACKEND_URL=http://192.168.86.183:1314
+    volumes:
+      - ./data:/app/data

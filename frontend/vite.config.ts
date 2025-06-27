@@ -15,7 +15,7 @@ export default defineConfig(({ mode }) => ({
                       "/api": {
                           target:
                               process.env.VITE_BACKEND_URL ||
-                              "http://backend:1314",
+                              "http://localhost:1314",
                           changeOrigin: true,
                           rewrite: (path) => path.replace(/^\/api/, "/api"),
                       },
