@@ -199,8 +199,8 @@
                         <Button
                             label="Cancel"
                             class="p-button-text"
-                            @click="showNewSourceModal = false"
                             type="button"
+                            @click="showNewSourceModal = false"
                         />
                         <Button label="Save" icon="pi pi-check" type="submit" />
                     </div>
@@ -214,7 +214,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, nextTick } from "vue"
+import { ref, onMounted } from "vue"
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
 import InputText from "primevue/inputtext"
@@ -226,6 +226,7 @@ import Button from "primevue/button"
 import ConfirmDialog from "primevue/confirmdialog"
 import { useConfirm } from "primevue/useconfirm"
 import Calendar from "primevue/calendar"
+import { timezoneOptions } from "../utils/timezones"
 
 // Modal state and new source object
 const showNewSourceModal = ref(false)
@@ -283,10 +284,6 @@ const error = ref("")
 const saveSuccess = ref("")
 const editingRows = ref<Source[]>([])
 const confirm = useConfirm()
-const timezoneOptions = Intl.supportedValuesOf("timeZone").map((tz) => ({
-    label: tz,
-    value: tz,
-}))
 
 function formatDate(date: string | Date) {
     if (!date) return ""
@@ -309,29 +306,6 @@ onMounted(async () => {
         loading.value = false
     }
 })
-
-const addNewSource = async () => {
-    const newSource = {
-        name: "",
-        enabled: true,
-        m3u_url: "",
-        epg_url: "",
-        number_of_connections: 1,
-        refresh_every_hours: 24,
-        subscription_expires: "",
-        source_timezone: "",
-    }
-
-    sources.value.push(newSource)
-
-    await nextTick()
-    document
-        .querySelector("table")
-        ?.scrollIntoView({ behavior: "smooth", block: "end" })
-
-    // Edit the newly added row
-    editingRows.value = [newSource]
-}
 
 const deleteSource = async (index: number) => {
     confirm.require({

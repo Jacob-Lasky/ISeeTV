@@ -51,7 +51,7 @@ class Source(BaseModel):
 class GlobalSettings(BaseModel):
     user_timezone: str
     program_cache_days: int
-    ui: Dict[str, str]
+    theme: str
 
 
 @app.get("/", response_model=Message, tags=["Meta"])
