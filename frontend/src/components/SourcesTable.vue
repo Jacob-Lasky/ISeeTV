@@ -43,14 +43,34 @@
                     />
                 </template>
             </Column>
-            <Column field="m3u_url" header="M3U URL" sortable>
+            <Column
+                field="m3u_url"
+                header="M3U URL"
+                sortable
+                style="min-width: 8rem; max-width: 200px"
+                bodyStyle="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space;"
+            >
                 <template #editor="{ data, field }">
-                    <InputText v-model="data[field]" fluid />
+                    <InputText
+                        v-model="data[field]"
+                        fluid
+                        style="min-width: 160px"
+                    />
                 </template>
             </Column>
-            <Column field="epg_url" header="EPG URL" sortable>
+            <Column
+                field="epg_url"
+                header="EPG URL"
+                sortable
+                style="min-width: 8rem; max-width: 200px"
+                bodyStyle="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space;"
+            >
                 <template #editor="{ data, field }">
-                    <InputText v-model="data[field]" fluid />
+                    <InputText
+                        v-model="data[field]"
+                        fluid
+                        style="min-width: 160px"
+                    />
                 </template>
             </Column>
             <Column field="number_of_connections" header="Connections" sortable>
@@ -70,7 +90,15 @@
             </Column>
             <Column field="source_timezone" header="Timezone" sortable>
                 <template #editor="{ data, field }">
-                    <InputText v-model="data[field]" fluid />
+                    <Select
+                        v-model="data[field]"
+                        :options="timezoneOptions"
+                        optionLabel="label"
+                        optionValue="value"
+                        placeholder="Select timezone"
+                        filter
+                        fluid
+                    />
                 </template>
             </Column>
             <Column
@@ -90,7 +118,7 @@
                 </template>
             </Column>
         </DataTable>
-
+        <br />
         <Button
             label="New Source"
             icon="pi pi-plus"
@@ -123,6 +151,10 @@ const error = ref("")
 const saveSuccess = ref("")
 const editingRows = ref<Source[]>([])
 const confirm = useConfirm()
+const timezoneOptions = Intl.supportedValuesOf("timeZone").map((tz) => ({
+    label: tz,
+    value: tz,
+}))
 
 onMounted(async () => {
     try {
