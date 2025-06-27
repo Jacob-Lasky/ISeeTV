@@ -85,7 +85,14 @@
             </Column>
             <Column field="subscription_expires" header="Expires" sortable>
                 <template #editor="{ data, field }">
-                    <InputText v-model="data[field]" fluid />
+                    <Calendar
+                        v-model="data[field]"
+                        showIcon
+                        dateFormat="yyyy-mm-dd"
+                    />
+                </template>
+                <template #body="{ data }">
+                    {{ formatDate(data.subscription_expires) }}
                 </template>
             </Column>
             <Column field="source_timezone" header="Timezone" sortable>
@@ -144,6 +151,7 @@ import Button from "primevue/button"
 import { nextTick } from "vue"
 import ConfirmDialog from "primevue/confirmdialog"
 import { useConfirm } from "primevue/useconfirm"
+import Calendar from "primevue/calendar"
 
 const sources = ref<Source[]>([])
 const loading = ref(true)
@@ -155,6 +163,16 @@ const timezoneOptions = Intl.supportedValuesOf("timeZone").map((tz) => ({
     label: tz,
     value: tz,
 }))
+
+function formatDate(date: string | Date) {
+    if (!date) return ""
+    const d = typeof date === "string" ? new Date(date) : date
+    if (isNaN(d.getTime())) return ""
+    const yyyy = d.getFullYear()
+    const mm = String(d.getMonth() + 1).padStart(2, "0")
+    const dd = String(d.getDate()).padStart(2, "0")
+    return `${yyyy}-${mm}-${dd}`
+}
 
 onMounted(async () => {
     try {
