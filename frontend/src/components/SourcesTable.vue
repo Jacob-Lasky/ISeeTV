@@ -9,7 +9,6 @@
             sortField="sourceName"
             :sortOrder="1"
             responsiveLayout="scroll"
-            stripedRows
             showGridlines
             :rows="20"
             editMode="row"
@@ -1101,14 +1100,23 @@ onMounted(async () => {
 .source-group-header {
     background: linear-gradient(
         135deg,
-        var(--p-surface-50) 0%,
-        var(--p-surface-100) 100%
+        var(--p-surface-100) 0%,
+        var(--p-surface-200) 100%
     );
     border: 1px solid var(--p-surface-200);
     border-radius: 8px;
     padding: 1rem;
     margin: 0.5rem 0;
     transition: all 0.2s ease;
+}
+
+.dark-theme .source-group-header {
+    background: linear-gradient(
+        135deg,
+        var(--p-surface-900) 0%,
+        var(--p-surface-800) 100%
+    );
+    border: 1px solid var(--p-surface-600);
 }
 
 .source-header-main {
@@ -1155,26 +1163,11 @@ onMounted(async () => {
 .metadata-value {
     font-weight: 600;
     color: var(--p-text-color);
-    background: var(--p-surface-0);
+    background: var(--p-surface-section);
     padding: 0.25rem 0.5rem;
     border-radius: 4px;
-    border: 1px solid var(--p-surface-200);
+    border: 1px solid var(--p-surface-border);
     transition: all 0.2s ease;
-}
-
-/* Dark mode specific adjustments */
-:global(.p-dark) .source-group-header {
-    background: linear-gradient(
-        135deg,
-        var(--p-surface-800) 0%,
-        var(--p-surface-700) 100%
-    );
-    border-color: var(--p-surface-600);
-}
-
-:global(.p-dark) .metadata-value {
-    background: var(--p-surface-900);
-    border-color: var(--p-surface-600);
 }
 
 /* Responsive adjustments */

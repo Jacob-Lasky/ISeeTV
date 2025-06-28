@@ -26,17 +26,7 @@ export const useThemeStore = defineStore("theme", () => {
             isDark.value = theme.value === "dark"
         }
 
-        // Apply theme to document - this is what PrimeVue will detect
-        document.documentElement.classList.toggle("dark-theme", isDark.value)
-
-        // Also apply to body for full-page styling
-        document.body.classList.toggle("dark-theme", isDark.value)
-
-        // Set PrimeVue theme attribute for components
-        document.documentElement.setAttribute(
-            "data-p-theme",
-            isDark.value ? "dark" : "light"
-        )
+        document.documentElement.classList.toggle("p-dark", isDark.value)
     }
 
     // Initialize theme

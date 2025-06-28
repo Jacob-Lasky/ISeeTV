@@ -6,7 +6,6 @@
         :closable="false"
         :closeOnEscape="true"
         class="settings-dialog"
-        @hide="tryClose"
     >
         <template #header>
             <h2>Settings</h2>
@@ -95,16 +94,6 @@
             </div>
         </template>
     </Dialog>
-
-    <!-- Confirm Dialog for Unsaved Changes -->
-    <ConfirmDialog>
-        <template #message="{ message }">
-            <div class="confirm-dialog-content">
-                <i class="pi pi-exclamation-triangle" style="font-size: 2rem" />
-                <p>{{ message }}</p>
-            </div>
-        </template>
-    </ConfirmDialog>
 </template>
 
 <script setup lang="ts">
@@ -175,6 +164,7 @@ function tryClose() {
             icon: "pi pi-exclamation-triangle",
             acceptClass: "p-button-danger",
             accept: () => {
+                fetchSettings()
                 close()
             },
             reject: () => {

@@ -26,7 +26,7 @@ app.use(PrimeVue, {
         preset: Aura,
         options: {
             prefix: "p", // default CSS variable prefix
-            darkModeSelector: ".dark-theme", // Use our dark-theme class as selector
+            darkModeSelector: ".p-dark", // Use PrimeVue's standard dark mode class
             cssLayer: false, // or set to true if you want custom cascade layers
         },
     },
