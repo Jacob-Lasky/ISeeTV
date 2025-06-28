@@ -31,6 +31,7 @@ const defaultApiOptions: ApiOptions = {
 export async function apiFetch<T = unknown>(
     url: string,
     options?: RequestInit,
+    showLoadingToast?: boolean,
     apiOptions: ApiOptions = {}
 ): Promise<T> {
     // Merge default options with provided options
@@ -38,7 +39,11 @@ export async function apiFetch<T = unknown>(
 
     try {
         // Show loading toast for long operations (optional)
-        toastService.showInfo("Loading...", "Please wait")
+        if (showLoadingToast) {
+            toastService.showInfo("Loading...", "Please wait")
+        }
+        // put a synthetic delay to make the loading visible
+        // await new Promise((resolve) => setTimeout(resolve, 5000))
 
         // Make the API request
         const response = await fetch(url, options)
@@ -93,9 +98,10 @@ export async function apiFetch<T = unknown>(
  */
 export function apiGet<T = unknown>(
     url: string,
+    showLoadingToast?: boolean,
     apiOptions?: ApiOptions
 ): Promise<T> {
-    return apiFetch<T>(url, { method: "GET" }, apiOptions)
+    return apiFetch<T>(url, { method: "GET" }, showLoadingToast, apiOptions)
 }
 
 /**
@@ -108,6 +114,7 @@ export function apiGet<T = unknown>(
 export function apiPost<T = ApiMessage>(
     url: string,
     data: unknown,
+    showLoadingToast?: boolean,
     apiOptions?: ApiOptions
 ): Promise<T> {
     return apiFetch<T>(
@@ -119,6 +126,7 @@ export function apiPost<T = ApiMessage>(
             },
             body: JSON.stringify(data),
         },
+        showLoadingToast,
         apiOptions
     )
 }

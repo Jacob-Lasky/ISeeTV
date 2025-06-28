@@ -11,22 +11,20 @@
         <template #header>
             <h2>Settings</h2>
         </template>
-
-        <!-- Loading and Error States -->
-        <div v-if="loading" class="loading">
-            <ProgressSpinner />
-            <p>Loading...</p>
-        </div>
-        <div v-else-if="error" class="error">
+        <div v-if="error" class="error">
             <Message severity="error" :closable="false">{{ error }}</Message>
         </div>
-        <div v-else class="settings-content">
+        <div class="settings-content">
             <table class="settings-table">
                 <tbody>
                     <tr>
                         <td class="label">User Timezone</td>
                         <td class="value">
+                            <div v-if="loading" class="skeleton-row">
+                                <Skeleton width="100%" height="2.5rem" />
+                            </div>
                             <Select
+                                v-else
                                 v-model="editableSettings.user_timezone"
                                 :options="timezoneOptions"
                                 optionLabel="label"
@@ -41,7 +39,11 @@
                     <tr>
                         <td class="label">Program Cache Days</td>
                         <td class="value">
+                            <div v-if="loading" class="skeleton-row">
+                                <Skeleton width="100%" height="2.5rem" />
+                            </div>
                             <InputNumber
+                                v-else
                                 v-model="editableSettings.program_cache_days"
                                 inputClass="settings-input right-align"
                                 :min="1"
@@ -51,7 +53,11 @@
                     <tr>
                         <td class="label">Theme</td>
                         <td class="value">
+                            <div v-if="loading" class="skeleton-row">
+                                <Skeleton width="100%" height="2.5rem" />
+                            </div>
                             <Select
+                                v-else
                                 v-model="editableSettings.theme"
                                 :options="themeOptions"
                                 optionLabel="label"
@@ -112,7 +118,7 @@ import ConfirmDialog from "primevue/confirmdialog"
 import Button from "primevue/button"
 import InputNumber from "primevue/inputnumber"
 import Select from "primevue/select"
-import ProgressSpinner from "primevue/progressspinner"
+import Skeleton from "primevue/skeleton"
 import Message from "primevue/message"
 
 // Import utilities and stores
@@ -194,8 +200,8 @@ async function fetchSettings() {
     loading.value = true
     error.value = null
     try {
-        const data = await apiGet("/api/settings", {
-            showSuccessToast: true, // Don't show success toast for GET requests
+        const data = await apiGet("/api/settings", false, {
+            showSuccessToast: true,
             errorPrefix: "Failed to load settings",
         })
 
@@ -230,7 +236,7 @@ async function saveSettings() {
             themeStore.setTheme(editableSettings.value.theme)
         }
 
-        await apiPost("/api/settings", editableSettings.value, {
+        await apiPost("/api/settings", editableSettings.value, true, {
             successMessage: "Settings saved successfully",
             errorPrefix: "Failed to save settings",
         })
@@ -271,14 +277,11 @@ watch(
     padding: 0 1.5rem 1rem 1.5rem;
 }
 
-/* Loading State */
-.loading {
+/* Skeleton Row Loading */
+.skeleton-row {
+    width: 100%;
     display: flex;
-    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    padding: 2rem 0;
-    gap: 1rem;
 }
 
 /* Error Message */

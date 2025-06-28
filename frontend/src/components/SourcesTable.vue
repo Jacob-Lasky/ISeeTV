@@ -2,8 +2,7 @@
     <div>
         <DataTable
             v-model:editingRows="editingRows"
-            :value="sources"
-            :loading="loading"
+            :value="displaySources"
             responsiveLayout="scroll"
             stripedRows
             showGridlines
@@ -23,22 +22,28 @@
             @row-edit-save="onRowEditSave"
         >
             <Column field="name" header="Name" sortable>
+                <template #body="{ data }">
+                    <Skeleton v-if="data.isSkeletonRow" />
+                    <span v-else>{{ data.name }}</span>
+                </template>
                 <template #editor="{ data, field }">
                     <InputText v-model="data[field]" fluid />
                 </template>
             </Column>
             <Column field="enabled" header="Enabled" sortable>
+                <template #body="{ data }">
+                    <Skeleton v-if="data.isSkeletonRow" width="60px" />
+                    <Tag
+                        v-else
+                        :severity="data.enabled ? 'success' : 'danger'"
+                        :value="data.enabled ? 'Yes' : 'No'"
+                    />
+                </template>
                 <template #editor="{ data, field }">
                     <Select
                         v-model="data[field]"
                         :options="[true, false]"
                         fluid
-                    />
-                </template>
-                <template #body="{ data }">
-                    <Tag
-                        :severity="data.enabled ? 'success' : 'danger'"
-                        :value="data.enabled ? 'Yes' : 'No'"
                     />
                 </template>
             </Column>
@@ -49,6 +54,10 @@
                 style="min-width: 8rem; max-width: none"
                 bodyStyle="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space;"
             >
+                <template #body="{ data }">
+                    <Skeleton v-if="data.isSkeletonRow" width="150px" />
+                    <span v-else>{{ data.m3u_url }}</span>
+                </template>
                 <template #editor="{ data, field }">
                     <InputText
                         v-model="data[field]"
@@ -64,6 +73,10 @@
                 style="min-width: 8rem; max-width: none"
                 bodyStyle="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space;"
             >
+                <template #body="{ data }">
+                    <Skeleton v-if="data.isSkeletonRow" width="150px" />
+                    <span v-else>{{ data.epg_url }}</span>
+                </template>
                 <template #editor="{ data, field }">
                     <InputText
                         v-model="data[field]"
@@ -73,16 +86,30 @@
                 </template>
             </Column>
             <Column field="number_of_connections" header="Connections" sortable>
+                <template #body="{ data }">
+                    <Skeleton v-if="data.isSkeletonRow" width="50px" />
+                    <span v-else>{{ data.number_of_connections }}</span>
+                </template>
                 <template #editor="{ data, field }">
                     <InputNumber v-model="data[field]" fluid />
                 </template>
             </Column>
             <Column field="refresh_every_hours" header="Refresh (h)" sortable>
+                <template #body="{ data }">
+                    <Skeleton v-if="data.isSkeletonRow" width="50px" />
+                    <span v-else>{{ data.refresh_every_hours }}</span>
+                </template>
                 <template #editor="{ data, field }">
                     <InputNumber v-model="data[field]" fluid />
                 </template>
             </Column>
             <Column field="subscription_expires" header="Expires" sortable>
+                <template #body="{ data }">
+                    <Skeleton v-if="data.isSkeletonRow" width="100px" />
+                    <span v-else>{{
+                        formatDate(data.subscription_expires)
+                    }}</span>
+                </template>
                 <template #editor="{ data, field }">
                     <DatePicker
                         v-model="data[field]"
@@ -90,11 +117,12 @@
                         dateFormat="yy-mm-dd"
                     />
                 </template>
-                <template #body="{ data }">
-                    {{ formatDate(data.subscription_expires) }}
-                </template>
             </Column>
             <Column field="source_timezone" header="Timezone" sortable>
+                <template #body="{ data }">
+                    <Skeleton v-if="data.isSkeletonRow" width="120px" />
+                    <span v-else>{{ data.source_timezone }}</span>
+                </template>
                 <template #editor="{ data, field }">
                     <Select
                         v-model="data[field]"
@@ -102,7 +130,6 @@
                         optionLabel="label"
                         optionValue="value"
                         placeholder="Select timezone"
-                        filter
                         fluid
                     />
                 </template>
@@ -265,7 +292,7 @@
 <script setup lang="ts">
 import { apiGet, apiPost } from "../utils/apiUtils"
 import type { Source } from "../types/types"
-import { ref, onMounted } from "vue"
+import { ref, onMounted, computed } from "vue"
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
 import InputText from "primevue/inputtext"
@@ -275,6 +302,7 @@ import Select from "primevue/select"
 import DatePicker from "primevue/datepicker"
 import Tag from "primevue/tag"
 import Dialog from "primevue/dialog"
+import Skeleton from "primevue/skeleton"
 import { timezoneOptions } from "../utils/timezones"
 
 // Modal state and new source object
@@ -312,7 +340,7 @@ const saveNewSource = async () => {
         const updatedSources = [...sources.value, newSource.value]
 
         // Send the updated sources to the backend
-        await apiPost("/api/sources", updatedSources, {
+        await apiPost("/api/sources", updatedSources, true, {
             successMessage: "New source added successfully",
             errorPrefix: "Failed to add source",
         })
@@ -337,6 +365,24 @@ const error = ref("")
 const saveSuccess = ref("")
 const editingRows = ref<Source[]>([])
 
+// Create skeleton data for loading state
+const skeletonData = Array.from({ length: 1 }, (_, index) => ({
+    name: `skeleton-${index}`,
+    enabled: true,
+    m3u_url: "",
+    epg_url: "",
+    number_of_connections: 1,
+    refresh_every_hours: 24,
+    subscription_expires: "",
+    source_timezone: "",
+    isSkeletonRow: true,
+}))
+
+// Computed property to show skeleton data when loading, real data when loaded
+const displaySources = computed(() => {
+    return loading.value ? skeletonData : sources.value
+})
+
 function formatDate(date: string | Date) {
     if (!date) return ""
     const d = typeof date === "string" ? new Date(date) : date
@@ -349,7 +395,7 @@ function formatDate(date: string | Date) {
 
 onMounted(async () => {
     try {
-        sources.value = await apiGet("/api/sources", {
+        sources.value = await apiGet("/api/sources", false, {
             showSuccessToast: true,
             errorPrefix: "Failed to load sources",
         })
@@ -375,7 +421,7 @@ const confirmDelete = async () => {
         const updated = [...sources.value]
         updated.splice(index, 1)
 
-        await apiPost("/api/sources", updated, {
+        await apiPost("/api/sources", updated, true, {
             successMessage: "Source deleted successfully",
             errorPrefix: "Failed to delete source",
         })
@@ -400,7 +446,7 @@ const onRowEditSave = async (event: {
         sources.value[index] = newData
 
         // Send the updated sources to the backend
-        await apiPost("/api/sources", sources.value, {
+        await apiPost("/api/sources", sources.value, true, {
             successMessage: "Source updated successfully",
             errorPrefix: "Failed to update source",
         })
@@ -492,5 +538,13 @@ const onRowEditSave = async (event: {
 .success {
     color: green;
     margin-top: 1rem;
+}
+
+/* Skeleton Cell Loading */
+.skeleton-cell {
+    width: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: flex-start;
 }
 </style>
