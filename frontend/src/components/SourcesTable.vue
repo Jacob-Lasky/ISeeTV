@@ -113,7 +113,7 @@
                 bodyStyle="text-align: center"
             />
             <Column header="" style="width: 10%; min-width: 2rem">
-                <template #body="{ data, index }">
+                <template #body="{ index }">
                     <Button
                         icon="pi pi-trash"
                         severity="danger"
@@ -264,6 +264,7 @@
 
 <script setup lang="ts">
 import { apiGet, apiPost } from "../utils/apiUtils"
+import type { Source } from "../types/types"
 import { ref, onMounted } from "vue"
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
@@ -281,7 +282,7 @@ const showNewSourceModal = ref(false)
 const showDeleteDialog = ref(false)
 const sourceToDeleteIndex = ref<number | null>(null)
 
-const newSource = ref({
+const newSource = ref<Source>({
     name: "",
     enabled: true,
     m3u_url: "",

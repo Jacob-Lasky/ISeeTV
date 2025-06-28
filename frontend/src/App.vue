@@ -96,16 +96,30 @@ const menuItems = [
         icon: "pi pi-home",
         command: () => {
             router.push("/")
-            // Close drawer on mobile when item is selected
             drawerVisible.value = false
         },
     },
     {
         label: "Sources",
-        icon: "pi pi-list",
+        icon: "pi pi-database",
         command: () => {
             router.push("/sources")
-            // Close drawer on mobile when item is selected
+            drawerVisible.value = false
+        },
+    },
+    {
+        label: "Channels",
+        icon: "pi pi-list",
+        command: () => {
+            router.push("/channels")
+            drawerVisible.value = false
+        },
+    },
+    {
+        label: "Rules",
+        icon: "pi pi-filter",
+        command: () => {
+            router.push("/rules")
             drawerVisible.value = false
         },
     },

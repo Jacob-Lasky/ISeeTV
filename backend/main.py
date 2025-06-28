@@ -9,7 +9,7 @@ from fastapi.responses import RedirectResponse
 
 app = FastAPI(
     title="ISeeTV API",
-    description="ISeeTV API",
+    description="An IPTV Pipeline Platform",
     version="0.1.0",
     openapi_url="/openapi.json",
     docs_url="/docs",

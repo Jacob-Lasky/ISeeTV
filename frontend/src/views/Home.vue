@@ -1,10 +1,7 @@
 <template>
     <div>
-        <h2>Welcome to ISeeTV</h2>
-        <p>
-            This is your all-in-one IPTV dashboard. Use the navigation above to
-            view and manage your sources.
-        </p>
+        <h1>Welcome to ISeeTV</h1>
+        <p>An IPTV Pipeline Platform</p>
     </div>
 </template>
 
@@ -13,7 +10,7 @@
 </script>
 
 <style scoped>
-h2 {
-    color: #333;
+h1 {
+    color: #42b983;
 }
 </style>
