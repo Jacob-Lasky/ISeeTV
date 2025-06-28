@@ -48,8 +48,11 @@
                 <template v-if="column.editable" #editor="{ data, field }">
                     <component
                         :is="getEditorComponent(column)"
-                        v-model="data[field]"
+                        :model-value="getEditorValue(column, data, field)"
                         v-bind="getEditorProps(column)"
+                        @update:model-value="
+                            updateEditorValue(column, data, field, $event)
+                        "
                     />
                 </template>
             </Column>
@@ -107,11 +110,11 @@
                     </div>
                     <div class="form-row">
                         <label>M3U URL:</label>
-                        <InputText v-model="newSource.m3u_url" required fluid />
+                        <InputText v-model="newSourceM3uUrl" required fluid />
                     </div>
                     <div class="form-row">
                         <label>EPG URL:</label>
-                        <InputText v-model="newSource.epg_url" fluid />
+                        <InputText v-model="newSourceEpgUrl" fluid />
                     </div>
                     <div class="form-row">
                         <label>Connections:</label>
@@ -225,11 +228,11 @@ import Tag from "primevue/tag"
 import DatePicker from "primevue/datepicker"
 import Skeleton from "primevue/skeleton"
 import { apiGet, apiPost } from "../utils/apiUtils"
-import type { Source } from "../types/types"
+import type { Source, FileMetadata } from "../types/types"
 import { timezoneOptions } from "../utils/timezones"
 
 interface SourceFieldSchema {
-    field: keyof Source
+    field: keyof Source | string // Allow virtual fields like m3u_url, epg_url
     header: string
     type:
         | "text"
@@ -239,12 +242,14 @@ interface SourceFieldSchema {
         | "url"
         | "timezone"
         | "last_refresh"
+        | "file_metadata_url"
     defaultValue: any
     sortable?: boolean
     editable?: boolean
     style?: string
     bodyStyle?: string
     skeletonWidth?: string
+    file_type?: "m3u" | "epg" // For file_metadata_url fields
 }
 
 // Schema drives everything - add new fields here
@@ -268,7 +273,8 @@ const sourceFieldsSchema: SourceFieldSchema[] = [
     {
         field: "m3u_url",
         header: "M3U URL",
-        type: "url",
+        type: "file_metadata_url",
+        file_type: "m3u",
         defaultValue: "",
         sortable: true,
         editable: true,
@@ -280,7 +286,8 @@ const sourceFieldsSchema: SourceFieldSchema[] = [
     {
         field: "epg_url",
         header: "EPG URL",
-        type: "url",
+        type: "file_metadata_url",
+        file_type: "epg",
         defaultValue: "",
         sortable: true,
         editable: true,
@@ -346,6 +353,7 @@ interface TableColumn {
     bodyStyle?: string
     type: string
     skeletonWidth?: string
+    file_type?: "m3u" | "epg" // For file_metadata_url fields
 }
 
 const tableColumns = ref<TableColumn[]>(
@@ -358,6 +366,7 @@ const tableColumns = ref<TableColumn[]>(
         style: schema.style,
         bodyStyle: schema.bodyStyle,
         skeletonWidth: schema.skeletonWidth,
+        file_type: schema.file_type, // Include file_type for file_metadata_url columns
     }))
 )
 
@@ -366,10 +375,23 @@ function createDefaultSource(): Source {
     const defaults: Partial<Source> = {}
 
     sourceFieldsSchema.forEach((schema) => {
-        defaults[schema.field] = schema.defaultValue
+        defaults[schema.field as keyof Source] = schema.defaultValue
     })
 
-    return defaults as Source
+    // Initialize file_metadata structure for new sources
+    const source = defaults as Source
+    const defaultFileMetadata: FileMetadata = {
+        url: "",
+        last_refresh: "",
+        last_size_bytes: 0,
+    }
+
+    source.file_metadata = {
+        m3u: { ...defaultFileMetadata },
+        epg: { ...defaultFileMetadata },
+    }
+
+    return source
 }
 
 // Modal state and new source object
@@ -378,6 +400,43 @@ const showDeleteDialog = ref(false)
 const sourceToDeleteIndex = ref<number | null>(null)
 
 const newSource = ref<Source>(createDefaultSource())
+
+// Computed properties for form binding to file_metadata URLs
+const newSourceM3uUrl = computed({
+    get: () => newSource.value.file_metadata?.m3u?.url || "",
+    set: (value: string) => {
+        if (!newSource.value.file_metadata) {
+            newSource.value.file_metadata = {}
+        }
+        if (!newSource.value.file_metadata.m3u) {
+            const defaultMetadata: FileMetadata = {
+                url: "",
+                last_refresh: "",
+                last_size_bytes: 0,
+            }
+            newSource.value.file_metadata.m3u = defaultMetadata
+        }
+        newSource.value.file_metadata.m3u.url = value
+    },
+})
+
+const newSourceEpgUrl = computed({
+    get: () => newSource.value.file_metadata?.epg?.url || "",
+    set: (value: string) => {
+        if (!newSource.value.file_metadata) {
+            newSource.value.file_metadata = {}
+        }
+        if (!newSource.value.file_metadata.epg) {
+            const defaultMetadata: FileMetadata = {
+                url: "",
+                last_refresh: "",
+                last_size_bytes: 0,
+            }
+            newSource.value.file_metadata.epg = defaultMetadata
+        }
+        newSource.value.file_metadata.epg.url = value
+    },
+})
 
 function resetNewSource() {
     newSource.value = createDefaultSource()
@@ -491,6 +550,10 @@ function getBodyContent(column: TableColumn, data: any) {
             return formatDate(data[column.field])
         case "last_refresh":
             return calculateHoursAgo(data[column.field])
+        case "file_metadata_url":
+            // Extract URL from file_metadata based on file_type
+            const fileType = column.file_type
+            return data.file_metadata?.[fileType]?.url || ""
         default:
             return data[column.field] || ""
     }
@@ -508,6 +571,42 @@ function getEditorComponent(column: TableColumn) {
             return Select
         default:
             return InputText
+    }
+}
+
+function getEditorValue(column: TableColumn, data: any, field: string) {
+    if (column.type === "file_metadata_url") {
+        const fileType = column.file_type
+        return data.file_metadata?.[fileType]?.url || ""
+    }
+    return data[field]
+}
+
+function updateEditorValue(
+    column: TableColumn,
+    data: any,
+    field: string,
+    value: any
+) {
+    if (column.type === "file_metadata_url") {
+        const fileType = column.file_type
+        // Ensure file_metadata exists
+        if (!data.file_metadata) {
+            data.file_metadata = {}
+        }
+        // Ensure the specific file type metadata exists
+        if (!data.file_metadata[fileType]) {
+            const defaultMetadata: FileMetadata = {
+                url: "",
+                last_refresh: "",
+                last_size_bytes: 0,
+            }
+            data.file_metadata[fileType] = defaultMetadata
+        }
+        // Update the URL
+        data.file_metadata[fileType].url = value
+    } else {
+        data[field] = value
     }
 }
 
@@ -541,6 +640,7 @@ function getEditorProps(column: TableColumn) {
                 dateFormat: "yy-mm-dd",
             }
         case "url":
+        case "file_metadata_url":
             return { ...baseProps, style: "min-width: 160px" }
         default:
             return baseProps

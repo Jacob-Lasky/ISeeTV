@@ -11,18 +11,26 @@ export interface ApiMessage {
 }
 
 /**
+ * File metadata for downloadable resources
+ */
+export interface FileMetadata {
+    url: string
+    last_refresh?: string
+    last_size_bytes?: number
+}
+
+/**
  * Source configuration for IPTV streams
  */
 export interface Source {
     name: string
-    m3u_url: string
-    epg_url?: string | null
     number_of_connections?: number | null
     refresh_every_hours?: number | null
     subscription_expires?: string | null
     last_refresh?: string | null
     source_timezone?: string | null
     enabled: boolean
+    file_metadata?: Record<string, FileMetadata>
 }
 
 /**

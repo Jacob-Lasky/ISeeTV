@@ -4,3 +4,4 @@
 nginx_logs
 data/settings.json
 data/sources.json
+data/sources/*
