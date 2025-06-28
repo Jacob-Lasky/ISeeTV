@@ -1,47 +1,104 @@
 <template>
     <div class="app-container" :class="{ 'dark-theme': themeStore.isDark }">
-        <header
-            style="
-                display: flex;
-                align-items: center;
-                justify-content: space-between;
-            "
-        >
-            <div style="display: flex; align-items: center">
-                <h1 style="margin: 0 1rem 0 0">ISeeTV</h1>
-                <nav>
-                    <router-link to="/">Home</router-link> |
-                    <router-link to="/sources">Sources</router-link>
-                </nav>
+        <header>
+            <div class="header-content">
+                <div class="header-left">
+                    <!-- Mobile Navigation with Hamburger Menu -->
+                    <div class="mobile-nav">
+                        <Button
+                            icon="pi pi-bars"
+                            text
+                            rounded
+                            aria-label="Menu"
+                            @click="toggleSidebar"
+                        />
+                    </div>
+
+                    <!-- Desktop Navigation with TabMenu -->
+                    <nav class="desktop-nav">
+                        <TabMenu :model="menuItems" />
+                    </nav>
+                </div>
+
+                <div class="header-right">
+                    <h1>ISeeTV</h1>
+                    <Button
+                        icon="pi pi-cog"
+                        text
+                        rounded
+                        aria-label="Settings"
+                        class="settings-btn"
+                        @click="openSettings = true"
+                    />
+                </div>
             </div>
-            <button
-                aria-label="Settings"
-                class="settings-btn"
-                @click="openSettings = true"
-            >
-                <i class="pi pi-cog" style="font-size: 1.7rem"></i>
-            </button>
         </header>
+
+        <!-- Mobile Navigation Drawer -->
+        <Drawer
+            v-model:visible="drawerVisible"
+            position="left"
+            class="mobile-drawer"
+        >
+            <template #header>
+                <h2>ISeeTV Menu</h2>
+            </template>
+            <Menu :model="menuItems" />
+        </Drawer>
 
         <main>
             <router-view />
         </main>
     </div>
-    <SettingsModal
-        v-if="openSettings"
-        :open="openSettings"
-        @close="openSettings = false"
-    />
+    <SettingsModal v-model:visible="openSettings" />
+    <ConfirmDialog />
 </template>
 
 <script setup lang="ts">
 import "primeicons/primeicons.css"
 import { ref } from "vue"
+import { useRouter } from "vue-router"
 import SettingsModal from "./components/SettingsModal.vue"
 import { useThemeStore } from "./stores/themeStore"
 
+// Import PrimeVue components
+import TabMenu from "primevue/tabmenu"
+import Menu from "primevue/menu"
+import Drawer from "primevue/drawer"
+import Button from "primevue/button"
+import ConfirmDialog from "primevue/confirmdialog"
+
+const router = useRouter()
 const themeStore = useThemeStore()
 const openSettings = ref(false)
+const drawerVisible = ref(false)
+
+// Define menu items for both TabMenu and Sidebar Menu
+const menuItems = [
+    {
+        label: "Home",
+        icon: "pi pi-home",
+        command: () => {
+            router.push("/")
+            // Close drawer on mobile when item is selected
+            drawerVisible.value = false
+        },
+    },
+    {
+        label: "Sources",
+        icon: "pi pi-list",
+        command: () => {
+            router.push("/sources")
+            // Close drawer on mobile when item is selected
+            drawerVisible.value = false
+        },
+    },
+]
+
+// Toggle drawer visibility for mobile menu
+function toggleSidebar() {
+    drawerVisible.value = !drawerVisible.value
+}
 </script>
 
 <style scoped>
@@ -51,37 +108,84 @@ const openSettings = ref(false)
     padding: 1rem;
     font-family: sans-serif;
 }
-.settings-btn {
-    background: none;
-    border: none;
-    cursor: pointer;
-    padding: 0.5rem;
-    border-radius: 50%;
-    transition: background 0.2s;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-}
-.settings-btn .pi {
-    font-size: 1.7rem;
-    color: #222;
-}
-.settings-btn:hover {
-    background: #f0f0f0;
-}
 
 header {
     margin-bottom: 2rem;
 }
 
-nav a {
-    margin-right: 1rem;
-    text-decoration: none;
+.header-content {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+}
+
+.header-left {
+    display: flex;
+    align-items: center;
+}
+
+.header-right {
+    display: flex;
+    align-items: center;
+}
+
+.header-right h1 {
+    margin: 0 1rem 0 0;
+}
+
+/* Desktop navigation */
+.desktop-nav {
+    display: block;
+}
+
+/* Mobile navigation */
+.mobile-nav {
+    display: none;
+}
+
+/* Mobile sidebar styling */
+.mobile-sidebar h2 {
+    padding: 1rem;
+    margin-top: 0;
+    border-bottom: 1px solid #eee;
+}
+
+/* Responsive styles */
+@media (max-width: 768px) {
+    .desktop-nav {
+        display: none;
+    }
+
+    .mobile-nav {
+        display: block;
+    }
+
+    .header-left h1 {
+        font-size: 1.5rem;
+    }
+}
+
+/* Override PrimeVue TabMenu styles for better integration */
+:deep(.p-tabmenu) {
+    border: none;
+}
+
+:deep(.p-tabmenu .p-tabmenu-nav) {
+    border: none;
+    background: transparent;
+}
+
+:deep(.p-tabmenu .p-tabmenu-nav .p-tabmenuitem.p-highlight .p-menuitem-link) {
+    border-color: #42b983;
     color: #42b983;
 }
 
-nav a.router-link-exact-active {
-    font-weight: bold;
-    text-decoration: underline;
+:deep(
+    .p-tabmenu
+        .p-tabmenu-nav
+        .p-tabmenuitem
+        .p-menuitem-link:not(.p-disabled):focus
+) {
+    box-shadow: 0 0 0 0.2rem rgba(66, 185, 131, 0.2);
 }
 </style>

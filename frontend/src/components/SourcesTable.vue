@@ -1,6 +1,5 @@
 <template>
     <div>
-        <ConfirmDialog />
         <DataTable
             v-model:editingRows="editingRows"
             :value="sources"
@@ -133,11 +132,17 @@
             @click="showNewSourceModal = true"
         />
 
-        <!-- New Source Modal -->
-        <div v-if="showNewSourceModal" class="modal-overlay">
-            <div class="modal">
-                <h3>New Source</h3>
-                <form @submit.prevent="saveNewSource">
+        <!-- New Source Dialog -->
+        <Dialog
+            v-model:visible="showNewSourceModal"
+            header="New Source"
+            :modal="true"
+            :closable="false"
+            :closeOnEscape="true"
+            class="new-source-dialog"
+        >
+            <form @submit.prevent="saveNewSource">
+                <div class="form-grid">
                     <div class="form-row">
                         <label>Name:</label>
                         <InputText v-model="newSource.name" required fluid />
@@ -177,15 +182,16 @@
                         />
                     </div>
                     <div class="form-row">
-                        <label>Expires:</label>
+                        <label>Subscription Expires:</label>
                         <DatePicker
                             v-model="newSource.subscription_expires"
-                            showIcon
                             dateFormat="yy-mm-dd"
+                            showIcon
+                            fluid
                         />
                     </div>
                     <div class="form-row">
-                        <label>Timezone:</label>
+                        <label>Source Timezone:</label>
                         <Select
                             v-model="newSource.source_timezone"
                             :options="timezoneOptions"
@@ -195,18 +201,61 @@
                             fluid
                         />
                     </div>
-                    <div class="modal-actions">
-                        <Button
-                            label="Cancel"
-                            class="p-button-text"
-                            type="button"
-                            @click="showNewSourceModal = false"
-                        />
-                        <Button label="Save" icon="pi pi-check" type="submit" />
-                    </div>
-                </form>
+                </div>
+            </form>
+            <template #footer>
+                <div class="dialog-footer">
+                    <Button
+                        label="Cancel"
+                        icon="pi pi-times"
+                        severity="secondary"
+                        text
+                        @click="showNewSourceModal = false"
+                    />
+                    <Button
+                        label="Save"
+                        icon="pi pi-check"
+                        severity="success"
+                        @click="saveNewSource"
+                    />
+                </div>
+            </template>
+        </Dialog>
+
+        <!-- Delete Confirmation Dialog -->
+        <Dialog
+            v-model:visible="showDeleteDialog"
+            header="Delete Confirmation"
+            :modal="true"
+            :closable="false"
+            :closeOnEscape="true"
+            class="delete-dialog"
+        >
+            <div class="confirmation-content">
+                <i
+                    class="pi pi-exclamation-triangle mr-3"
+                    style="font-size: 2rem; color: var(--orange-500)"
+                ></i>
+                <span>Are you sure you want to delete this source?</span>
             </div>
-        </div>
+            <template #footer>
+                <div class="dialog-footer">
+                    <Button
+                        label="No"
+                        icon="pi pi-times"
+                        text
+                        class="p-button-secondary"
+                        @click="showDeleteDialog = false"
+                    />
+                    <Button
+                        label="Yes"
+                        icon="pi pi-check"
+                        severity="danger"
+                        @click="confirmDelete"
+                    />
+                </div>
+            </template>
+        </Dialog>
 
         <p v-if="error" class="error">{{ error }}</p>
         <p v-if="saveSuccess" class="success">{{ saveSuccess }}</p>
@@ -219,17 +268,19 @@ import DataTable from "primevue/datatable"
 import Column from "primevue/column"
 import InputText from "primevue/inputtext"
 import InputNumber from "primevue/inputnumber"
-import Select from "primevue/select"
-import Tag from "primevue/tag"
-import type { Source } from "../../types"
 import Button from "primevue/button"
-import ConfirmDialog from "primevue/confirmdialog"
+import Select from "primevue/dropdown"
+import DatePicker from "primevue/calendar"
+import Tag from "primevue/tag"
+import Dialog from "primevue/dialog"
 import { useConfirm } from "primevue/useconfirm"
-import DatePicker from "primevue/datepicker"
 import { timezoneOptions } from "../utils/timezones"
 
 // Modal state and new source object
 const showNewSourceModal = ref(false)
+const showDeleteDialog = ref(false)
+const sourceToDeleteIndex = ref<number | null>(null)
+
 const newSource = ref({
     name: "",
     enabled: true,
@@ -283,7 +334,6 @@ const loading = ref(true)
 const error = ref("")
 const saveSuccess = ref("")
 const editingRows = ref<Source[]>([])
-const confirm = useConfirm()
 
 function formatDate(date: string | Date) {
     if (!date) return ""
@@ -307,35 +357,37 @@ onMounted(async () => {
     }
 })
 
-const deleteSource = async (index: number) => {
-    confirm.require({
-        message: "Are you sure you want to delete this source?",
-        header: "Delete Confirmation",
-        icon: "pi pi-exclamation-triangle",
-        acceptClass: "p-button-danger",
-        accept: async () => {
-            try {
-                const updated = [...sources.value]
-                updated.splice(index, 1)
+// Show delete confirmation dialog
+const deleteSource = (index: number) => {
+    sourceToDeleteIndex.value = index
+    showDeleteDialog.value = true
+}
 
-                const response = await fetch("/api/sources", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify(updated),
-                })
+// Handle delete confirmation
+const confirmDelete = async () => {
+    try {
+        if (sourceToDeleteIndex.value === null) return
 
-                if (!response.ok) throw new Error(`HTTP ${response.status}`)
+        const index = sourceToDeleteIndex.value
+        const updated = [...sources.value]
+        updated.splice(index, 1)
 
-                sources.value = updated
-                saveSuccess.value = "Source deleted successfully"
-            } catch (err) {
-                error.value = `Failed to delete source: ${err instanceof Error ? err.message : String(err)}`
-            }
-        },
-        reject: () => {
-            // User rejected the confirmation, do nothing
-        },
-    })
+        const response = await fetch("/api/sources", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(updated),
+        })
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`)
+
+        sources.value = updated
+        saveSuccess.value = "Source deleted successfully"
+        showDeleteDialog.value = false
+        sourceToDeleteIndex.value = null
+    } catch (err) {
+        error.value = `Failed to delete source: ${err instanceof Error ? err.message : String(err)}`
+        showDeleteDialog.value = false
+    }
 }
 
 const onRowEditSave = async (event: {
@@ -389,39 +441,63 @@ const onRowEditSave = async (event: {
     color: green;
     margin-top: 1rem;
 }
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0.4);
+:deep(.new-source-dialog) {
+    min-width: 400px;
+    max-width: 90vw;
+}
+
+:deep(.new-source-dialog .p-dialog-header) {
+    padding-bottom: 0.5rem;
+}
+
+:deep(.new-source-dialog .p-dialog-content) {
+    padding: 0 1.5rem 1rem 1.5rem;
+}
+
+:deep(.delete-dialog) {
+    width: 450px;
+}
+
+.confirmation-content {
     display: flex;
     align-items: center;
-    justify-content: center;
-    z-index: 1000;
+    justify-content: flex-start;
+    gap: 1rem;
+    padding: 1rem 0;
 }
-.modal {
-    background: #fff;
-    padding: 2rem;
-    border-radius: 8px;
-    min-width: 350px;
-    max-width: 90vw;
-    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.2);
+
+.confirmation-content i {
+    font-size: 2rem;
 }
+.form-grid {
+    display: grid;
+    grid-template-columns: 1fr;
+    gap: 1rem;
+    padding: 1rem 0;
+}
+
+@media (min-width: 768px) {
+    .form-grid {
+        grid-template-columns: 1fr 1fr;
+    }
+}
+
 .form-row {
-    margin-bottom: 1rem;
+    margin-bottom: 0.5rem;
     display: flex;
     flex-direction: column;
 }
+
 .form-row label {
     font-weight: bold;
     margin-bottom: 0.3rem;
 }
-.modal-actions {
+
+/* Dialog Footer */
+.dialog-footer {
     display: flex;
     justify-content: flex-end;
-    gap: 1rem;
+    gap: 0.75rem;
 }
 
 .error {

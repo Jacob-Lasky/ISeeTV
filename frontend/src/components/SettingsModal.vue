@@ -1,99 +1,123 @@
 <template>
-    <div class="modal-overlay" @click.self="tryClose">
-        <div v-if="showDiscardDialog" class="discard-dialog-overlay">
-            <div class="discard-dialog">
-                <p>Discard changes?</p>
-                <div class="dialog-actions">
-                    <button class="discard-btn" @click="discardChanges">
-                        Discard
-                    </button>
-                    <button
-                        class="cancel-btn"
-                        @click="showDiscardDialog = false"
-                    >
-                        Cancel
-                    </button>
-                </div>
+    <!-- Main Settings Dialog -->
+    <Dialog
+        v-model:visible="dialogVisible"
+        header="Settings"
+        :modal="true"
+        :closable="false"
+        :closeOnEscape="true"
+        class="settings-dialog"
+        @hide="tryClose"
+    >
+        <template #header>
+            <h2>Settings</h2>
+        </template>
+
+        <!-- Loading and Error States -->
+        <div v-if="loading" class="loading">
+            <ProgressSpinner />
+            <p>Loading...</p>
+        </div>
+        <div v-else-if="error" class="error">
+            <Message severity="error" :closable="false">{{ error }}</Message>
+        </div>
+        <div v-else class="settings-content">
+            <table class="settings-table">
+                <tbody>
+                    <tr>
+                        <td class="label">User Timezone</td>
+                        <td class="value">
+                            <Select
+                                v-model="editableSettings.user_timezone"
+                                :options="timezoneOptions"
+                                optionLabel="label"
+                                optionValue="value"
+                                placeholder="Select timezone"
+                                filter
+                                inputClass="settings-input right-align"
+                                style="width: 100%"
+                            />
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="label">Program Cache Days</td>
+                        <td class="value">
+                            <InputNumber
+                                v-model="editableSettings.program_cache_days"
+                                inputClass="settings-input right-align"
+                                :min="1"
+                            />
+                        </td>
+                    </tr>
+                    <tr>
+                        <td class="label">Theme</td>
+                        <td class="value">
+                            <Select
+                                v-model="editableSettings.theme"
+                                :options="themeOptions"
+                                optionLabel="label"
+                                optionValue="value"
+                                placeholder="Select theme"
+                                inputClass="settings-input right-align"
+                                style="width: 100%"
+                                @change="
+                                    themeStore.setTheme(editableSettings.theme)
+                                "
+                            />
+                        </td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Dialog Footer with Actions -->
+        <template #footer>
+            <div class="dialog-footer">
+                <Button
+                    label="Cancel"
+                    icon="pi pi-times"
+                    severity="secondary"
+                    text
+                    @click="tryClose"
+                />
+                <Button
+                    label="Save"
+                    icon="pi pi-check"
+                    :loading="saving"
+                    severity="success"
+                    @click="saveSettings"
+                />
             </div>
-        </div>
-        <div class="modal">
-            <header>
-                <h2>Settings</h2>
-                <button class="close-btn" @click="tryClose">&times;</button>
-            </header>
-            <section v-if="loading" class="loading">Loading...</section>
-            <section v-else-if="error" class="error">{{ error }}</section>
-            <section v-else class="settings-content">
-                <table class="settings-table">
-                    <tbody>
-                        <tr>
-                            <td class="label">User Timezone</td>
-                            <td class="value">
-                                <Select
-                                    v-model="editableSettings.user_timezone"
-                                    :options="timezoneOptions"
-                                    optionLabel="label"
-                                    optionValue="value"
-                                    placeholder="Select timezone"
-                                    filter
-                                    inputClass="settings-input right-align"
-                                    style="width: 100%"
-                                />
-                            </td>
-                        </tr>
-                        <tr>
-                            <td class="label">Program Cache Days</td>
-                            <td class="value">
-                                <InputNumber
-                                    v-model="
-                                        editableSettings.program_cache_days
-                                    "
-                                    inputClass="settings-input right-align"
-                                    :min="1"
-                                />
-                            </td>
-                        </tr>
-                        <tr>
-                            <td class="label">Theme</td>
-                            <td class="value">
-                                <Select
-                                    v-model="editableSettings.theme"
-                                    :options="themeOptions"
-                                    optionLabel="label"
-                                    optionValue="value"
-                                    placeholder="Select theme"
-                                    inputClass="settings-input right-align"
-                                    style="width: 100%"
-                                    @change="
-                                        themeStore.setTheme(
-                                            editableSettings.theme
-                                        )
-                                    "
-                                />
-                            </td>
-                        </tr>
-                    </tbody>
-                </table>
-                <div class="actions">
-                    <button
-                        class="save-btn"
-                        :disabled="saving"
-                        @click="saveSettings"
-                    >
-                        {{ saving ? "Saving..." : "Save" }}
-                    </button>
-                </div>
-            </section>
-        </div>
-    </div>
+        </template>
+    </Dialog>
+
+    <!-- Confirm Dialog for Unsaved Changes -->
+    <ConfirmDialog>
+        <template #message="{ message }">
+            <div class="confirm-dialog-content">
+                <i class="pi pi-exclamation-triangle" style="font-size: 2rem" />
+                <p>{{ message }}</p>
+            </div>
+        </template>
+    </ConfirmDialog>
 </template>
 
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from "vue"
+import { useConfirm } from "primevue/useconfirm"
+
+// Import PrimeVue components
+import Dialog from "primevue/dialog"
+import ConfirmDialog from "primevue/confirmdialog"
+import Button from "primevue/button"
 import InputNumber from "primevue/inputnumber"
 import Select from "primevue/select"
+import ProgressSpinner from "primevue/progressspinner"
+import Message from "primevue/message"
+
+// Import utilities and stores
 import { timezoneOptions } from "../utils/timezones"
-import { useThemeStore, ThemeMode } from "../stores/themeStore"
+import { useThemeStore, type ThemeMode } from "../stores/themeStore"
 
 // Define interface for settings structure
 interface AppSettings {
@@ -103,21 +127,29 @@ interface AppSettings {
     [key: string]: string | number | boolean // Allow for additional properties
 }
 
-const props = defineProps<{ open: boolean }>()
-const emit = defineEmits(["close"])
+const props = defineProps<{ visible: boolean }>()
+const emit = defineEmits(["update:visible"])
 
-// Initialize theme store
+// Initialize theme store and confirm service
 const themeStore = useThemeStore()
+const confirm = useConfirm()
 
+// State management
+const loading = ref(false)
+const saving = ref(false)
+const error = ref<string | null>(null)
 const settings = ref<AppSettings | null>(null)
 const editableSettings = ref<AppSettings>({
-    user_timezone: "",
+    user_timezone: "UTC",
     program_cache_days: 7,
-    theme: "system",
+    theme: themeStore.theme as ThemeMode,
 })
-const loading = ref(false)
-const error = ref<string | null>(null)
-const saving = ref(false)
+
+// Computed property for dialog visibility with two-way binding
+const dialogVisible = computed({
+    get: () => props.visible,
+    set: (value) => emit("update:visible", value),
+})
 
 const themeOptions = [
     { label: "Light", value: "light" },
@@ -126,20 +158,26 @@ const themeOptions = [
 ]
 
 function close() {
-    emit("close")
+    dialogVisible.value = false
 }
 
 function tryClose() {
     if (hasUnsavedChanges.value) {
-        showDiscardDialog.value = true
+        confirm.require({
+            message: "Discard unsaved changes?",
+            header: "Confirmation",
+            icon: "pi pi-exclamation-triangle",
+            acceptClass: "p-button-danger",
+            accept: () => {
+                close()
+            },
+            reject: () => {
+                // Stay on the dialog
+            },
+        })
     } else {
         close()
     }
-}
-
-function discardChanges() {
-    showDiscardDialog.value = false
-    close()
 }
 
 const hasUnsavedChanges = computed(() => {
@@ -151,8 +189,6 @@ const hasUnsavedChanges = computed(() => {
         settings.value.theme !== editableSettings.value.theme
     )
 })
-
-const showDiscardDialog = ref(false)
 
 async function fetchSettings() {
     loading.value = true
@@ -222,50 +258,48 @@ watch(
 </script>
 
 <style scoped>
-.modal-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0.4);
+/* Settings Dialog Styling */
+:deep(.settings-dialog) {
+    min-width: 400px;
+    max-width: 90vw;
+}
+
+:deep(.settings-dialog .p-dialog-header) {
+    padding-bottom: 0.5rem;
+}
+
+:deep(.settings-dialog .p-dialog-content) {
+    padding: 0 1.5rem 1rem 1.5rem;
+}
+
+/* Loading State */
+.loading {
     display: flex;
+    flex-direction: column;
     align-items: center;
     justify-content: center;
-    z-index: 1000;
+    padding: 2rem 0;
+    gap: 1rem;
 }
-.modal {
-    background: #fff;
-    border-radius: 8px;
-    padding: 2rem;
-    min-width: 350px;
-    max-width: 90vw;
-    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.2);
-    position: relative;
-}
-.close-btn {
-    background: none;
-    border: none;
-    font-size: 2rem;
-    position: absolute;
-    top: 1rem;
-    right: 1rem;
-    cursor: pointer;
-}
-.loading,
+
+/* Error Message */
 .error {
-    padding: 1rem;
-    text-align: center;
+    padding: 1rem 0;
 }
+
+/* Settings Content */
 .settings-content {
     padding: 1rem 0;
 }
+
+/* Settings Table */
 .settings-table {
     width: 100%;
     border-collapse: separate;
     border-spacing: 0 0.5rem;
-    margin-bottom: 1.5rem;
+    margin-bottom: 1rem;
 }
+
 .settings-table .label {
     text-align: left;
     font-weight: bold;
@@ -273,93 +307,79 @@ watch(
     vertical-align: middle;
     width: 60%;
 }
+
 .settings-table .value {
     text-align: right;
     vertical-align: middle;
     width: 40%;
 }
+
+/* Input Styling */
 .settings-input {
-    width: 80%;
+    width: 100%;
     font-size: 1rem;
-    padding: 0.3rem 0.6rem;
-    border: 1px solid #ccc;
-    border-radius: 4px;
 }
+
 .right-align {
     text-align: right;
 }
-.actions {
+
+/* Dialog Footer */
+.dialog-footer {
     display: flex;
     justify-content: flex-end;
-    margin-top: 1rem;
+    gap: 0.75rem;
 }
-.save-btn {
-    background: #42b983;
-    color: #fff;
-    border: none;
-    padding: 0.5rem 1.5rem;
-    border-radius: 4px;
-    font-size: 1rem;
-    cursor: pointer;
-    transition: background 0.2s;
-}
-.save-btn:disabled {
-    background: #b3e0cd;
-    cursor: not-allowed;
-}
-.save-btn:hover:not(:disabled) {
-    background: #36996f;
-}
-.discard-dialog-overlay {
-    position: fixed;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
-    background: rgba(0, 0, 0, 0.35);
+
+/* Confirm Dialog Styling */
+.confirm-dialog-content {
     display: flex;
+    flex-direction: column;
     align-items: center;
-    justify-content: center;
-    z-index: 2000;
-}
-.discard-dialog {
-    background: #fff;
-    padding: 2rem 2.5rem;
-    border-radius: 8px;
-    box-shadow: 0 2px 16px rgba(0, 0, 0, 0.2);
+    gap: 1rem;
+    padding: 1rem 0;
     text-align: center;
-    min-width: 260px;
 }
-.dialog-actions {
-    margin-top: 1.5rem;
-    display: flex;
-    justify-content: center;
-    gap: 1.5rem;
+
+/* PrimeVue Component Overrides */
+:deep(.p-inputnumber-input) {
+    text-align: right;
 }
-.discard-btn {
-    background: #e74c3c;
-    color: #fff;
-    border: none;
-    padding: 0.5rem 1.2rem;
-    border-radius: 4px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: background 0.2s;
+
+:deep(.p-dropdown) {
+    width: 100%;
 }
-.discard-btn:hover {
-    background: #c0392b;
-}
-.cancel-btn {
-    background: #eee;
-    color: #333;
-    border: none;
-    padding: 0.5rem 1.2rem;
-    border-radius: 4px;
-    font-weight: bold;
-    cursor: pointer;
-    transition: background 0.2s;
-}
-.cancel-btn:hover {
-    background: #ccc;
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    :deep(.settings-dialog) {
+        width: 95vw;
+        min-width: unset;
+    }
+
+    .settings-table {
+        display: flex;
+        flex-direction: column;
+    }
+
+    .settings-table tbody {
+        display: flex;
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .settings-table tr {
+        display: flex;
+        flex-direction: column;
+        margin-bottom: 1rem;
+        width: 100%;
+    }
+
+    .settings-table .label,
+    .settings-table .value {
+        width: 100%;
+        text-align: left;
+        padding: 0.25rem 0;
+    }
 }
 </style>
