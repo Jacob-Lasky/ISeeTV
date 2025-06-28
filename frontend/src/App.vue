@@ -1,7 +1,7 @@
 <template>
     <div class="app-container" :class="{ 'dark-theme': themeStore.isDark }">
         <!-- Toast container for application-wide notifications -->
-        <Toast position="top-right" />
+        <Toast position="bottom-right" />
         <header>
             <div class="header-content">
                 <div class="header-left">
