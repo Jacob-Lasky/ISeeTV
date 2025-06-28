@@ -6,10 +6,8 @@ import uvicorn
 import json
 from fastapi import HTTPException, status
 from fastapi.responses import RedirectResponse
-import httpx
 import asyncio
 from datetime import datetime
-import os
 from common.models import DownloadProgress, Message, Source, GlobalSettings
 from common.download_helper import (
     create_download_task,
@@ -171,8 +169,9 @@ async def download_all_m3u(
 
         # Filter sources with M3U URLs in file_metadata
         m3u_sources = [
-            source for source in sources 
-            if source.get_file_metadata("m3u") and source.get_file_metadata("m3u").url
+            source
+            for source in sources
+            if (m3u_meta := source.get_file_metadata("m3u")) and m3u_meta.url
         ]
 
         if not m3u_sources:
@@ -240,8 +239,9 @@ async def download_all_epg(
 
         # Filter sources with EPG URLs in file_metadata
         epg_sources = [
-            source for source in sources 
-            if source.get_file_metadata("epg") and source.get_file_metadata("epg").url
+            source
+            for source in sources
+            if (epg_meta := source.get_file_metadata("epg")) and epg_meta.url
         ]
 
         if not epg_sources:

@@ -1,8 +1,9 @@
 import os
 import asyncio
 import httpx
+import json
 from datetime import datetime
-from typing import List, Optional, Tuple
+from typing import List, Optional, Tuple, Literal
 from common.models import Source
 from common.state import get_download_progress
 
@@ -33,7 +34,11 @@ def update_download_progress(task_id: str, **kwargs) -> None:
 
 
 async def download_file_with_progress(
-    url: str, filepath: str, task_id: str, item_name: str, fallback_size: Optional[int] = None
+    url: str,
+    filepath: str,
+    task_id: str,
+    item_name: str,
+    fallback_size: Optional[int] = None,
 ) -> Tuple[bool, int]:
     """Download a single file with real-time progress tracking by bytes"""
     try:
@@ -49,11 +54,11 @@ async def download_file_with_progress(
 
                 # Get total file size from Content-Length header
                 total_size = int(response.headers.get("content-length", 0))
-                
+
                 # Use fallback size if Content-Length is missing or zero
                 if total_size == 0 and fallback_size is not None:
                     total_size = fallback_size
-                
+
                 downloaded_size = 0
 
                 # Initialize total_bytes for this download
@@ -82,10 +87,10 @@ async def download_file_with_progress(
 
 async def download_file(
     source_name: str,
-    download_type: str,
+    download_type: Literal["m3u", "epg"],
     sources_file: str,
     download_dir: str,
-    task_id: str = None,
+    task_id: Optional[str] = None,
 ) -> None:
     """Atomic download function for any file type with optional progress tracking"""
     import json
@@ -115,8 +120,10 @@ async def download_file(
 
                 if task_id:
                     # Get fallback size from source metadata
-                    fallback_size = file_metadata.last_size_bytes if file_metadata else None
-                    
+                    fallback_size = (
+                        file_metadata.last_size_bytes if file_metadata else None
+                    )
+
                     # Use progress tracking for background tasks
                     success, size = await download_file_with_progress(
                         url, filepath, task_id, source_name, fallback_size
@@ -124,7 +131,7 @@ async def download_file(
                     # Update source metadata with actual downloaded size
                     if success:
                         source.update_file_metadata(download_type, url, size)
-                        
+
                         # Save updated sources back to file
                         with open(sources_file, "w") as f:
                             json.dump([s.dict() for s in sources], f, indent=2)
@@ -142,7 +149,7 @@ async def download_file(
 async def background_download_task(
     task_id: str,
     sources: List[Source],
-    download_type: str,
+    download_type: Literal["m3u", "epg"],
     sources_file: str,
     download_dir: str,
 ) -> None:
@@ -155,7 +162,7 @@ async def background_download_task(
             file_metadata = source.get_file_metadata(download_type)
             if not file_metadata or not file_metadata.url:
                 continue
-            
+
             url = file_metadata.url
 
             # Create filepath
@@ -174,8 +181,8 @@ async def background_download_task(
                 # Update source metadata with actual downloaded size
                 source.update_file_metadata(download_type, url, actual_size)
                 # Update source last_refresh
-                source.last_refresh = datetime.now().isoformat()
-                
+                file_metadata.last_refresh = datetime.now().isoformat()
+
                 download_progress = get_download_progress()
                 update_download_progress(
                     task_id,
@@ -209,7 +216,7 @@ async def background_download_task(
 async def background_single_download_task(
     task_id: str,
     source_name: str,
-    download_type: str,
+    download_type: Literal["m3u", "epg"],
     sources_file: str,
     download_dir: str,
 ) -> None:

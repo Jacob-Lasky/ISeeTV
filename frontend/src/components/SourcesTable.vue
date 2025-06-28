@@ -53,20 +53,24 @@
                         ></Skeleton>
                         <Skeleton width="4rem" height="1rem"></Skeleton>
                     </div>
-                    <div v-else style="display: flex; align-items: center; gap: 16px;">
+                    <div
+                        v-else
+                        style="display: flex; align-items: center; gap: 16px"
+                    >
                         <i
                             :class="getFileTypeIcon(data.fileType)"
                             :style="{ color: getFileTypeColor(data.fileType) }"
                         ></i>
-                        <span style="text-transform: uppercase; font-weight: 600;">{{
-                            data.fileType
-                        }}</span>
+                        <span
+                            style="text-transform: uppercase; font-weight: 600"
+                            >{{ data.fileType }}</span
+                        >
                     </div>
                 </template>
             </Column>
 
             <!-- File URL Column -->
-            <Column field="fileUrl" header="URL" style="min-width: 300px">
+            <Column field="fileUrl" header="URL" style="width: 300px">
                 <template #body="{ data }">
                     <div v-if="data._isSkeleton">
                         <Skeleton width="100%" height="1rem"></Skeleton>
@@ -711,6 +715,31 @@ const isEditMode = ref(false)
 const editingSourceId = ref<string | null>(null)
 const sourceToDeleteId = ref<string | null>(null)
 
+// TypeScript interface for source form data
+interface SourceFormData {
+    name: string
+    enabled: boolean
+    timezone: string
+    connections: number
+    refreshHours: number
+    subscriptionExpires: string
+    m3uUrl: string
+    epgUrl: string
+    [key: string]: string | number | boolean // Index signature for dynamic access
+}
+
+// Default values for source form fields (single source of truth)
+const DEFAULT_SOURCE_FORM = {
+    name: "",
+    enabled: true,
+    connections: 1,
+    refreshHours: 24,
+    timezone: "UTC",
+    subscriptionExpires: null as string | null,
+    m3uUrl: "",
+    epgUrl: "",
+} as const
+
 // Source field mapping: form field -> source property
 const SOURCE_FIELD_MAP = {
     name: "name",
@@ -727,18 +756,6 @@ const FILE_FIELD_MAP = {
     epgUrl: { fileType: "epg", property: "url" },
 } as const
 
-// Default values for source form fields (single source of truth)
-const DEFAULT_SOURCE_FORM = {
-    name: "",
-    enabled: true,
-    connections: 1,
-    refreshHours: 24,
-    timezone: "UTC",
-    subscriptionExpires: null as string | null,
-    m3uUrl: "",
-    epgUrl: "",
-} as const
-
 // Unified source form data (initialized from defaults)
 const sourceForm = ref({ ...DEFAULT_SOURCE_FORM })
 
@@ -752,7 +769,7 @@ function populateFormFromSource(source: Source): void {
     // Map source-level fields
     Object.entries(SOURCE_FIELD_MAP).forEach(([formField, sourceField]) => {
         const value = source[sourceField as keyof Source]
-        ;(sourceForm.value as any)[formField] =
+        ;(sourceForm.value as SourceFormData)[formField] =
             value ??
             DEFAULT_SOURCE_FORM[formField as keyof typeof DEFAULT_SOURCE_FORM]
     })
@@ -761,7 +778,7 @@ function populateFormFromSource(source: Source): void {
     Object.entries(FILE_FIELD_MAP).forEach(([formField, fileConfig]) => {
         const fileData = source.file_metadata?.[fileConfig.fileType]
         const value = fileData?.[fileConfig.property as keyof typeof fileData]
-        ;(sourceForm.value as any)[formField] = value || ""
+        ;(sourceForm.value as SourceFormData)[formField] = value || ""
     })
 }
 
@@ -771,13 +788,13 @@ function updateSourceFromForm(source: Source): Source {
 
     // Update source-level fields
     Object.entries(SOURCE_FIELD_MAP).forEach(([formField, sourceField]) => {
-        const value = (sourceForm.value as any)[formField]
-        ;(updatedSource as any)[sourceField] = value
+        const value = (sourceForm.value as SourceFormData)[formField]
+        ;(updatedSource as Record<string, unknown>)[sourceField] = value
     })
 
     // Update file-level fields
     Object.entries(FILE_FIELD_MAP).forEach(([formField, fileConfig]) => {
-        const value = (sourceForm.value as any)[formField]
+        const value = (sourceForm.value as SourceFormData)[formField]
         if (!updatedSource.file_metadata) {
             updatedSource.file_metadata = {}
         }
@@ -802,14 +819,14 @@ function createSourceFromForm(): Source {
 
     // Set source-level fields
     Object.entries(SOURCE_FIELD_MAP).forEach(([formField, sourceField]) => {
-        const value = (sourceForm.value as any)[formField]
-        ;(newSource as any)[sourceField] = value
+        const value = (sourceForm.value as SourceFormData)[formField]
+        ;(newSource as Record<string, unknown>)[sourceField] = value
     })
 
     // Set file metadata
     newSource.file_metadata = {}
     Object.entries(FILE_FIELD_MAP).forEach(([formField, fileConfig]) => {
-        const value = (sourceForm.value as any)[formField]
+        const value = (sourceForm.value as SourceFormData)[formField]
         if (!newSource.file_metadata![fileConfig.fileType]) {
             newSource.file_metadata![fileConfig.fileType] = {
                 url: "",
@@ -838,7 +855,7 @@ function updateSourceFromFileRow(
             `source${formField.charAt(0).toUpperCase() + formField.slice(1)}` as keyof SourceFileRow
         const value = fileRowData[fileRowField]
         if (value !== undefined) {
-            ;(updatedSource as any)[sourceField] = value
+            ;(updatedSource as Record<string, unknown>)[sourceField] = value
         }
     })
 
@@ -1040,7 +1057,7 @@ onMounted(async () => {
 
 /* URL Cell Styling */
 .url-cell {
-    max-width: 300px;
+    width: 100%;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
@@ -1163,7 +1180,7 @@ onMounted(async () => {
 /* Responsive adjustments */
 @media (max-width: 768px) {
     .url-cell {
-        max-width: 200px;
+        max-width: 250px;
     }
 
     .action-buttons {
