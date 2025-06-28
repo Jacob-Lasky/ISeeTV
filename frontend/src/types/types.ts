@@ -1,9 +1,4 @@
 /**
- * TypeScript interfaces matching the backend Pydantic models
- * These should be kept in sync with backend/main.py
- */
-
-/**
  * Message response from API endpoints
  */
 export interface ApiMessage {
@@ -11,7 +6,7 @@ export interface ApiMessage {
 }
 
 /**
- * File metadata for downloadable resources
+ * File metadata for downloadable resources, matches source.json
  */
 export interface FileMetadata {
     url: string
@@ -20,7 +15,7 @@ export interface FileMetadata {
 }
 
 /**
- * Source configuration for IPTV streams
+ * Source interface, matches source.json
  */
 export interface Source {
     name: string
@@ -31,6 +26,59 @@ export interface Source {
     source_timezone?: string | null
     enabled: boolean
     file_metadata?: Record<string, FileMetadata>
+}
+
+/**
+ * Atomic file representation - single responsibility for file-specific data
+ */
+export interface SourceFile {
+    id: string // unique identifier: sourceId + fileType
+    sourceId: string // reference to parent source
+    type: "m3u" | "epg" // file type
+    url: string
+    last_refresh?: string | null
+    last_size_bytes?: number
+    status?: "active" | "inactive" | "error"
+    last_error?: string | null
+}
+
+/**
+ * Atomic source representation - single responsibility for source-specific metadata
+ */
+export interface SourceProvider {
+    id: string // unique identifier
+    name: string
+    number_of_connections?: number | null
+    refresh_every_hours?: number | null
+    subscription_expires?: string | null
+    source_timezone?: string | null
+    enabled: boolean
+    // Source-level metadata only, no file-specific data
+}
+
+/**
+ * Normalized data structure for the table display
+ * Combines source and file data for row-grouped display
+ */
+export interface SourceFileRow {
+    sourceId: string
+    sourceName: string
+    sourceEnabled: boolean
+    sourceTimezone?: string | null
+    sourceConnections?: number | null
+    sourceRefreshHours?: number | null
+    sourceSubscriptionExpires?: string | null
+
+    fileId: string
+    fileType: "m3u" | "epg"
+    fileUrl: string
+    fileLastRefresh?: string | null
+    fileSizeBytes?: number
+    fileStatus?: "active" | "inactive" | "error"
+    fileLastError?: string | null
+
+    isFirstFileForSource?: boolean // for rowspan logic
+    rowSpanCount?: number // number of files for this source
 }
 
 /**

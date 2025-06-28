@@ -2,15 +2,22 @@
     <div>
         <DataTable
             v-model:editingRows="editingRows"
-            :value="displaySources"
+            :value="sourceFileRows"
+            rowGroupMode="subheader"
+            groupRowsBy="sourceName"
+            sortMode="single"
+            sortField="sourceName"
+            :sortOrder="1"
             responsiveLayout="scroll"
             stripedRows
             showGridlines
-            :rows="10"
+            :rows="20"
             editMode="row"
-            dataKey="name"
+            dataKey="fileId"
+            scrollable
+            scrollHeight="600px"
             :pt="{
-                table: { style: 'width: 100%; min-width: 70rem' },
+                table: { style: 'width: 100%; min-width: 80rem' },
                 column: {
                     bodycell: ({ state }) => ({
                         style:
@@ -21,136 +28,330 @@
             }"
             @row-edit-save="onRowEditSave"
         >
-            <!-- Dynamic columns based on configuration -->
+            <!-- Source Name Column (for grouping) -->
             <Column
-                v-for="column in tableColumns"
-                :key="column.field"
-                :field="column.field"
-                :header="column.header"
-                :sortable="column.sortable"
-                :style="column.style"
-                :bodyStyle="column.bodyStyle"
+                field="sourceName"
+                header="Source"
+                style="display: none"
+            ></Column>
+
+            <!-- File Type Column -->
+            <Column
+                field="fileType"
+                header="File Type"
+                style="min-width: 120px"
             >
                 <template #body="{ data }">
-                    <component
-                        :is="getBodyComponent(column, data)"
-                        v-bind="getBodyProps(column, data)"
+                    <div
+                        v-if="data._isSkeleton"
+                        class="flex items-center gap-2"
                     >
-                        <template
-                            v-if="
-                                !data.isSkeletonRow && column.type !== 'boolean'
-                            "
-                        >
-                            {{ getBodyContent(column, data) }}
-                        </template>
-                    </component>
+                        <Skeleton
+                            shape="circle"
+                            size="1.5rem"
+                            class="mr-2"
+                        ></Skeleton>
+                        <Skeleton width="4rem" height="1rem"></Skeleton>
+                    </div>
+                    <div v-else style="display: flex; align-items: center; gap: 16px;">
+                        <i
+                            :class="getFileTypeIcon(data.fileType)"
+                            :style="{ color: getFileTypeColor(data.fileType) }"
+                        ></i>
+                        <span style="text-transform: uppercase; font-weight: 600;">{{
+                            data.fileType
+                        }}</span>
+                    </div>
                 </template>
-                <template v-if="column.editable" #editor="{ data, field }">
-                    <component
-                        :is="getEditorComponent(column)"
-                        :model-value="getEditorValue(column, data, field)"
-                        v-bind="getEditorProps(column)"
-                        @update:model-value="
-                            updateEditorValue(column, data, field, $event)
-                        "
+            </Column>
+
+            <!-- File URL Column -->
+            <Column field="fileUrl" header="URL" style="min-width: 300px">
+                <template #body="{ data }">
+                    <div v-if="data._isSkeleton">
+                        <Skeleton width="100%" height="1rem"></Skeleton>
+                    </div>
+                    <div v-else class="url-cell" :title="data.fileUrl">
+                        {{ data.fileUrl }}
+                    </div>
+                </template>
+                <template #editor="{ data }">
+                    <InputText
+                        :model-value="data.fileUrl"
+                        fluid
+                        @update:model-value="data.fileUrl = $event"
                     />
                 </template>
             </Column>
 
-            <!-- Action columns -->
+            <!-- File Last Refresh Column -->
             <Column
-                header="Edit"
-                :rowEditor="true"
-                style="width: 10%; min-width: 8rem"
-                bodyStyle="text-align: center"
-            />
-            <Column header="Delete" style="width: 10%; min-width: 8rem">
-                <template #body="{ data, index }">
-                    <Button
-                        v-if="!data.isSkeletonRow"
-                        icon="pi pi-trash"
-                        severity="danger"
-                        text
-                        rounded
-                        @click="deleteSource(index)"
-                    />
+                field="fileLastRefresh"
+                header="Last Refresh"
+                style="min-width: 150px"
+            >
+                <template #body="{ data }">
+                    <Skeleton
+                        v-if="data._isSkeleton"
+                        width="8rem"
+                        height="1rem"
+                    ></Skeleton>
+                    <span v-else>{{
+                        formatLastRefresh(data.fileLastRefresh || "")
+                    }}</span>
                 </template>
             </Column>
+
+            <!-- File Actions Column -->
+            <Column
+                header="File Actions"
+                style="width: 150px; min-width: 120px"
+            >
+                <template #body="{ data }">
+                    <div v-if="data._isSkeleton" class="action-buttons">
+                        <Skeleton
+                            shape="circle"
+                            size="2rem"
+                            class="mr-1"
+                        ></Skeleton>
+                        <Skeleton shape="circle" size="2rem"></Skeleton>
+                    </div>
+                    <div v-else class="action-buttons">
+                        <Button
+                            icon="pi pi-refresh"
+                            severity="info"
+                            size="small"
+                            text
+                            rounded
+                            :title="`Refresh ${data.fileType.toUpperCase()} file`"
+                            @click="refreshFile(data)"
+                        />
+                        <Button
+                            icon="pi pi-download"
+                            severity="success"
+                            size="small"
+                            text
+                            rounded
+                            :title="`Download ${data.fileType.toUpperCase()} file`"
+                            @click="downloadFile(data)"
+                        />
+                    </div>
+                </template>
+            </Column>
+
+            <!-- Group Header Template - Source Metadata -->
+            <template #groupheader="{ data }">
+                <!-- Skeleton Group Header -->
+                <div v-if="data._isSkeleton" class="source-group-header">
+                    <div class="source-header-main">
+                        <div class="source-name">
+                            <Skeleton
+                                shape="circle"
+                                size="1.5rem"
+                                class="mr-2"
+                            ></Skeleton>
+                            <Skeleton width="12rem" height="1.5rem"></Skeleton>
+                        </div>
+                        <div class="source-actions">
+                            <Skeleton
+                                shape="circle"
+                                size="2rem"
+                                class="mr-1"
+                            ></Skeleton>
+                            <Skeleton shape="circle" size="2rem"></Skeleton>
+                        </div>
+                    </div>
+                    <div class="source-metadata">
+                        <div class="metadata-item">
+                            <Skeleton
+                                width="4rem"
+                                height="1rem"
+                                class="mr-2"
+                            ></Skeleton>
+                            <Skeleton width="5rem" height="1.5rem"></Skeleton>
+                        </div>
+                        <div class="metadata-item">
+                            <Skeleton
+                                width="6rem"
+                                height="1rem"
+                                class="mr-2"
+                            ></Skeleton>
+                            <Skeleton width="2rem" height="1rem"></Skeleton>
+                        </div>
+                        <div class="metadata-item">
+                            <Skeleton
+                                width="4rem"
+                                height="1rem"
+                                class="mr-2"
+                            ></Skeleton>
+                            <Skeleton width="3rem" height="1rem"></Skeleton>
+                        </div>
+                        <div class="metadata-item">
+                            <Skeleton
+                                width="5rem"
+                                height="1rem"
+                                class="mr-2"
+                            ></Skeleton>
+                            <Skeleton width="4rem" height="1rem"></Skeleton>
+                        </div>
+                        <div class="metadata-item">
+                            <Skeleton
+                                width="4rem"
+                                height="1rem"
+                                class="mr-2"
+                            ></Skeleton>
+                            <Skeleton width="5rem" height="1rem"></Skeleton>
+                        </div>
+                    </div>
+                </div>
+                <!-- Normal Group Header -->
+                <div v-else class="source-group-header">
+                    <div class="source-header-main">
+                        <div class="source-name">
+                            <i class="pi pi-server" style="color: #6366f1"></i>
+                            <span class="font-bold text-lg">{{
+                                data.sourceName
+                            }}</span>
+                        </div>
+                        <div class="source-actions">
+                            <Button
+                                icon="pi pi-pencil"
+                                severity="info"
+                                size="small"
+                                text
+                                rounded
+                                title="Edit source"
+                                @click="editSource(data.sourceId)"
+                            />
+                            <Button
+                                icon="pi pi-trash"
+                                severity="danger"
+                                size="small"
+                                text
+                                rounded
+                                title="Delete source"
+                                @click="deleteSource(data.sourceId)"
+                            />
+                        </div>
+                    </div>
+                    <div class="source-metadata">
+                        <div class="metadata-item">
+                            <span class="metadata-label">Status:</span>
+                            <Tag
+                                :value="
+                                    data.sourceEnabled ? 'Enabled' : 'Disabled'
+                                "
+                                :severity="
+                                    data.sourceEnabled ? 'success' : 'danger'
+                                "
+                            />
+                        </div>
+                        <div class="metadata-item">
+                            <span class="metadata-label">Connections:</span>
+                            <span class="metadata-value">{{
+                                data.sourceConnections || 1
+                            }}</span>
+                        </div>
+                        <div class="metadata-item">
+                            <span class="metadata-label">Refresh:</span>
+                            <span class="metadata-value"
+                                >{{ data.sourceRefreshHours || 24 }}h</span
+                            >
+                        </div>
+                        <div class="metadata-item">
+                            <span class="metadata-label">Timezone:</span>
+                            <span class="metadata-value">{{
+                                data.sourceTimezone || "UTC"
+                            }}</span>
+                        </div>
+                        <div class="metadata-item">
+                            <span class="metadata-label">Expires:</span>
+                            <span class="metadata-value">{{
+                                formatSubscriptionExpires(
+                                    data.sourceSubscriptionExpires
+                                )
+                            }}</span>
+                        </div>
+                    </div>
+                </div>
+            </template>
         </DataTable>
         <br />
         <Button
             label="New Source"
             icon="pi pi-plus"
             class="mt-4"
-            @click="showNewSourceModal = true"
+            @click="openNewSourceDialog"
         />
 
-        <!-- New Source Dialog -->
         <Dialog
-            v-model:visible="showNewSourceModal"
-            header="New Source"
+            v-model:visible="showSourceModal"
+            :header="isEditMode ? 'Edit Source' : 'New Source'"
             :modal="true"
             :closable="false"
             :closeOnEscape="true"
-            class="new-source-dialog"
+            class="source-dialog"
         >
-            <form @submit.prevent="saveNewSource">
+            <form @submit.prevent="saveSource">
                 <div class="form-grid">
                     <div class="form-row">
                         <label>Name:</label>
-                        <InputText v-model="newSource.name" required fluid />
+                        <InputText v-model="sourceForm.name" required fluid />
                     </div>
                     <div class="form-row">
                         <label>Enabled:</label>
                         <Select
-                            v-model="newSource.enabled"
-                            :options="[true, false]"
+                            v-model="sourceForm.enabled"
+                            :options="[
+                                { label: 'Yes', value: true },
+                                { label: 'No', value: false },
+                            ]"
+                            optionLabel="label"
+                            optionValue="value"
                             fluid
                         />
                     </div>
                     <div class="form-row">
                         <label>M3U URL:</label>
-                        <InputText v-model="newSourceM3uUrl" required fluid />
+                        <InputText v-model="sourceForm.m3uUrl" required fluid />
                     </div>
                     <div class="form-row">
                         <label>EPG URL:</label>
-                        <InputText v-model="newSourceEpgUrl" fluid />
+                        <InputText v-model="sourceForm.epgUrl" fluid />
                     </div>
                     <div class="form-row">
                         <label>Connections:</label>
                         <InputNumber
-                            v-model="newSource.number_of_connections"
+                            v-model="sourceForm.connections"
                             :min="1"
-                            required
                             fluid
                         />
                     </div>
                     <div class="form-row">
-                        <label>Refresh (h):</label>
+                        <label>Refresh Hours:</label>
                         <InputNumber
-                            v-model="newSource.refresh_every_hours"
+                            v-model="sourceForm.refreshHours"
                             :min="1"
-                            required
+                            fluid
+                        />
+                    </div>
+                    <div class="form-row">
+                        <label>Timezone:</label>
+                        <Select
+                            v-model="sourceForm.timezone"
+                            :options="timezoneOptions"
+                            optionLabel="label"
+                            optionValue="value"
+                            placeholder="Select timezone"
                             fluid
                         />
                     </div>
                     <div class="form-row">
                         <label>Subscription Expires:</label>
                         <DatePicker
-                            v-model="newSource.subscription_expires"
+                            v-model="sourceForm.subscriptionExpires"
                             dateFormat="yy-mm-dd"
                             showIcon
-                            fluid
-                        />
-                    </div>
-                    <div class="form-row">
-                        <label>Source Timezone:</label>
-                        <Select
-                            v-model="newSource.source_timezone"
-                            :options="timezoneOptions"
-                            optionLabel="label"
-                            optionValue="value"
-                            placeholder="Select timezone"
                             fluid
                         />
                     </div>
@@ -163,13 +364,13 @@
                         icon="pi pi-times"
                         severity="secondary"
                         text
-                        @click="showNewSourceModal = false"
+                        @click="cancelSourceDialog"
                     />
                     <Button
                         label="Save"
                         icon="pi pi-check"
                         severity="success"
-                        @click="saveNewSource"
+                        @click="saveSource"
                     />
                 </div>
             </template>
@@ -228,237 +429,268 @@ import Tag from "primevue/tag"
 import DatePicker from "primevue/datepicker"
 import Skeleton from "primevue/skeleton"
 import { apiGet, apiPost } from "../utils/apiUtils"
-import type { Source, FileMetadata } from "../types/types"
+import type { Source, SourceFileRow } from "../types/types"
 import { timezoneOptions } from "../utils/timezones"
 
-interface SourceFieldSchema {
-    field: keyof Source | string // Allow virtual fields like m3u_url, epg_url
-    header: string
-    type:
-        | "text"
-        | "number"
-        | "boolean"
-        | "date"
-        | "url"
-        | "timezone"
-        | "last_refresh"
-        | "file_metadata_url"
-    defaultValue: any
-    sortable?: boolean
-    editable?: boolean
-    style?: string
-    bodyStyle?: string
-    skeletonWidth?: string
-    file_type?: "m3u" | "epg" // For file_metadata_url fields
-}
+// Reactive state for sources and UI
+const sources = ref<Source[]>([])
+const editingRows = ref([])
+const loading = ref(true)
+const error = ref("")
+const saveSuccess = ref("")
 
-// Schema drives everything - add new fields here
-const sourceFieldsSchema: SourceFieldSchema[] = [
-    {
-        field: "name",
-        header: "Name",
-        type: "text",
-        defaultValue: "",
-        sortable: true,
-        editable: true,
-    },
-    {
-        field: "enabled",
-        header: "Enabled",
-        type: "boolean",
-        defaultValue: true,
-        sortable: true,
-        editable: true,
-    },
-    {
-        field: "m3u_url",
-        header: "M3U URL",
-        type: "file_metadata_url",
-        file_type: "m3u",
-        defaultValue: "",
-        sortable: true,
-        editable: true,
-        style: "min-width: 8rem; max-width: none",
-        bodyStyle:
-            "max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space;",
-        skeletonWidth: "150px",
-    },
-    {
-        field: "epg_url",
-        header: "EPG URL",
-        type: "file_metadata_url",
-        file_type: "epg",
-        defaultValue: "",
-        sortable: true,
-        editable: true,
-        style: "min-width: 8rem; max-width: none",
-        bodyStyle:
-            "max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space;",
-        skeletonWidth: "150px",
-    },
-    {
-        field: "number_of_connections",
-        header: "Connections",
-        type: "number",
-        defaultValue: 1,
-        sortable: true,
-        editable: true,
-        skeletonWidth: "50px",
-    },
-    {
-        field: "refresh_every_hours",
-        header: "Refresh (h)",
-        type: "number",
-        defaultValue: 24,
-        sortable: true,
-        editable: true,
-        skeletonWidth: "50px",
-    },
-    {
-        field: "last_refresh",
-        header: "Last Refresh",
-        type: "last_refresh",
-        defaultValue: "",
-        sortable: true,
-        editable: false,
-        skeletonWidth: "100px",
-    },
-    {
-        field: "subscription_expires",
-        header: "Expires",
-        type: "date",
-        defaultValue: "",
-        sortable: true,
-        editable: true,
-        skeletonWidth: "100px",
-    },
-    {
-        field: "source_timezone",
-        header: "Timezone",
-        type: "timezone",
-        defaultValue: "",
-        sortable: true,
-        editable: true,
-        skeletonWidth: "120px",
-    },
-]
+// Data transformation
+const sourceFileRows = computed<SourceFileRow[]>(() => {
+    if (loading.value) {
+        // Return skeleton data during loading
+        return createSkeletonRows()
+    }
 
-// Derived table columns from schema
-interface TableColumn {
-    field: string
-    header: string
-    sortable?: boolean
-    editable?: boolean
-    style?: string
-    bodyStyle?: string
-    type: string
-    skeletonWidth?: string
-    file_type?: "m3u" | "epg" // For file_metadata_url fields
-}
+    return transformSourcesToRows(sources.value)
+})
 
-const tableColumns = ref<TableColumn[]>(
-    sourceFieldsSchema.map((schema) => ({
-        field: schema.field,
-        header: schema.header,
-        type: schema.type,
-        sortable: schema.sortable,
-        editable: schema.editable,
-        style: schema.style,
-        bodyStyle: schema.bodyStyle,
-        skeletonWidth: schema.skeletonWidth,
-        file_type: schema.file_type, // Include file_type for file_metadata_url columns
-    }))
-)
+// Transform sources to normalized row structure
+function transformSourcesToRows(sourcesData: Source[]): SourceFileRow[] {
+    const rows: SourceFileRow[] = []
 
-// DRY Default Source Factory - driven by schema
-function createDefaultSource(): Source {
-    const defaults: Partial<Source> = {}
+    sourcesData.forEach((source, sourceIndex) => {
+        const sourceId = `source-${sourceIndex}-${source.name}`
+        const fileTypes: Array<"m3u" | "epg"> = ["m3u", "epg"]
 
-    sourceFieldsSchema.forEach((schema) => {
-        defaults[schema.field as keyof Source] = schema.defaultValue
+        fileTypes.forEach((fileType, fileIndex) => {
+            const fileMetadata = source.file_metadata?.[fileType]
+            if (!fileMetadata) return // Skip if file metadata doesn't exist
+
+            const row: SourceFileRow = {
+                // Source fields (will be row-spanned)
+                sourceId,
+                sourceName: source.name,
+                sourceEnabled: source.enabled,
+                sourceTimezone: source.source_timezone,
+                sourceConnections: source.number_of_connections,
+                sourceRefreshHours: source.refresh_every_hours,
+                sourceSubscriptionExpires: source.subscription_expires,
+
+                // File fields (unique per row)
+                fileId: `${sourceId}-${fileType}`,
+                fileType,
+                fileUrl: fileMetadata.url,
+                fileLastRefresh: fileMetadata.last_refresh || null,
+                fileSizeBytes: fileMetadata.last_size_bytes,
+                fileStatus: determineFileStatus(fileMetadata),
+                fileLastError: null, // TODO: Add error tracking
+
+                // UI helpers for rowspan logic
+                isFirstFileForSource: fileIndex === 0,
+                rowSpanCount: fileTypes.length,
+            }
+
+            rows.push(row)
+        })
     })
 
-    // Initialize file_metadata structure for new sources
-    const source = defaults as Source
-    const defaultFileMetadata: FileMetadata = {
-        url: "",
-        last_refresh: "",
-        last_size_bytes: 0,
-    }
-
-    source.file_metadata = {
-        m3u: { ...defaultFileMetadata },
-        epg: { ...defaultFileMetadata },
-    }
-
-    return source
+    return rows
 }
 
-// Modal state and new source object
-const showNewSourceModal = ref(false)
-const showDeleteDialog = ref(false)
-const sourceToDeleteIndex = ref<number | null>(null)
-
-const newSource = ref<Source>(createDefaultSource())
-
-// Computed properties for form binding to file_metadata URLs
-const newSourceM3uUrl = computed({
-    get: () => newSource.value.file_metadata?.m3u?.url || "",
-    set: (value: string) => {
-        if (!newSource.value.file_metadata) {
-            newSource.value.file_metadata = {}
-        }
-        if (!newSource.value.file_metadata.m3u) {
-            const defaultMetadata: FileMetadata = {
-                url: "",
-                last_refresh: "",
-                last_size_bytes: 0,
-            }
-            newSource.value.file_metadata.m3u = defaultMetadata
-        }
-        newSource.value.file_metadata.m3u.url = value
-    },
-})
-
-const newSourceEpgUrl = computed({
-    get: () => newSource.value.file_metadata?.epg?.url || "",
-    set: (value: string) => {
-        if (!newSource.value.file_metadata) {
-            newSource.value.file_metadata = {}
-        }
-        if (!newSource.value.file_metadata.epg) {
-            const defaultMetadata: FileMetadata = {
-                url: "",
-                last_refresh: "",
-                last_size_bytes: 0,
-            }
-            newSource.value.file_metadata.epg = defaultMetadata
-        }
-        newSource.value.file_metadata.epg.url = value
-    },
-})
-
-function resetNewSource() {
-    newSource.value = createDefaultSource()
+// Determine file status based on metadata
+function determineFileStatus(
+    fileMetadata: FileMetadata
+): "active" | "inactive" | "error" {
+    if (!fileMetadata.url) return "inactive"
+    if (fileMetadata.last_refresh) return "active"
+    return "inactive"
 }
 
-const saveNewSource = async () => {
+// Create skeleton rows for loading state
+function createSkeletonRows(): SourceFileRow[] {
+    return Array.from(
+        { length: 1 },
+        (_, index) =>
+            ({
+                sourceId: `skeleton-${index}`,
+                sourceName: `Skeleton Source ${index + 1}`,
+                sourceEnabled: true,
+                sourceTimezone: "UTC",
+                sourceConnections: 1,
+                sourceRefreshHours: 24,
+                sourceSubscriptionExpires: null,
+                fileId: `skeleton-file-${index}-m3u`,
+                fileType: "m3u" as const,
+                fileUrl: "skeleton-url",
+                fileLastRefresh: null,
+                fileSizeBytes: 0,
+                fileStatus: "active" as const,
+                fileLastError: null,
+                isFirstFileForSource: true,
+                rowSpanCount: 1,
+                _isSkeleton: true, // Flag to identify skeleton rows
+            }) as SourceFileRow & { _isSkeleton: boolean }
+    )
+}
+
+/**
+ * Utility functions for UI display and interactions
+ */
+
+// Get file type icon
+function getFileTypeIcon(fileType: "m3u" | "epg"): string {
+    switch (fileType) {
+        case "m3u":
+            return "pi pi-list"
+        case "epg":
+            return "pi pi-calendar"
+        default:
+            return "pi pi-file"
+    }
+}
+
+// Get file type color
+function getFileTypeColor(fileType: "m3u" | "epg"): string {
+    switch (fileType) {
+        case "m3u":
+            return "#10b981" // green
+        case "epg":
+            return "#3b82f6" // blue
+        default:
+            return "#6b7280" // gray
+    }
+}
+
+// Format last refresh time
+function formatLastRefresh(lastRefresh: string): string {
+    if (!lastRefresh) return "Never"
+
+    const date = new Date(lastRefresh)
+    if (isNaN(date.getTime())) return "Invalid date"
+
+    const now = new Date()
+    const diffMs = now.getTime() - date.getTime()
+    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
+    const diffDays = Math.floor(diffHours / 24)
+
+    if (diffDays > 0) {
+        return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`
+    } else if (diffHours > 0) {
+        return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`
+    } else {
+        return "Less than 1 hour ago"
+    }
+}
+
+function formatSubscriptionExpires(expiresDate: string | null): string {
+    if (!expiresDate) return "Never"
+
+    const date = new Date(expiresDate)
+    if (isNaN(date.getTime())) return "Invalid date"
+
+    // Format to yyyy-mm-dd
+    const year = date.getFullYear().toString() // Year
+    const month = (date.getMonth() + 1).toString().padStart(2, "0") // Month (1-12) with leading zero
+    const day = date.getDate().toString().padStart(2, "0") // Day with leading zero
+
+    return `${year}-${month}-${day}`
+}
+
+/**
+ * Action handlers for file and source operations
+ */
+
+// File-specific actions
+function refreshFile(fileRow: SourceFileRow) {
+    console.log(
+        `Refreshing ${fileRow.fileType.toUpperCase()} file for source: ${fileRow.sourceName}`
+    )
+    // TODO: Implement file refresh logic
+}
+
+function downloadFile(fileRow: SourceFileRow) {
+    console.log(
+        `Downloading ${fileRow.fileType.toUpperCase()} file for source: ${fileRow.sourceName}`
+    )
+    // TODO: Implement file download logic
+}
+
+// Source-specific actions
+function editSource(sourceId: string) {
+    console.log(`Editing source: ${sourceId}`)
+
+    // Find the source to edit
+    const sourceIndex = sources.value.findIndex(
+        (source) =>
+            `source-${sources.value.indexOf(source)}-${source.name}` ===
+            sourceId
+    )
+
+    if (sourceIndex === -1) {
+        console.error("Source not found for editing:", sourceId)
+        return
+    }
+
+    // Set up the editing state
+    const sourceToEdit = sources.value[sourceIndex]
+    isEditMode.value = true
+    editingSourceId.value = sourceId
+
+    // Populate the form using dynamic field mapping
+    populateFormFromSource(sourceToEdit)
+
+    showSourceModal.value = true
+}
+
+function cancelSourceDialog() {
+    showSourceModal.value = false
+    isEditMode.value = false
+    editingSourceId.value = null
+    resetSourceForm()
+}
+
+async function saveSource() {
     try {
-        // Add the new source to the sources array
-        const updatedSources = [...sources.value, newSource.value]
+        if (isEditMode.value) {
+            // Edit existing source
+            if (!editingSourceId.value) return
 
-        // Send the updated sources to the backend
-        await apiPost("/api/sources", updatedSources, true, {
-            successMessage: "New source added successfully",
-            errorPrefix: "Failed to add source",
-        })
+            const sourceIndex = sources.value.findIndex(
+                (source) =>
+                    `source-${sources.value.indexOf(source)}-${source.name}` ===
+                    editingSourceId.value
+            )
 
-        // Update local sources and reset form
-        sources.value = updatedSources
-        resetNewSource()
-        showNewSourceModal.value = false
+            if (sourceIndex === -1) {
+                console.error(
+                    "Source not found for saving:",
+                    editingSourceId.value
+                )
+                return
+            }
+
+            // Update the source using dynamic field mapping
+            const updatedSource = updateSourceFromForm(
+                sources.value[sourceIndex]
+            )
+            sources.value[sourceIndex] = updatedSource
+
+            await apiPost("/api/sources", sources.value, true, {
+                successMessage: "Source updated successfully",
+                errorPrefix: "Failed to update source",
+            })
+        } else {
+            // Create new source using dynamic field mapping
+            const newSource = createSourceFromForm()
+            const updatedSources = [...sources.value, newSource]
+
+            await apiPost("/api/sources", updatedSources, true, {
+                successMessage: "Source created successfully",
+                errorPrefix: "Failed to create source",
+            })
+
+            sources.value = updatedSources
+        }
+
+        // Close the modal and reset state
+        cancelSourceDialog()
     } catch (err) {
-        error.value = `Failed to add source: ${err instanceof Error ? err.message : String(err)}`
+        error.value = `Failed to ${isEditMode.value ? "update" : "create"} source: ${err instanceof Error ? err.message : String(err)}`
 
         // Clear error message after 5 seconds
         setTimeout(() => {
@@ -467,213 +699,185 @@ const saveNewSource = async () => {
     }
 }
 
-const sources = ref<Source[]>([])
-const loading = ref(true)
-const error = ref("")
-const saveSuccess = ref("")
-const editingRows = ref<Source[]>([])
-
-// DRY Skeleton Factory - reuses createDefaultSource()
-function createSkeletonSource(
-    index: number
-): Source & { isSkeletonRow: boolean } {
-    return {
-        ...createDefaultSource(),
-        name: `skeleton-${index}`,
-        isSkeletonRow: true,
-    }
+function deleteSource(sourceId: string) {
+    sourceToDeleteId.value = sourceId
+    showDeleteDialog.value = true
 }
 
-// Create skeleton data for loading state
-const skeletonData = Array.from({ length: 1 }, (_, index) =>
-    createSkeletonSource(index)
-)
+// Modal and form state
+const showSourceModal = ref(false)
+const showDeleteDialog = ref(false)
+const isEditMode = ref(false)
+const editingSourceId = ref<string | null>(null)
+const sourceToDeleteId = ref<string | null>(null)
 
-// Computed property to show skeleton data when loading, real data when loaded
-const displaySources = computed(() => {
-    return loading.value ? skeletonData : sources.value
-})
+// Source field mapping: form field -> source property
+const SOURCE_FIELD_MAP = {
+    name: "name",
+    enabled: "enabled",
+    connections: "number_of_connections",
+    refreshHours: "refresh_every_hours",
+    timezone: "source_timezone",
+    subscriptionExpires: "subscription_expires",
+} as const
 
-function formatDate(date: string | Date) {
-    if (!date) return ""
-    const d = typeof date === "string" ? new Date(date) : date
-    if (isNaN(d.getTime())) return ""
-    const yyyy = d.getFullYear()
-    const mm = String(d.getMonth() + 1).padStart(2, "0")
-    const dd = String(d.getDate()).padStart(2, "0")
-    return `${yyyy}-${mm}-${dd}`
+// File field mapping: form field -> file metadata property
+const FILE_FIELD_MAP = {
+    m3uUrl: { fileType: "m3u", property: "url" },
+    epgUrl: { fileType: "epg", property: "url" },
+} as const
+
+// Default values for source form fields (single source of truth)
+const DEFAULT_SOURCE_FORM = {
+    name: "",
+    enabled: true,
+    connections: 1,
+    refreshHours: 24,
+    timezone: "UTC",
+    subscriptionExpires: null as string | null,
+    m3uUrl: "",
+    epgUrl: "",
+} as const
+
+// Unified source form data (initialized from defaults)
+const sourceForm = ref({ ...DEFAULT_SOURCE_FORM })
+
+// Helper function to reset form to default values
+function resetSourceForm() {
+    sourceForm.value = { ...DEFAULT_SOURCE_FORM }
 }
 
-function calculateHoursAgo(date: string | Date) {
-    if (!date) return "Never"
-    const d = typeof date === "string" ? new Date(date) : date
-    if (isNaN(d.getTime())) return "Unknown"
-    const hoursAgo = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60))
-    return `${hoursAgo} hours ago`
+// Helper function to populate form from source data
+function populateFormFromSource(source: Source): void {
+    // Map source-level fields
+    Object.entries(SOURCE_FIELD_MAP).forEach(([formField, sourceField]) => {
+        const value = source[sourceField as keyof Source]
+        ;(sourceForm.value as any)[formField] =
+            value ??
+            DEFAULT_SOURCE_FORM[formField as keyof typeof DEFAULT_SOURCE_FORM]
+    })
+
+    // Map file-level fields
+    Object.entries(FILE_FIELD_MAP).forEach(([formField, fileConfig]) => {
+        const fileData = source.file_metadata?.[fileConfig.fileType]
+        const value = fileData?.[fileConfig.property as keyof typeof fileData]
+        ;(sourceForm.value as any)[formField] = value || ""
+    })
 }
 
-// DRY Component Rendering Functions
-function getBodyComponent(column: TableColumn, data: any) {
-    if (data.isSkeletonRow) return Skeleton
+// Helper function to update source from form data
+function updateSourceFromForm(source: Source): Source {
+    const updatedSource = { ...source }
 
-    switch (column.type) {
-        case "boolean":
-            return Tag
-        default:
-            return "span"
-    }
-}
+    // Update source-level fields
+    Object.entries(SOURCE_FIELD_MAP).forEach(([formField, sourceField]) => {
+        const value = (sourceForm.value as any)[formField]
+        ;(updatedSource as any)[sourceField] = value
+    })
 
-function getBodyProps(column: TableColumn, data: any) {
-    if (data.isSkeletonRow) {
-        return column.skeletonWidth ? { width: column.skeletonWidth } : {}
-    }
-
-    switch (column.type) {
-        case "boolean":
-            return {
-                severity: data[column.field] ? "success" : "danger",
-                value: data[column.field] ? "Yes" : "No",
-            }
-        default:
-            return {}
-    }
-}
-
-function getBodyContent(column: TableColumn, data: any) {
-    if (data.isSkeletonRow) return ""
-
-    switch (column.type) {
-        case "boolean":
-            return "" // Content handled by Tag component props
-        case "date":
-            return formatDate(data[column.field])
-        case "last_refresh":
-            return calculateHoursAgo(data[column.field])
-        case "file_metadata_url":
-            // Extract URL from file_metadata based on file_type
-            const fileType = column.file_type
-            return data.file_metadata?.[fileType]?.url || ""
-        default:
-            return data[column.field] || ""
-    }
-}
-
-function getEditorComponent(column: TableColumn) {
-    switch (column.type) {
-        case "number":
-            return InputNumber
-        case "boolean":
-            return Select
-        case "date":
-            return DatePicker
-        case "timezone":
-            return Select
-        default:
-            return InputText
-    }
-}
-
-function getEditorValue(column: TableColumn, data: any, field: string) {
-    if (column.type === "file_metadata_url") {
-        const fileType = column.file_type
-        return data.file_metadata?.[fileType]?.url || ""
-    }
-    return data[field]
-}
-
-function updateEditorValue(
-    column: TableColumn,
-    data: any,
-    field: string,
-    value: any
-) {
-    if (column.type === "file_metadata_url") {
-        const fileType = column.file_type
-        // Ensure file_metadata exists
-        if (!data.file_metadata) {
-            data.file_metadata = {}
+    // Update file-level fields
+    Object.entries(FILE_FIELD_MAP).forEach(([formField, fileConfig]) => {
+        const value = (sourceForm.value as any)[formField]
+        if (!updatedSource.file_metadata) {
+            updatedSource.file_metadata = {}
         }
-        // Ensure the specific file type metadata exists
-        if (!data.file_metadata[fileType]) {
-            const defaultMetadata: FileMetadata = {
+        if (!updatedSource.file_metadata[fileConfig.fileType]) {
+            updatedSource.file_metadata[fileConfig.fileType] = {
                 url: "",
                 last_refresh: "",
                 last_size_bytes: 0,
             }
-            data.file_metadata[fileType] = defaultMetadata
         }
-        // Update the URL
-        data.file_metadata[fileType].url = value
-    } else {
-        data[field] = value
-    }
+        updatedSource.file_metadata[fileConfig.fileType][
+            fileConfig.property as "url"
+        ] = value
+    })
+
+    return updatedSource
 }
 
-function getEditorProps(column: TableColumn) {
-    const baseProps = { fluid: true }
+// Helper function to create new source from form data
+function createSourceFromForm(): Source {
+    const newSource: Partial<Source> = {}
 
-    switch (column.type) {
-        case "boolean":
-            return {
-                ...baseProps,
-                options: [
-                    { label: "Yes", value: true },
-                    { label: "No", value: false },
-                ],
-                optionLabel: "label",
-                optionValue: "value",
-                placeholder: "Select status",
+    // Set source-level fields
+    Object.entries(SOURCE_FIELD_MAP).forEach(([formField, sourceField]) => {
+        const value = (sourceForm.value as any)[formField]
+        ;(newSource as any)[sourceField] = value
+    })
+
+    // Set file metadata
+    newSource.file_metadata = {}
+    Object.entries(FILE_FIELD_MAP).forEach(([formField, fileConfig]) => {
+        const value = (sourceForm.value as any)[formField]
+        if (!newSource.file_metadata![fileConfig.fileType]) {
+            newSource.file_metadata![fileConfig.fileType] = {
+                url: "",
+                last_refresh: "",
+                last_size_bytes: 0,
             }
-        case "timezone":
-            return {
-                ...baseProps,
-                options: timezoneOptions,
-                optionLabel: "label",
-                optionValue: "value",
-                placeholder: "Select timezone",
-            }
-        case "date":
-            return {
-                ...baseProps,
-                showIcon: true,
-                dateFormat: "yy-mm-dd",
-            }
-        case "url":
-        case "file_metadata_url":
-            return { ...baseProps, style: "min-width: 160px" }
-        default:
-            return baseProps
-    }
+        }
+        newSource.file_metadata![fileConfig.fileType][
+            fileConfig.property as "url"
+        ] = value
+    })
+
+    return newSource as Source
 }
 
-onMounted(async () => {
-    try {
-        sources.value = await apiGet("/api/sources", false, {
-            showSuccessToast: true,
-            errorPrefix: "Failed to load sources",
-        })
-    } catch (err) {
-        error.value = `Failed to load sources: ${err instanceof Error ? err.message : String(err)}`
-    } finally {
-        loading.value = false
-    }
-})
+// Helper function to update source from SourceFileRow data (for inline editing)
+function updateSourceFromFileRow(
+    source: Source,
+    fileRowData: SourceFileRow
+): Source {
+    const updatedSource = { ...source }
 
-// Show delete confirmation dialog
-const deleteSource = (index: number) => {
-    sourceToDeleteIndex.value = index
-    showDeleteDialog.value = true
+    // Use the same SOURCE_FIELD_MAP but with 'source' prefix for SourceFileRow fields
+    Object.entries(SOURCE_FIELD_MAP).forEach(([formField, sourceField]) => {
+        const fileRowField =
+            `source${formField.charAt(0).toUpperCase() + formField.slice(1)}` as keyof SourceFileRow
+        const value = fileRowData[fileRowField]
+        if (value !== undefined) {
+            ;(updatedSource as any)[sourceField] = value
+        }
+    })
+
+    // Update file-level fields
+    if (
+        updatedSource.file_metadata &&
+        updatedSource.file_metadata[fileRowData.fileType]
+    ) {
+        updatedSource.file_metadata[fileRowData.fileType].url =
+            fileRowData.fileUrl
+    }
+
+    return updatedSource
+}
+
+// Open dialog for new source
+function openNewSourceDialog() {
+    isEditMode.value = false
+    editingSourceId.value = null
+    resetSourceForm()
+    showSourceModal.value = true
 }
 
 // Handle delete confirmation
 const confirmDelete = async () => {
     try {
-        if (sourceToDeleteIndex.value === null) return
+        if (sourceToDeleteId.value === null) return
 
-        const index = sourceToDeleteIndex.value
+        // Find the source to delete by ID
+        const sourceIndex = sources.value.findIndex(
+            (source) =>
+                `source-${sources.value.indexOf(source)}-${source.name}` ===
+                sourceToDeleteId.value
+        )
+
+        if (sourceIndex === -1) return
+
         const updated = [...sources.value]
-        updated.splice(index, 1)
+        updated.splice(sourceIndex, 1)
 
         await apiPost("/api/sources", updated, true, {
             successMessage: "Source deleted successfully",
@@ -682,22 +886,37 @@ const confirmDelete = async () => {
 
         sources.value = updated
         showDeleteDialog.value = false
-        sourceToDeleteIndex.value = null
+        sourceToDeleteId.value = null
     } catch (err) {
         error.value = `Failed to delete source: ${err instanceof Error ? err.message : String(err)}`
         showDeleteDialog.value = false
     }
 }
 
+// Handle row edit save
 const onRowEditSave = async (event: {
-    data: Source
-    newData: Source
+    data: SourceFileRow
+    newData: SourceFileRow
     index: number
 }) => {
     try {
-        // Update the local data
-        const { newData, index } = event
-        sources.value[index] = newData
+        const { newData } = event
+
+        // Find the source that this file belongs to
+        const sourceIndex = sources.value.findIndex(
+            (source) =>
+                `source-${sources.value.indexOf(source)}-${source.name}` ===
+                newData.sourceId
+        )
+
+        if (sourceIndex === -1) return
+
+        // Update the source using dynamic field mapping
+        const updatedSource = updateSourceFromFileRow(
+            sources.value[sourceIndex],
+            newData
+        )
+        sources.value[sourceIndex] = updatedSource
 
         // Send the updated sources to the backend
         await apiPost("/api/sources", sources.value, true, {
@@ -713,6 +932,23 @@ const onRowEditSave = async (event: {
         }, 5000)
     }
 }
+
+/**
+ * Component lifecycle
+ */
+
+onMounted(async () => {
+    try {
+        sources.value = await apiGet("/api/sources", false, {
+            showSuccessToast: true,
+            errorPrefix: "Failed to load sources",
+        })
+    } catch (err) {
+        error.value = `Failed to load sources: ${err instanceof Error ? err.message : String(err)}`
+    } finally {
+        loading.value = false
+    }
+})
 </script>
 
 <style scoped>
@@ -800,5 +1036,150 @@ const onRowEditSave = async (event: {
     display: flex;
     align-items: center;
     justify-content: flex-start;
+}
+
+/* URL Cell Styling */
+.url-cell {
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    font-family: monospace;
+    font-size: 0.9em;
+}
+
+/* File Type Styling */
+.file-type-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+/* Source Name Styling */
+.source-name-cell {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+}
+
+/* Action Button Styling */
+.action-buttons {
+    display: flex;
+    gap: 0.25rem;
+    justify-content: center;
+}
+
+/* Row Group Styling */
+:deep(.p-datatable-tbody > tr:first-child td) {
+    border-top: 2px solid #e5e7eb;
+}
+
+:deep(.p-datatable-tbody > tr[data-p-rowgroup-first="true"] td) {
+    border-top: 2px solid #e5e7eb;
+    background-color: #f9fafb;
+}
+
+/* Source Group Header Styling */
+.source-group-header {
+    background: linear-gradient(
+        135deg,
+        var(--p-surface-50) 0%,
+        var(--p-surface-100) 100%
+    );
+    border: 1px solid var(--p-surface-200);
+    border-radius: 8px;
+    padding: 1rem;
+    margin: 0.5rem 0;
+    transition: all 0.2s ease;
+}
+
+.source-header-main {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 0.75rem;
+}
+
+.source-name {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 1.125rem;
+    font-weight: 600;
+    color: var(--p-text-color);
+}
+
+.source-actions {
+    display: flex;
+    gap: 0.25rem;
+}
+
+.source-metadata {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 1rem;
+    padding-top: 0.75rem;
+    border-top: 1px solid var(--p-surface-200);
+}
+
+.metadata-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.metadata-label {
+    font-weight: 500;
+    color: var(--p-text-muted-color);
+    min-width: 80px;
+}
+
+.metadata-value {
+    font-weight: 600;
+    color: var(--p-text-color);
+    background: var(--p-surface-0);
+    padding: 0.25rem 0.5rem;
+    border-radius: 4px;
+    border: 1px solid var(--p-surface-200);
+    transition: all 0.2s ease;
+}
+
+/* Dark mode specific adjustments */
+:global(.p-dark) .source-group-header {
+    background: linear-gradient(
+        135deg,
+        var(--p-surface-800) 0%,
+        var(--p-surface-700) 100%
+    );
+    border-color: var(--p-surface-600);
+}
+
+:global(.p-dark) .metadata-value {
+    background: var(--p-surface-900);
+    border-color: var(--p-surface-600);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+    .url-cell {
+        max-width: 200px;
+    }
+
+    .action-buttons {
+        flex-direction: column;
+        gap: 0.125rem;
+    }
+
+    .source-header-main {
+        flex-direction: column;
+        align-items: flex-start;
+        gap: 0.5rem;
+    }
+
+    .source-metadata {
+        grid-template-columns: 1fr;
+        gap: 0.5rem;
+    }
 }
 </style>

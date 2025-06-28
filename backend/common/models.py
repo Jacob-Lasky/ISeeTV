@@ -21,7 +21,6 @@ class Source(BaseModel):
     name: str
     number_of_connections: Optional[int]
     refresh_every_hours: Optional[int]
-    last_refresh: Optional[str]
     subscription_expires: Optional[str]
     source_timezone: Optional[str]
     enabled: bool
