@@ -16,8 +16,8 @@
             </div>
             <button
                 aria-label="Settings"
-                @click="openSettings = true"
                 class="settings-btn"
+                @click="openSettings = true"
             >
                 <i class="pi pi-cog" style="font-size: 1.7rem"></i>
             </button>
@@ -29,8 +29,8 @@
     </div>
     <SettingsModal
         :open="openSettings"
-        @close="openSettings = false"
         v-if="openSettings"
+        @close="openSettings = false"
     />
 </template>
 

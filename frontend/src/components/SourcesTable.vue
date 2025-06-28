@@ -85,7 +85,7 @@
             </Column>
             <Column field="subscription_expires" header="Expires" sortable>
                 <template #editor="{ data, field }">
-                    <Calendar
+                    <DatePicker
                         v-model="data[field]"
                         showIcon
                         dateFormat="yy-mm-dd"
@@ -178,7 +178,7 @@
                     </div>
                     <div class="form-row">
                         <label>Expires:</label>
-                        <Calendar
+                        <DatePicker
                             v-model="newSource.subscription_expires"
                             showIcon
                             dateFormat="yy-mm-dd"
@@ -221,11 +221,11 @@ import InputText from "primevue/inputtext"
 import InputNumber from "primevue/inputnumber"
 import Select from "primevue/select"
 import Tag from "primevue/tag"
-import type { Source } from "../../types" // if you have a shared TS interface
+import type { Source } from "../../types"
 import Button from "primevue/button"
 import ConfirmDialog from "primevue/confirmdialog"
 import { useConfirm } from "primevue/useconfirm"
-import Calendar from "primevue/calendar"
+import DatePicker from "primevue/datepicker"
 import { timezoneOptions } from "../utils/timezones"
 
 // Modal state and new source object
