@@ -64,6 +64,11 @@
                                     placeholder="Select theme"
                                     inputClass="settings-input right-align"
                                     style="width: 100%"
+                                    @change="
+                                        themeStore.setTheme(
+                                            editableSettings.theme
+                                        )
+                                    "
                                 />
                             </td>
                         </tr>
@@ -88,12 +93,28 @@ import { ref, onMounted, watch, computed } from "vue"
 import InputNumber from "primevue/inputnumber"
 import Select from "primevue/select"
 import { timezoneOptions } from "../utils/timezones"
+import { useThemeStore, ThemeMode } from "../stores/themeStore"
+
+// Define interface for settings structure
+interface AppSettings {
+    user_timezone: string
+    program_cache_days: number
+    theme: ThemeMode
+    [key: string]: string | number | boolean // Allow for additional properties
+}
 
 const props = defineProps<{ open: boolean }>()
 const emit = defineEmits(["close"])
 
-const settings = ref<any>(null)
-const editableSettings = ref<any>({})
+// Initialize theme store
+const themeStore = useThemeStore()
+
+const settings = ref<AppSettings | null>(null)
+const editableSettings = ref<AppSettings>({
+    user_timezone: "",
+    program_cache_days: 7,
+    theme: "system",
+})
 const loading = ref(false)
 const error = ref<string | null>(null)
 const saving = ref(false)
@@ -140,10 +161,21 @@ async function fetchSettings() {
         const res = await fetch("/api/settings")
         if (!res.ok) throw new Error("Failed to fetch settings")
         const data = await res.json()
+
+        // If theme is not in settings, add it with the current theme from store
+        if (!data.theme) {
+            data.theme = themeStore.theme
+        } else {
+            // If theme is in settings and different from store, update the store
+            if (data.theme !== themeStore.theme) {
+                themeStore.setTheme(data.theme)
+            }
+        }
+
         settings.value = data
         editableSettings.value = { ...data }
-    } catch (e: any) {
-        error.value = e.message || "Unknown error"
+    } catch (e: unknown) {
+        error.value = e instanceof Error ? e.message : "Unknown error"
     } finally {
         loading.value = false
     }
@@ -153,6 +185,14 @@ async function saveSettings() {
     saving.value = true
     error.value = null
     try {
+        // Update theme in the store if it has changed
+        if (
+            settings.value &&
+            settings.value.theme !== editableSettings.value.theme
+        ) {
+            themeStore.setTheme(editableSettings.value.theme)
+        }
+
         const res = await fetch("/api/settings", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -162,8 +202,8 @@ async function saveSettings() {
         await fetchSettings() // reload settings
         // Optionally show a success message here
         close()
-    } catch (e: any) {
-        error.value = e.message || "Unknown error"
+    } catch (e: unknown) {
+        error.value = e instanceof Error ? e.message : "Unknown error"
     } finally {
         saving.value = false
     }

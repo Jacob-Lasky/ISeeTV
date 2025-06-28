@@ -1,5 +1,5 @@
 <template>
-    <div class="app-container">
+    <div class="app-container" :class="{ 'dark-theme': themeStore.isDark }">
         <header
             style="
                 display: flex;
@@ -28,8 +28,8 @@
         </main>
     </div>
     <SettingsModal
-        :open="openSettings"
         v-if="openSettings"
+        :open="openSettings"
         @close="openSettings = false"
     />
 </template>
@@ -38,7 +38,9 @@
 import "primeicons/primeicons.css"
 import { ref } from "vue"
 import SettingsModal from "./components/SettingsModal.vue"
+import { useThemeStore } from "./stores/themeStore"
 
+const themeStore = useThemeStore()
 const openSettings = ref(false)
 </script>
 

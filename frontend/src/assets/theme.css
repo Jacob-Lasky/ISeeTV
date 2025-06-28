@@ -1,0 +1,149 @@
+/* Theme variables and styles */
+:root {
+    /* Light theme variables (default) */
+    --background-color: #ffffff;
+    --text-color: #333333;
+    --border-color: #dddddd;
+    --primary-color: #42b983;
+    --secondary-color: #35495e;
+    --hover-color: #f0f0f0;
+    --card-background: #ffffff;
+    --modal-overlay: rgba(0, 0, 0, 0.4);
+    --table-header-bg: #f5f5f5;
+    --table-row-bg: #ffffff;
+    --table-row-alt-bg: #f9f9f9;
+    --table-border: #e0e0e0;
+}
+
+/* Dark theme variables */
+.dark-theme {
+    --background-color: #121212;
+    --text-color: #e0e0e0;
+    --border-color: #444444;
+    --primary-color: #42b983;
+    --secondary-color: #8bc6ec;
+    --hover-color: #2a2a2a;
+    --card-background: #1e1e1e;
+    --modal-overlay: rgba(0, 0, 0, 0.6);
+    --table-header-bg: #2a2a2a;
+    --table-row-bg: #1e1e1e;
+    --table-row-alt-bg: #252525;
+    --table-border: #444444;
+}
+
+/* Apply theme variables to elements */
+html,
+body {
+    background-color: var(--background-color);
+    color: var(--text-color);
+    transition:
+        background-color 0.3s ease,
+        color 0.3s ease;
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+.app-container {
+    background-color: var(--background-color);
+    color: var(--text-color);
+    transition:
+        background-color 0.3s ease,
+        color 0.3s ease;
+    min-height: 100vh;
+}
+
+/* Override modal styles for dark theme */
+.dark-theme .modal {
+    background-color: var(--card-background);
+    color: var(--text-color);
+}
+
+.dark-theme .settings-input {
+    background-color: var(--card-background);
+    color: var(--text-color);
+    border-color: var(--border-color);
+}
+
+.dark-theme .cancel-btn {
+    background-color: #333;
+    color: #eee;
+}
+
+.dark-theme .cancel-btn:hover {
+    background-color: #444;
+}
+
+/* Links in dark mode */
+.dark-theme a {
+    color: var(--primary-color);
+}
+
+/* Settings button in dark mode */
+.dark-theme .settings-btn .pi {
+    color: var(--text-color);
+}
+
+.dark-theme .settings-btn:hover {
+    background-color: var(--hover-color);
+}
+
+/* Table styles for dark mode */
+.dark-theme table {
+    border-color: var(--table-border);
+    color: var(--text-color);
+}
+
+.dark-theme th {
+    background-color: var(--table-header-bg);
+    color: var(--text-color);
+    border-color: var(--table-border);
+}
+
+.dark-theme td {
+    border-color: var(--table-border);
+}
+
+.dark-theme tr {
+    background-color: var(--table-row-bg);
+}
+
+.dark-theme tr:nth-child(even) {
+    background-color: var(--table-row-alt-bg);
+}
+
+/* PrimeVue specific overrides */
+.dark-theme .p-component {
+    background-color: var(--card-background);
+    color: var(--text-color);
+}
+
+.dark-theme .p-datatable .p-datatable-thead > tr > th {
+    background-color: var(--table-header-bg);
+    color: var(--text-color);
+    border-color: var(--table-border);
+}
+
+.dark-theme .p-datatable .p-datatable-tbody > tr {
+    background-color: var(--table-row-bg);
+    color: var(--text-color);
+}
+
+.dark-theme .p-datatable .p-datatable-tbody > tr > td {
+    border-color: var(--table-border);
+}
+
+.dark-theme .p-dropdown-panel,
+.dark-theme .p-dropdown-items-wrapper,
+.dark-theme .p-dropdown-items {
+    background-color: var(--card-background);
+    color: var(--text-color);
+}
+
+.dark-theme .p-dropdown-item {
+    color: var(--text-color);
+}
+
+.dark-theme .p-dropdown-item:hover {
+    background-color: var(--hover-color);
+}

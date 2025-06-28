@@ -47,12 +47,12 @@ If you're thinking about contributing to this repo in any way, I want you to! I 
 
 ## Linting
 - While in the frontend directory, run:
-  - to check linting issues: `docker run --rm -v $(pwd):/app -w /app node:22-slim npm run format-and-lint`
-    - to fix most linting issues: `docker run --rm -v $(pwd):/app -w /app node:22-slim npm run format-and-lint -- --fix`
+  - to check linting issues: `npm run format-and-lint` (or, if you want to containerize npm: `docker run --rm -v $(pwd):/app -w /app node:22-slim npm run format-and-lint`)
+    - to fix most linting issues: `npm run format-and-lint -- --fix` (or, if you want to containerize npm: `docker run --rm -v $(pwd):/app -w /app node:22-slim npm run format-and-lint -- --fix`)
 - While in the backend directory, run:
-  - check for type errors: `poetry run mypy .`
+  - check for type errors: `poetry run mypy .` (or, if you want to containerize poetry: `docker run --rm -v $(pwd):/app -w /app python:3.11-slim poetry run mypy .`)
     - to fix most type errors, you'll need to manually edit the files
-  - check for linting issues: `poetry run ruff check .`
-    - to fix most linting issues: `poetry run ruff check . --fix`
-  - check for formatting issues: `poetry run black --check .`
-    - to fix most formatting issues: `poetry run black .`
+  - check for linting issues: `poetry run ruff check .` (or, if you want to containerize poetry: `docker run --rm -v $(pwd):/app -w /app python:3.11-slim poetry run ruff check .`)
+    - to fix most linting issues: `poetry run ruff check . --fix` (or, if you want to containerize poetry: `docker run --rm -v $(pwd):/app -w /app python:3.11-slim poetry run ruff check . --fix`)
+  - check for formatting issues: `poetry run black --check .` (or, if you want to containerize poetry: `docker run --rm -v $(pwd):/app -w /app python:3.11-slim poetry run black --check .`)
+    - to fix most formatting issues: `poetry run black .` (or, if you want to containerize poetry: `docker run --rm -v $(pwd):/app -w /app python:3.11-slim poetry run black .`)
