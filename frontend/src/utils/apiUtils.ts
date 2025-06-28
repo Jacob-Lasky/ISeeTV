@@ -43,7 +43,7 @@ export async function apiFetch<T = unknown>(
             toastService.showInfo("Loading...", "Please wait")
         }
         // put a synthetic delay to make the loading visible
-        // await new Promise((resolve) => setTimeout(resolve, 5000))
+        await new Promise((resolve) => setTimeout(resolve, 1000))
 
         // Make the API request
         const response = await fetch(url, options)

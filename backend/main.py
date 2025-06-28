@@ -43,6 +43,7 @@ class Source(BaseModel):
     epg_url: Optional[str]
     number_of_connections: Optional[int]
     refresh_every_hours: Optional[int]
+    last_refresh: Optional[str]
     subscription_expires: Optional[str]
     source_timezone: Optional[str]
     enabled: bool
@@ -120,6 +121,98 @@ async def set_sources(
         with open(sources_file, "w") as f:
             json.dump([source.dict() for source in sources], f, indent=4)
         return Message(message="Sources saved successfully")
+    except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/download/all_m3u", response_model=Message, tags=["Sources"])
+async def download_all_m3u(
+    sources_file: str = f"{DATA_PATH}/sources.json",
+    download_dir: str = f"{DATA_PATH}/sources",
+):
+    """Download sources from the provided file"""
+    try:
+        with open(sources_file, "r") as f:
+            sources = [Source(**source) for source in json.load(f)]
+
+        for source in sources:
+            if source.m3u_url:
+                download_m3u(source.name, sources_file, download_dir)
+
+        return Message(message="All M3U files downloaded successfully")
+    except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/download/m3u/{source_name}", response_model=Message, tags=["Sources"])
+async def download_m3u(
+    source_name: str,
+    sources_file: str = f"{DATA_PATH}/sources.json",
+    download_dir: str = f"{DATA_PATH}/sources",
+):
+    """Download sources from the provided file"""
+    try:
+        with open(sources_file, "r") as f:
+            sources = [Source(**source) for source in json.load(f)]
+
+        for source in sources:
+            if source.name == source_name:
+                if source.m3u_url:
+                    try:
+                        response = requests.get(source.m3u_url)
+                        response.raise_for_status()
+                        with open(f"{download_dir}/{source.name}.m3u", "w") as f:
+                            f.write(response.text)
+                    except requests.exceptions.RequestException as e:
+                        raise HTTPException(status_code=500, detail=str(e))
+
+        return Message(message=f"M3U file for {source_name} downloaded successfully")
+    except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/download/all_epg", response_model=Message, tags=["Sources"])
+async def download_all_epg(
+    sources_file: str = f"{DATA_PATH}/sources.json",
+    download_dir: str = f"{DATA_PATH}/sources",
+):
+    """Download EPG from the provided file"""
+    try:
+        with open(sources_file, "r") as f:
+            sources = [Source(**source) for source in json.load(f)]
+
+        for source in sources:
+            if source.epg_url:
+                download_epg(source.name, sources_file, download_dir)
+
+        return Message(message="All EPG files downloaded successfully")
+    except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.get("/api/download/epg/{source_name}", response_model=Message, tags=["Sources"])
+async def download_epg(
+    source_name: str,
+    sources_file: str = f"{DATA_PATH}/sources.json",
+    download_dir: str = f"{DATA_PATH}/sources",
+):
+    """Download EPG from the provided file"""
+    try:
+        with open(sources_file, "r") as f:
+            sources = [Source(**source) for source in json.load(f)]
+
+        for source in sources:
+            if source.name == source_name:
+                if source.epg_url:
+                    try:
+                        response = requests.get(source.epg_url)
+                        response.raise_for_status()
+                        with open(f"{download_dir}/{source.name}.epg", "w") as f:
+                            f.write(response.text)
+                    except requests.exceptions.RequestException as e:
+                        raise HTTPException(status_code=500, detail=str(e))
+
+        return Message(message=f"EPG file for {source_name} downloaded successfully")
     except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
         raise HTTPException(status_code=500, detail=str(e))
 

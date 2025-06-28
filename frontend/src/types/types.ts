@@ -20,6 +20,7 @@ export interface Source {
     number_of_connections?: number | null
     refresh_every_hours?: number | null
     subscription_expires?: string | null
+    last_refresh?: string | null
     source_timezone?: string | null
     enabled: boolean
 }

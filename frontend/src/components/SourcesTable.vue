@@ -21,127 +21,50 @@
             }"
             @row-edit-save="onRowEditSave"
         >
-            <Column field="name" header="Name" sortable>
-                <template #body="{ data }">
-                    <Skeleton v-if="data.isSkeletonRow" />
-                    <span v-else>{{ data.name }}</span>
-                </template>
-                <template #editor="{ data, field }">
-                    <InputText v-model="data[field]" fluid />
-                </template>
-            </Column>
-            <Column field="enabled" header="Enabled" sortable>
-                <template #body="{ data }">
-                    <Skeleton v-if="data.isSkeletonRow" width="60px" />
-                    <Tag
-                        v-else
-                        :severity="data.enabled ? 'success' : 'danger'"
-                        :value="data.enabled ? 'Yes' : 'No'"
-                    />
-                </template>
-                <template #editor="{ data, field }">
-                    <Select
-                        v-model="data[field]"
-                        :options="[true, false]"
-                        fluid
-                    />
-                </template>
-            </Column>
+            <!-- Dynamic columns based on configuration -->
             <Column
-                field="m3u_url"
-                header="M3U URL"
-                sortable
-                style="min-width: 8rem; max-width: none"
-                bodyStyle="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space;"
+                v-for="column in tableColumns"
+                :key="column.field"
+                :field="column.field"
+                :header="column.header"
+                :sortable="column.sortable"
+                :style="column.style"
+                :bodyStyle="column.bodyStyle"
             >
                 <template #body="{ data }">
-                    <Skeleton v-if="data.isSkeletonRow" width="150px" />
-                    <span v-else>{{ data.m3u_url }}</span>
+                    <component
+                        :is="getBodyComponent(column, data)"
+                        v-bind="getBodyProps(column, data)"
+                    >
+                        <template
+                            v-if="
+                                !data.isSkeletonRow && column.type !== 'boolean'
+                            "
+                        >
+                            {{ getBodyContent(column, data) }}
+                        </template>
+                    </component>
                 </template>
-                <template #editor="{ data, field }">
-                    <InputText
+                <template v-if="column.editable" #editor="{ data, field }">
+                    <component
+                        :is="getEditorComponent(column)"
                         v-model="data[field]"
-                        fluid
-                        style="min-width: 160px"
+                        v-bind="getEditorProps(column)"
                     />
                 </template>
             </Column>
+
+            <!-- Action columns -->
             <Column
-                field="epg_url"
-                header="EPG URL"
-                sortable
-                style="min-width: 8rem; max-width: none"
-                bodyStyle="max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space;"
-            >
-                <template #body="{ data }">
-                    <Skeleton v-if="data.isSkeletonRow" width="150px" />
-                    <span v-else>{{ data.epg_url }}</span>
-                </template>
-                <template #editor="{ data, field }">
-                    <InputText
-                        v-model="data[field]"
-                        fluid
-                        style="min-width: 160px"
-                    />
-                </template>
-            </Column>
-            <Column field="number_of_connections" header="Connections" sortable>
-                <template #body="{ data }">
-                    <Skeleton v-if="data.isSkeletonRow" width="50px" />
-                    <span v-else>{{ data.number_of_connections }}</span>
-                </template>
-                <template #editor="{ data, field }">
-                    <InputNumber v-model="data[field]" fluid />
-                </template>
-            </Column>
-            <Column field="refresh_every_hours" header="Refresh (h)" sortable>
-                <template #body="{ data }">
-                    <Skeleton v-if="data.isSkeletonRow" width="50px" />
-                    <span v-else>{{ data.refresh_every_hours }}</span>
-                </template>
-                <template #editor="{ data, field }">
-                    <InputNumber v-model="data[field]" fluid />
-                </template>
-            </Column>
-            <Column field="subscription_expires" header="Expires" sortable>
-                <template #body="{ data }">
-                    <Skeleton v-if="data.isSkeletonRow" width="100px" />
-                    <span v-else>{{
-                        formatDate(data.subscription_expires)
-                    }}</span>
-                </template>
-                <template #editor="{ data, field }">
-                    <DatePicker
-                        v-model="data[field]"
-                        showIcon
-                        dateFormat="yy-mm-dd"
-                    />
-                </template>
-            </Column>
-            <Column field="source_timezone" header="Timezone" sortable>
-                <template #body="{ data }">
-                    <Skeleton v-if="data.isSkeletonRow" width="120px" />
-                    <span v-else>{{ data.source_timezone }}</span>
-                </template>
-                <template #editor="{ data, field }">
-                    <Select
-                        v-model="data[field]"
-                        :options="timezoneOptions"
-                        optionLabel="label"
-                        optionValue="value"
-                        placeholder="Select timezone"
-                        fluid
-                    />
-                </template>
-            </Column>
-            <Column
+                header="Edit"
                 :rowEditor="true"
                 style="width: 10%; min-width: 8rem"
                 bodyStyle="text-align: center"
             />
-            <Column header="" style="width: 10%; min-width: 2rem">
-                <template #body="{ index }">
+            <Column header="Delete" style="width: 10%; min-width: 8rem">
+                <template #body="{ data, index }">
                     <Button
+                        v-if="!data.isSkeletonRow"
                         icon="pi pi-trash"
                         severity="danger"
                         text
@@ -290,48 +213,174 @@
 </template>
 
 <script setup lang="ts">
-import { apiGet, apiPost } from "../utils/apiUtils"
-import type { Source } from "../types/types"
-import { ref, onMounted, computed } from "vue"
+import { ref, computed, onMounted } from "vue"
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
+import Button from "primevue/button"
 import InputText from "primevue/inputtext"
 import InputNumber from "primevue/inputnumber"
-import Button from "primevue/button"
 import Select from "primevue/select"
-import DatePicker from "primevue/datepicker"
-import Tag from "primevue/tag"
 import Dialog from "primevue/dialog"
+import Tag from "primevue/tag"
+import DatePicker from "primevue/datepicker"
 import Skeleton from "primevue/skeleton"
+import { apiGet, apiPost } from "../utils/apiUtils"
+import type { Source } from "../types/types"
 import { timezoneOptions } from "../utils/timezones"
+
+interface SourceFieldSchema {
+    field: keyof Source
+    header: string
+    type:
+        | "text"
+        | "number"
+        | "boolean"
+        | "date"
+        | "url"
+        | "timezone"
+        | "last_refresh"
+    defaultValue: any
+    sortable?: boolean
+    editable?: boolean
+    style?: string
+    bodyStyle?: string
+    skeletonWidth?: string
+}
+
+// Schema drives everything - add new fields here
+const sourceFieldsSchema: SourceFieldSchema[] = [
+    {
+        field: "name",
+        header: "Name",
+        type: "text",
+        defaultValue: "",
+        sortable: true,
+        editable: true,
+    },
+    {
+        field: "enabled",
+        header: "Enabled",
+        type: "boolean",
+        defaultValue: true,
+        sortable: true,
+        editable: true,
+    },
+    {
+        field: "m3u_url",
+        header: "M3U URL",
+        type: "url",
+        defaultValue: "",
+        sortable: true,
+        editable: true,
+        style: "min-width: 8rem; max-width: none",
+        bodyStyle:
+            "max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space;",
+        skeletonWidth: "150px",
+    },
+    {
+        field: "epg_url",
+        header: "EPG URL",
+        type: "url",
+        defaultValue: "",
+        sortable: true,
+        editable: true,
+        style: "min-width: 8rem; max-width: none",
+        bodyStyle:
+            "max-width: 200px; overflow: hidden; text-overflow: ellipsis; white-space;",
+        skeletonWidth: "150px",
+    },
+    {
+        field: "number_of_connections",
+        header: "Connections",
+        type: "number",
+        defaultValue: 1,
+        sortable: true,
+        editable: true,
+        skeletonWidth: "50px",
+    },
+    {
+        field: "refresh_every_hours",
+        header: "Refresh (h)",
+        type: "number",
+        defaultValue: 24,
+        sortable: true,
+        editable: true,
+        skeletonWidth: "50px",
+    },
+    {
+        field: "last_refresh",
+        header: "Last Refresh",
+        type: "last_refresh",
+        defaultValue: "",
+        sortable: true,
+        editable: false,
+        skeletonWidth: "100px",
+    },
+    {
+        field: "subscription_expires",
+        header: "Expires",
+        type: "date",
+        defaultValue: "",
+        sortable: true,
+        editable: true,
+        skeletonWidth: "100px",
+    },
+    {
+        field: "source_timezone",
+        header: "Timezone",
+        type: "timezone",
+        defaultValue: "",
+        sortable: true,
+        editable: true,
+        skeletonWidth: "120px",
+    },
+]
+
+// Derived table columns from schema
+interface TableColumn {
+    field: string
+    header: string
+    sortable?: boolean
+    editable?: boolean
+    style?: string
+    bodyStyle?: string
+    type: string
+    skeletonWidth?: string
+}
+
+const tableColumns = ref<TableColumn[]>(
+    sourceFieldsSchema.map((schema) => ({
+        field: schema.field,
+        header: schema.header,
+        type: schema.type,
+        sortable: schema.sortable,
+        editable: schema.editable,
+        style: schema.style,
+        bodyStyle: schema.bodyStyle,
+        skeletonWidth: schema.skeletonWidth,
+    }))
+)
+
+// DRY Default Source Factory - driven by schema
+function createDefaultSource(): Source {
+    const defaults: Partial<Source> = {}
+
+    sourceFieldsSchema.forEach((schema) => {
+        defaults[schema.field] = schema.defaultValue
+    })
+
+    return defaults as Source
+}
 
 // Modal state and new source object
 const showNewSourceModal = ref(false)
 const showDeleteDialog = ref(false)
 const sourceToDeleteIndex = ref<number | null>(null)
 
-const newSource = ref<Source>({
-    name: "",
-    enabled: true,
-    m3u_url: "",
-    epg_url: "",
-    number_of_connections: 1,
-    refresh_every_hours: 24,
-    subscription_expires: "",
-    source_timezone: "",
-})
+const newSource = ref<Source>(createDefaultSource())
 
 function resetNewSource() {
-    newSource.value = {
-        name: "",
-        enabled: true,
-        m3u_url: "",
-        epg_url: "",
-        number_of_connections: 1,
-        refresh_every_hours: 24,
-        subscription_expires: "",
-        source_timezone: "",
-    }
+    newSource.value = createDefaultSource()
 }
 
 const saveNewSource = async () => {
@@ -365,18 +414,21 @@ const error = ref("")
 const saveSuccess = ref("")
 const editingRows = ref<Source[]>([])
 
+// DRY Skeleton Factory - reuses createDefaultSource()
+function createSkeletonSource(
+    index: number
+): Source & { isSkeletonRow: boolean } {
+    return {
+        ...createDefaultSource(),
+        name: `skeleton-${index}`,
+        isSkeletonRow: true,
+    }
+}
+
 // Create skeleton data for loading state
-const skeletonData = Array.from({ length: 1 }, (_, index) => ({
-    name: `skeleton-${index}`,
-    enabled: true,
-    m3u_url: "",
-    epg_url: "",
-    number_of_connections: 1,
-    refresh_every_hours: 24,
-    subscription_expires: "",
-    source_timezone: "",
-    isSkeletonRow: true,
-}))
+const skeletonData = Array.from({ length: 1 }, (_, index) =>
+    createSkeletonSource(index)
+)
 
 // Computed property to show skeleton data when loading, real data when loaded
 const displaySources = computed(() => {
@@ -391,6 +443,108 @@ function formatDate(date: string | Date) {
     const mm = String(d.getMonth() + 1).padStart(2, "0")
     const dd = String(d.getDate()).padStart(2, "0")
     return `${yyyy}-${mm}-${dd}`
+}
+
+function calculateHoursAgo(date: string | Date) {
+    if (!date) return "Never"
+    const d = typeof date === "string" ? new Date(date) : date
+    if (isNaN(d.getTime())) return "Unknown"
+    const hoursAgo = Math.floor((Date.now() - d.getTime()) / (1000 * 60 * 60))
+    return `${hoursAgo} hours ago`
+}
+
+// DRY Component Rendering Functions
+function getBodyComponent(column: TableColumn, data: any) {
+    if (data.isSkeletonRow) return Skeleton
+
+    switch (column.type) {
+        case "boolean":
+            return Tag
+        default:
+            return "span"
+    }
+}
+
+function getBodyProps(column: TableColumn, data: any) {
+    if (data.isSkeletonRow) {
+        return column.skeletonWidth ? { width: column.skeletonWidth } : {}
+    }
+
+    switch (column.type) {
+        case "boolean":
+            return {
+                severity: data[column.field] ? "success" : "danger",
+                value: data[column.field] ? "Yes" : "No",
+            }
+        default:
+            return {}
+    }
+}
+
+function getBodyContent(column: TableColumn, data: any) {
+    if (data.isSkeletonRow) return ""
+
+    switch (column.type) {
+        case "boolean":
+            return "" // Content handled by Tag component props
+        case "date":
+            return formatDate(data[column.field])
+        case "last_refresh":
+            return calculateHoursAgo(data[column.field])
+        default:
+            return data[column.field] || ""
+    }
+}
+
+function getEditorComponent(column: TableColumn) {
+    switch (column.type) {
+        case "number":
+            return InputNumber
+        case "boolean":
+            return Select
+        case "date":
+            return DatePicker
+        case "timezone":
+            return Select
+        default:
+            return InputText
+    }
+}
+
+function getEditorProps(column: TableColumn) {
+    const baseProps = { fluid: true }
+
+    switch (column.type) {
+        case "boolean":
+            return {
+                ...baseProps,
+                options: [
+                    { label: "Yes", value: true },
+                    { label: "No", value: false },
+                ],
+                optionLabel: "label",
+                optionValue: "value",
+                placeholder: "Select status",
+            }
+        case "timezone":
+            return {
+                ...baseProps,
+                options: timezoneOptions,
+                optionLabel: "label",
+                optionValue: "value",
+                placeholder: "Select timezone",
+            }
+        case "date":
+            return {
+                ...baseProps,
+                showIcon: true,
+                dateFormat: "yy-mm-dd",
+            }
+        case "url":
+            return { ...baseProps, style: "min-width: 160px" }
+        default:
+            return baseProps
+    }
 }
 
 onMounted(async () => {
