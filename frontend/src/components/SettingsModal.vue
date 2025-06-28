@@ -1,5 +1,4 @@
 <template>
-    <!-- Main Settings Dialog -->
     <Dialog
         v-model:visible="dialogVisible"
         header="Settings"
@@ -105,6 +104,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from "vue"
 import { useConfirm } from "primevue/useconfirm"
+import { apiGet, apiPost } from "../utils/apiUtils"
 
 // Import PrimeVue components
 import Dialog from "primevue/dialog"
@@ -194,9 +194,10 @@ async function fetchSettings() {
     loading.value = true
     error.value = null
     try {
-        const res = await fetch("/api/settings")
-        if (!res.ok) throw new Error("Failed to fetch settings")
-        const data = await res.json()
+        const data = await apiGet("/api/settings", {
+            showSuccessToast: true, // Don't show success toast for GET requests
+            errorPrefix: "Failed to load settings",
+        })
 
         // If theme is not in settings, add it with the current theme from store
         if (!data.theme) {
@@ -229,14 +230,12 @@ async function saveSettings() {
             themeStore.setTheme(editableSettings.value.theme)
         }
 
-        const res = await fetch("/api/settings", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(editableSettings.value),
+        await apiPost("/api/settings", editableSettings.value, {
+            successMessage: "Settings saved successfully",
+            errorPrefix: "Failed to save settings",
         })
-        if (!res.ok) throw new Error("Failed to save settings")
+
         await fetchSettings() // reload settings
-        // Optionally show a success message here
         close()
     } catch (e: unknown) {
         error.value = e instanceof Error ? e.message : "Unknown error"
@@ -246,11 +245,11 @@ async function saveSettings() {
 }
 
 onMounted(() => {
-    if (props.open) fetchSettings()
+    if (props.visible) fetchSettings()
 })
 
 watch(
-    () => props.open,
+    () => props.visible,
     (val) => {
         if (val) fetchSettings()
     }

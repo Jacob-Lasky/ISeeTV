@@ -1,5 +1,7 @@
 <template>
     <div class="app-container" :class="{ 'dark-theme': themeStore.isDark }">
+        <!-- Toast container for application-wide notifications -->
+        <Toast position="top-right" />
         <header>
             <div class="header-content">
                 <div class="header-left">
@@ -56,10 +58,12 @@
 
 <script setup lang="ts">
 import "primeicons/primeicons.css"
-import { ref } from "vue"
+import { ref, onMounted } from "vue"
 import { useRouter } from "vue-router"
 import SettingsModal from "./components/SettingsModal.vue"
 import { useThemeStore } from "./stores/themeStore"
+import { useToastListener } from "./services/toastService"
+import { useToast } from "primevue/usetoast"
 
 // Import PrimeVue components
 import TabMenu from "primevue/tabmenu"
@@ -67,11 +71,23 @@ import Menu from "primevue/menu"
 import Drawer from "primevue/drawer"
 import Button from "primevue/button"
 import ConfirmDialog from "primevue/confirmdialog"
+import Toast from "primevue/toast"
 
 const router = useRouter()
 const themeStore = useThemeStore()
 const openSettings = ref(false)
 const drawerVisible = ref(false)
+
+// Set up toast functionality
+const toast = useToast()
+const { subscribe } = useToastListener()
+
+// Listen for toast events and display them
+onMounted(() => {
+    subscribe((message) => {
+        toast.add(message)
+    })
+})
 
 // Define menu items for both TabMenu and Sidebar Menu
 const menuItems = [

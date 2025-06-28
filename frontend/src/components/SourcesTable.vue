@@ -263,17 +263,17 @@
 </template>
 
 <script setup lang="ts">
+import { apiGet, apiPost } from "../utils/apiUtils"
 import { ref, onMounted } from "vue"
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
 import InputText from "primevue/inputtext"
 import InputNumber from "primevue/inputnumber"
 import Button from "primevue/button"
-import Select from "primevue/dropdown"
-import DatePicker from "primevue/calendar"
+import Select from "primevue/select"
+import DatePicker from "primevue/datepicker"
 import Tag from "primevue/tag"
 import Dialog from "primevue/dialog"
-import { useConfirm } from "primevue/useconfirm"
 import { timezoneOptions } from "../utils/timezones"
 
 // Modal state and new source object
@@ -305,24 +305,25 @@ function resetNewSource() {
     }
 }
 
-async function saveNewSource() {
+const saveNewSource = async () => {
     try {
-        sources.value.push({ ...newSource.value })
-        const response = await fetch("/api/sources", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(sources.value),
+        // Add the new source to the sources array
+        const updatedSources = [...sources.value, newSource.value]
+
+        // Send the updated sources to the backend
+        await apiPost("/api/sources", updatedSources, {
+            successMessage: "New source added successfully",
+            errorPrefix: "Failed to add source",
         })
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-        const result = await response.json()
-        saveSuccess.value = result.message || "Source added successfully"
-        showNewSourceModal.value = false
+
+        // Update local sources and reset form
+        sources.value = updatedSources
         resetNewSource()
-        setTimeout(() => {
-            saveSuccess.value = ""
-        }, 3000)
+        showNewSourceModal.value = false
     } catch (err) {
-        error.value = `Failed to save sources: ${err instanceof Error ? err.message : String(err)}`
+        error.value = `Failed to add source: ${err instanceof Error ? err.message : String(err)}`
+
+        // Clear error message after 5 seconds
         setTimeout(() => {
             error.value = ""
         }, 5000)
@@ -347,9 +348,10 @@ function formatDate(date: string | Date) {
 
 onMounted(async () => {
     try {
-        const res = await fetch("/api/sources")
-        if (!res.ok) throw new Error(`HTTP ${res.status}`)
-        sources.value = await res.json()
+        sources.value = await apiGet("/api/sources", {
+            showSuccessToast: true,
+            errorPrefix: "Failed to load sources",
+        })
     } catch (err) {
         error.value = `Failed to load sources: ${err instanceof Error ? err.message : String(err)}`
     } finally {
@@ -372,16 +374,12 @@ const confirmDelete = async () => {
         const updated = [...sources.value]
         updated.splice(index, 1)
 
-        const response = await fetch("/api/sources", {
-            method: "POST",
-            headers: { "Content-Type": "application/json" },
-            body: JSON.stringify(updated),
+        await apiPost("/api/sources", updated, {
+            successMessage: "Source deleted successfully",
+            errorPrefix: "Failed to delete source",
         })
 
-        if (!response.ok) throw new Error(`HTTP ${response.status}`)
-
         sources.value = updated
-        saveSuccess.value = "Source deleted successfully"
         showDeleteDialog.value = false
         sourceToDeleteIndex.value = null
     } catch (err) {
@@ -401,25 +399,10 @@ const onRowEditSave = async (event: {
         sources.value[index] = newData
 
         // Send the updated sources to the backend
-        const response = await fetch("/api/sources", {
-            method: "POST",
-            headers: {
-                "Content-Type": "application/json",
-            },
-            body: JSON.stringify(sources.value),
+        await apiPost("/api/sources", sources.value, {
+            successMessage: "Source updated successfully",
+            errorPrefix: "Failed to update source",
         })
-
-        if (!response.ok) {
-            throw new Error(`HTTP error ${response.status}`)
-        }
-
-        const result = await response.json()
-        saveSuccess.value = result.message || "Source updated successfully"
-
-        // Clear success message after 3 seconds
-        setTimeout(() => {
-            saveSuccess.value = ""
-        }, 3000)
     } catch (err) {
         error.value = `Failed to update source: ${err instanceof Error ? err.message : String(err)}`
 
