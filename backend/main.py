@@ -36,11 +36,11 @@ app = FastAPI(
     docs_url="/api/docs",
     redoc_url="/api/redoc",
     openapi_tags=[
-        {"name": "Meta", "description": "Meta operations"},
         {"name": "Health", "description": "Health checks"},
         {"name": "Settings", "description": "Global app configuration"},
         {"name": "Sources", "description": "Manage IPTV sources (M3U, EPG, metadata)"},
         {"name": "Download", "description": "Download operations"},
+        {"name": "Redirect", "description": "Redirect operations"},
     ],
 )
 
@@ -56,7 +56,7 @@ app.add_middleware(
 @app.get(
     "/",
     response_model=Message,
-    tags=["Meta"],
+    tags=["Redirect"],
     status_code=status.HTTP_308_PERMANENT_REDIRECT,
 )
 async def root() -> RedirectResponse:
@@ -67,7 +67,7 @@ async def root() -> RedirectResponse:
 @app.get(
     "/docs",
     response_model=Message,
-    tags=["Meta"],
+    tags=["Redirect"],
     status_code=status.HTTP_308_PERMANENT_REDIRECT,
 )
 async def docs() -> RedirectResponse:
@@ -78,7 +78,7 @@ async def docs() -> RedirectResponse:
 @app.get(
     "/api",
     response_model=Message,
-    tags=["Meta"],
+    tags=["Redirect"],
     status_code=status.HTTP_308_PERMANENT_REDIRECT,
 )
 async def api() -> RedirectResponse:
