@@ -8,6 +8,7 @@ from fastapi import HTTPException, status
 from fastapi.responses import RedirectResponse, StreamingResponse
 import asyncio
 import logging
+import os
 from models.models import (
     DownloadProgress,
     Message,
@@ -23,7 +24,7 @@ from download.downloader import (
 from common.state import get_download_progress
 from common.utils import create_task_id
 
-DATA_PATH = "/app/data"
+DATA_PATH = os.getenv("DATA_PATH", "/app/data")
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -105,7 +106,7 @@ async def get_health() -> Message:
     status_code=status.HTTP_200_OK,
 )
 async def get_settings(
-    settings_file: str = f"{DATA_PATH}/settings.json",
+    settings_file: str = os.path.join(DATA_PATH, "settings.json"),
 ) -> GlobalSettings:
     """Return settings from the provided file"""
     try:
@@ -122,7 +123,8 @@ async def get_settings(
     status_code=status.HTTP_201_CREATED,
 )
 async def set_settings(
-    settings: GlobalSettings, settings_file: str = f"{DATA_PATH}/settings.json"
+    settings: GlobalSettings,
+    settings_file: str = os.path.join(DATA_PATH, "settings.json"),
 ):
     """Set settings in the provided file"""
     try:
@@ -139,7 +141,9 @@ async def set_settings(
     tags=["Sources"],
     status_code=status.HTTP_200_OK,
 )
-async def get_sources(sources_file: str = f"{DATA_PATH}/sources.json") -> List[Source]:
+async def get_sources(
+    sources_file: str = os.path.join(DATA_PATH, "sources.json")
+) -> List[Source]:
     """Return sources from the provided file"""
     try:
         with open(sources_file, "r") as f:
@@ -155,7 +159,7 @@ async def get_sources(sources_file: str = f"{DATA_PATH}/sources.json") -> List[S
     status_code=status.HTTP_201_CREATED,
 )
 async def set_sources(
-    sources: List[Source], sources_file: str = f"{DATA_PATH}/sources.json"
+    sources: List[Source], sources_file: str = os.path.join(DATA_PATH, "sources.json")
 ) -> Message:
     """Set sources in the provided file"""
     try:
@@ -225,8 +229,8 @@ async def cancel_download(task_id: str) -> Message:
 )
 async def download_all_files(
     file_type: Literal["m3u", "epg"],
-    sources_file: str = f"{DATA_PATH}/sources.json",
-    download_dir: str = f"{DATA_PATH}/sources",
+    sources_file: str = os.path.join(DATA_PATH, "sources.json"),
+    download_dir: str = os.path.join(DATA_PATH, "sources"),
 ) -> DownloadAllTasksResponse:
     """Start background download of all files of a specific type - one task per source"""
     try:
@@ -280,8 +284,8 @@ async def download_all_files(
 async def queue_file_for_download(
     file_type: Literal["m3u", "epg"],
     source_name: str,
-    sources_file: str = f"{DATA_PATH}/sources.json",
-    download_dir: str = f"{DATA_PATH}/sources",
+    sources_file: str = os.path.join(DATA_PATH, "sources.json"),
+    download_dir: str = os.path.join(DATA_PATH, "sources"),
 ) -> DownloadTaskResponse:
     """Download file of a specific type for a specific source"""
     try:
@@ -313,7 +317,7 @@ async def queue_file_for_download(
 async def download_file_stream(
     source_name: str,
     file_type: str,
-    sources_file: str = f"{DATA_PATH}/sources.json",
+    sources_file: str = os.path.join(DATA_PATH, "sources.json"),
 ) -> StreamingResponse:
     """Stream a file directly to the browser for download"""
     try:

@@ -152,7 +152,7 @@ async def orchestrate_file_download_from_source(
             if file_metadata and file_metadata.url:
                 url = file_metadata.url
 
-                filepath = f"{download_dir}/{source.name}.{extension}"
+                filepath = os.path.join(download_dir, f"{source.name}.{extension}")
 
                 if task_id:
                     # Set start timestamp when download begins
@@ -211,7 +211,7 @@ async def background_download_task(
 
             # Create filepath
             extension = ".m3u" if download_type == "m3u" else ".xml"
-            filepath = f"{download_dir}/{source.name}{extension}"
+            filepath = os.path.join(download_dir, f"{source.name}{extension}")
 
             # Get fallback size from source metadata
             fallback_size = file_metadata.last_size_bytes if file_metadata else None
