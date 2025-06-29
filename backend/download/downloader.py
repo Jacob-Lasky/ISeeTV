@@ -5,7 +5,7 @@ import httpx
 import json
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple, Literal
-from common.models import Source
+from models.models import Source
 from common.state import get_download_progress, is_task_cancelled, remove_cancelled_task
 from common.utils import log_info
 from fastapi import HTTPException
@@ -127,8 +127,6 @@ async def orchestrate_file_download_from_source(
         extension = "m3u"
     elif download_type == "epg":
         extension = "xml"
-    else:
-        raise ValueError(f"Unsupported download type: {download_type}")
 
     with open(sources_file, "r") as f:
         sources = [Source(**source) for source in json.load(f)]

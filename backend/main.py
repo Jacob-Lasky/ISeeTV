@@ -8,7 +8,7 @@ from fastapi import HTTPException, status
 from fastapi.responses import RedirectResponse, StreamingResponse
 import asyncio
 import logging
-from common.models import (
+from models.models import (
     DownloadProgress,
     Message,
     Source,
@@ -16,7 +16,7 @@ from common.models import (
     DownloadTaskResponse,
     DownloadAllTasksResponse,
 )
-from common.download_helper import (
+from download.downloader import (
     create_download_task,
     background_single_download_task,
 )
@@ -40,6 +40,7 @@ app = FastAPI(
         {"name": "Settings", "description": "Global app configuration"},
         {"name": "Sources", "description": "Manage IPTV sources (M3U, EPG, metadata)"},
         {"name": "Download", "description": "Download operations"},
+        {"name": "Ingest", "description": "Ingest operations"},
         {"name": "Redirect", "description": "Redirect operations"},
     ],
 )

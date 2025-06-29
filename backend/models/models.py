@@ -1,3 +1,4 @@
+from enum import unique
 from pydantic import BaseModel
 from typing import Optional, Literal, Dict
 from datetime import datetime, timezone
@@ -32,6 +33,36 @@ class FileMetadata(BaseModel):
     last_size_bytes: Optional[int] = 0  # Fallback size for progress tracking
     last_refresh_status: Optional[Literal["success", "failed", "cancelled"]] = None
     last_refresh_finished_timestamp: Optional[str] = ""
+
+
+class GlobalSettings(BaseModel):
+    user_timezone: str
+    program_cache_days: int
+    theme: str
+
+
+class DownloadProgress(BaseModel):
+    task_id: str
+    status: Literal["pending", "downloading", "completed", "failed", "cancelled"]
+    current_item: Optional[str]
+    total_items: int
+    completed_items: int
+    bytes_downloaded: int
+    total_bytes: int
+    error_message: Optional[str]
+    started_at: datetime
+    completed_at: Optional[datetime]
+
+
+class IngestProgress(BaseModel):
+    task_id: str
+    status: Literal["pending", "ingesting", "completed", "failed", "cancelled"]
+    current_item: Optional[str]
+    total_items: int
+    completed_items: int
+    error_message: Optional[str]
+    started_at: datetime
+    completed_at: Optional[datetime]
 
 
 class Source(BaseModel):
@@ -80,20 +111,24 @@ class Source(BaseModel):
             metadata.last_size_bytes = size_bytes
 
 
-class GlobalSettings(BaseModel):
-    user_timezone: str
-    program_cache_days: int
-    theme: str
+class Channel(BaseModel):
+    """Channel model, from an ingested playlist (usually M3U)"""
+
+    source: str
+    name: str
+    channel_id: str
+    stream_url: str
+    logo_url: Optional[str]
+    group: Optional[str]
 
 
-class DownloadProgress(BaseModel):
-    task_id: str
-    status: Literal["pending", "downloading", "completed", "failed", "cancelled"]
-    current_item: Optional[str]
-    total_items: int
-    completed_items: int
-    bytes_downloaded: int
-    total_bytes: int
-    error_message: Optional[str]
-    started_at: datetime
-    completed_at: Optional[datetime]
+class Program(BaseModel):
+    """Program model, from an epg (usually XML)"""
+
+    source: str
+    program_id: str
+    channel_id: str
+    start_time: datetime
+    end_time: datetime
+    title: str
+    description: Optional[str]
