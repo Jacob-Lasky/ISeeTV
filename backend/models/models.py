@@ -1,7 +1,7 @@
 from enum import unique
 from pydantic import BaseModel
 from typing import Optional, Literal, Dict
-from datetime import datetime, timezone
+import datetime as dt
 import logging
 
 logger = logging.getLogger(__name__)
@@ -52,8 +52,8 @@ class DownloadProgress(BaseModel):
     bytes_downloaded: int
     total_bytes: int
     error_message: Optional[str]
-    started_at: datetime
-    completed_at: Optional[datetime]
+    started_at: dt.datetime
+    completed_at: Optional[dt.datetime]
 
 
 class IngestProgress(BaseModel):
@@ -64,8 +64,8 @@ class IngestProgress(BaseModel):
     total_items: int
     completed_items: int
     error_message: Optional[str]
-    started_at: datetime
-    completed_at: Optional[datetime]
+    started_at: dt.datetime
+    completed_at: Optional[dt.datetime]
 
 
 class Source(BaseModel):
@@ -101,7 +101,7 @@ class Source(BaseModel):
         metadata = self.file_metadata[file_type]
         metadata.url = url
 
-        timestamp = datetime.now(timezone.utc).isoformat()
+        timestamp = dt.datetime.now(dt.timezone.utc).isoformat()
 
         # Set start timestamp only when download begins
         if set_start_timestamp:
@@ -118,24 +118,45 @@ class Source(BaseModel):
             metadata.local_path = local_path
 
 
-class Channel(BaseModel):
-    """Channel model, from an ingested playlist (usually M3U)"""
+class EpgChannel(BaseModel):
+    """Channel model from EPG data"""
 
-    source: str
-    name: str
+    source: str  # where the EPG came from
     channel_id: str
+    display_name: str
+    icon_url: Optional[str]
+
+
+class M3uChannel(BaseModel):
+    """Channel model from M3U playlist data"""
+
+    source: str  # where the M3U came from
+    tvg_id: str
+    name: str
     stream_url: str
     logo_url: Optional[str]
     group: Optional[str]
 
 
+class Channel(BaseModel):
+    """Unified channel model combining EPG and M3U data"""
+
+    source_epg: Optional[str]
+    source_m3u: Optional[str]
+    channel_id: str  # unified key — probably tvg-id / epg id
+    name: str
+    stream_url: Optional[str]
+    icon_url: Optional[str]
+    group: Optional[str]
+
+
 class Program(BaseModel):
-    """Program model, from an epg (usually XML)"""
+    """Program model, from an EPG (only from an EPG)"""
 
     source: str
     program_id: str
     channel_id: str
-    start_time: datetime
-    end_time: datetime
-    title: str
+    start_time: dt.datetime
+    end_time: dt.datetime
+    title: Optional[str]
     description: Optional[str]

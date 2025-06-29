@@ -65,7 +65,7 @@
                 <template #body="{ data }">
                     <div
                         v-if="data._isSkeleton"
-                        class="flex items-center gap-2"
+                        class="file-type flex items-center gap-2"
                     >
                         <Skeleton
                             shape="circle"
@@ -90,22 +90,50 @@
                 </template>
             </Column>
 
-            <!-- File URL Column -->
-            <Column field="fileUrl" header="URL" style="width: 300px">
+            <!-- File Actions Column -->
+            <Column
+                header="File Actions"
+                style="width: 150px; min-width: 120px"
+            >
                 <template #body="{ data }">
-                    <div v-if="data._isSkeleton">
-                        <Skeleton width="100%" height="1rem"></Skeleton>
+                    <div v-if="data._isSkeleton" class="action-buttons">
+                        <Skeleton
+                            shape="circle"
+                            size="2rem"
+                            class="mr-1"
+                        ></Skeleton>
+                        <Skeleton shape="circle" size="2rem"></Skeleton>
                     </div>
-                    <div v-else class="url-cell" :title="data.fileUrl">
-                        {{ data.fileUrl }}
+                    <div v-else class="action-buttons">
+                        <!-- Show stop button if file is downloading, refresh button otherwise -->
+                        <Button
+                            v-if="getProgressForFile(data.fileId)"
+                            icon="pi pi-stop"
+                            severity="danger"
+                            size="small"
+                            rounded
+                            :title="`Stop ${data.fileType.toUpperCase()} download`"
+                            @click="cancelDownload(data)"
+                        />
+                        <Button
+                            v-else
+                            icon="pi pi-refresh"
+                            severity="secondary"
+                            size="small"
+                            rounded
+                            :title="`Refresh ${data.fileType.toUpperCase()} file`"
+                            @click="refreshFile(data)"
+                        />
+                        <Button
+                            icon="pi pi-download"
+                            severity="success"
+                            size="small"
+                            text
+                            rounded
+                            :title="`Download ${data.fileType.toUpperCase()} file`"
+                            @click="downloadFile(data)"
+                        />
                     </div>
-                </template>
-                <template #editor="{ data }">
-                    <InputText
-                        :model-value="data.fileUrl"
-                        fluid
-                        @update:model-value="data.fileUrl = $event"
-                    />
                 </template>
             </Column>
 
@@ -195,50 +223,22 @@
                 </template>
             </Column>
 
-            <!-- File Actions Column -->
-            <Column
-                header="File Actions"
-                style="width: 150px; min-width: 120px"
-            >
+            <!-- File URL Column -->
+            <Column field="fileUrl" header="URL" style="width: 300px">
                 <template #body="{ data }">
-                    <div v-if="data._isSkeleton" class="action-buttons">
-                        <Skeleton
-                            shape="circle"
-                            size="2rem"
-                            class="mr-1"
-                        ></Skeleton>
-                        <Skeleton shape="circle" size="2rem"></Skeleton>
+                    <div v-if="data._isSkeleton">
+                        <Skeleton width="100%" height="1rem"></Skeleton>
                     </div>
-                    <div v-else class="action-buttons">
-                        <!-- Show stop button if file is downloading, refresh button otherwise -->
-                        <Button
-                            v-if="getProgressForFile(data.fileId)"
-                            icon="pi pi-stop"
-                            severity="danger"
-                            size="small"
-                            rounded
-                            :title="`Stop ${data.fileType.toUpperCase()} download`"
-                            @click="cancelDownload(data)"
-                        />
-                        <Button
-                            v-else
-                            icon="pi pi-refresh"
-                            severity="secondary"
-                            size="small"
-                            rounded
-                            :title="`Refresh ${data.fileType.toUpperCase()} file`"
-                            @click="refreshFile(data)"
-                        />
-                        <Button
-                            icon="pi pi-download"
-                            severity="success"
-                            size="small"
-                            text
-                            rounded
-                            :title="`Download ${data.fileType.toUpperCase()} file`"
-                            @click="downloadFile(data)"
-                        />
+                    <div v-else class="url-cell" :title="data.fileUrl">
+                        {{ data.fileUrl }}
                     </div>
+                </template>
+                <template #editor="{ data }">
+                    <InputText
+                        :model-value="data.fileUrl"
+                        fluid
+                        @update:model-value="data.fileUrl = $event"
+                    />
                 </template>
             </Column>
 

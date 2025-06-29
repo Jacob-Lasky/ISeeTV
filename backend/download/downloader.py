@@ -3,7 +3,7 @@ import os
 import asyncio
 import httpx
 import json
-from datetime import datetime, timezone
+import datetime as dt
 from typing import List, Optional, Tuple, Literal
 from models.models import Source
 from common.state import get_progress, is_task_cancelled, remove_cancelled_task
@@ -26,7 +26,7 @@ def create_download_task(task_id: str, total_items: int) -> None:
         "bytes_downloaded": 0,
         "total_bytes": 0,
         "error_message": None,
-        "started_at": datetime.now(timezone.utc).isoformat(),
+        "started_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         "completed_at": None,
     }
 
@@ -94,7 +94,9 @@ async def download_file_with_progress(
                                 task_id,
                                 status="cancelled",
                                 error_message="Download cancelled by user",
-                                completed_at=datetime.now(timezone.utc).isoformat(),
+                                completed_at=dt.datetime.now(
+                                    dt.timezone.utc
+                                ).isoformat(),
                             )
                             return False, 0, "cancelled"
 
@@ -248,7 +250,7 @@ async def background_download_task(
         update_download_progress(
             task_id,
             status="completed",
-            completed_at=datetime.now(timezone.utc).isoformat(),
+            completed_at=dt.datetime.now(dt.timezone.utc).isoformat(),
             current_item=None,
         )
 
@@ -257,7 +259,7 @@ async def background_download_task(
             task_id,
             status="failed",
             error_message=str(e),
-            completed_at=datetime.now(timezone.utc).isoformat(),
+            completed_at=dt.datetime.now(dt.timezone.utc).isoformat(),
         )
 
 
@@ -307,7 +309,7 @@ async def background_single_download_task(
         update_download_progress(
             task_id,
             status="completed",
-            completed_at=datetime.now(timezone.utc).isoformat(),
+            completed_at=dt.datetime.now(dt.timezone.utc).isoformat(),
             current_item=None,
             completed_items=1,
         )
@@ -317,5 +319,5 @@ async def background_single_download_task(
             task_id,
             status="failed",
             error_message=str(e),
-            completed_at=datetime.now(timezone.utc).isoformat(),
+            completed_at=dt.datetime.now(dt.timezone.utc).isoformat(),
         )

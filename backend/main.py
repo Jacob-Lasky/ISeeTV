@@ -18,7 +18,6 @@ from models.models import (
     DownloadTaskResponse,
     DownloadAllTasksResponse,
     Program,
-    Channel,
 )
 from download.downloader import (
     create_download_task,
@@ -27,6 +26,8 @@ from download.downloader import (
 from common.state import get_progress
 from common.utils import create_task_id, get_progress_response
 from common.constants import DATA_PATH
+from ingest.epg_parser import parse_epg_for_programs, parse_epg_for_channels
+from ingest.m3u_parser import parse_m3u
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -180,7 +181,29 @@ async def set_sources(
         )
 
 
+@app.get(
+    "/api/ingest/progress/{task_id}",
+    response_model=IngestProgress,
+    tags=["Ingest"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_ingest_progress_by_id(task_id: str) -> IngestProgress:
+    """Get ingest progress for a specific task"""
+    return IngestProgress(**get_progress_response(task_id, "ingest"))
 
+
+@app.get(
+    "/api/ingest/progress",
+    response_model=Dict[str, IngestProgress],
+    tags=["Ingest"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_all_ingest_progress() -> Dict[str, IngestProgress]:
+    """Get all ingest progress tasks"""
+    return {
+        task_id: IngestProgress(**progress)
+        for task_id, progress in get_progress("ingest").items()
+    }
 
 
 @app.get(
@@ -432,7 +455,60 @@ async def download_file_stream(
         )
 
 
+@app.get(
+    "/api/ingest/{file_type}/{source_name}",
+    response_model=List[Program],
+    tags=["Ingest"],
+    status_code=status.HTTP_200_OK,
+)
+async def ingest_file(
+    file_type: Literal["m3u", "epg"],
+    source_name: str,
+    sources_file: str = os.path.join(DATA_PATH, "sources.json"),
+) -> List[Program]:
+    """Ingest an EPG file and return a list of programs"""
+    try:
+        with open(sources_file, "r") as f:
+            sources = [Source(**source) for source in json.load(f)]
 
+        # Find the source
+        source = next(
+            (source for source in sources if source.name == source_name), None
+        )
+        if not source:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Source '{source_name}' not found",
+            )
+
+        # Get file metadata
+        file_metadata = source.get_file_metadata(file_type)
+        if not file_metadata or not file_metadata.local_path:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No {file_type.upper()} file defined for source '{source_name}'",
+            )
+
+        file_path = file_metadata.local_path
+
+        if not os.path.exists(file_path):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"File '{file_path}' not found for source '{source_name}'",
+            )
+
+        if file_type == "m3u":
+            return parse_m3u(file_path)
+        elif file_type == "epg":
+            # Parse channels
+            parse_epg_for_channels(file_path, source_name)
+            # Return the programs list
+            return parse_epg_for_programs(file_path, source_name)
+
+    except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
 
 
 if __name__ == "__main__":

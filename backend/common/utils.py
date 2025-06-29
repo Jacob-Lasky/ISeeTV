@@ -1,4 +1,4 @@
-from datetime import datetime
+import datetime as dt
 from typing import Literal
 import logging
 import inspect
@@ -14,7 +14,7 @@ def create_task_id(
     task_type: Literal["download", "parse"],
 ):
     """Create a unique task ID for a source and file type"""
-    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     return f"{task_type}_{file_type}_{source_name}_{timestamp}"
 
 
