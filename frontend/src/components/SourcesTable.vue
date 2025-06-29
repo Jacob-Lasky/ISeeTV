@@ -700,65 +700,6 @@ async function fetchUserTimezone(): Promise<void> {
     }
 }
 
-// Atomic function to convert UTC timestamp to user's timezone
-function convertToUserTimezone(utcTimestamp: string, timezone: string): Date {
-    const date = new Date(utcTimestamp)
-    if (isNaN(date.getTime())) {
-        throw new Error("Invalid date")
-    }
-
-    // Convert to user's timezone using Intl.DateTimeFormat
-    const userDate = new Date(
-        date.toLocaleString("en-US", { timeZone: timezone })
-    )
-    return userDate
-}
-
-// Atomic function to calculate time difference in a timezone-aware manner
-function calculateTimeDifference(
-    pastDate: Date,
-    currentDate: Date
-): { days: number; hours: number } {
-    const diffMs = currentDate.getTime() - pastDate.getTime()
-    const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
-    const diffDays = Math.floor(diffHours / 24)
-
-    return { days: diffDays, hours: diffHours }
-}
-
-// Enhanced format last refresh time with timezone awareness
-function formatLastRefresh(lastRefresh: string): string {
-    if (!lastRefresh) return "Never"
-
-    try {
-        // Convert both timestamps to user's timezone for accurate comparison
-        const refreshDate = convertToUserTimezone(
-            lastRefresh,
-            userTimezone.value
-        )
-        const nowInUserTz = convertToUserTimezone(
-            new Date().toISOString(),
-            userTimezone.value
-        )
-
-        const { days, hours } = calculateTimeDifference(
-            refreshDate,
-            nowInUserTz
-        )
-
-        if (days > 0) {
-            return `${days} day${days > 1 ? "s" : ""} ago`
-        } else if (hours > 0) {
-            return `${hours} hour${hours > 1 ? "s" : ""} ago`
-        } else {
-            return "Less than 1 hour ago"
-        }
-    } catch (error) {
-        console.warn("Error formatting last refresh time:", error)
-        return "Invalid date"
-    }
-}
-
 function formatSubscriptionExpires(expiresDate: string | null): string {
     if (!expiresDate) return "Never"
 
@@ -788,7 +729,6 @@ async function loadSources() {
 async function preserveActiveDownloadsAndReload() {
     // Capture current active downloads before reload
     const activeDownloads = new Map(activeTaskIds.value)
-    const activeProgress = new Map(downloadProgress.value)
 
     // Reload sources data
     await loadSources()
@@ -811,7 +751,7 @@ async function preserveActiveDownloadsAndReload() {
                     startProgressPolling(taskId, fileId)
                 }
             }
-        } catch (error) {
+        } catch {
             // If we can't check the task, assume it's no longer active
             console.log(
                 `Task ${taskId} no longer active, not restoring progress polling`

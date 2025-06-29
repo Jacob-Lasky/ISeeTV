@@ -5,7 +5,7 @@ from typing import Dict, List, Literal
 import uvicorn
 import json
 from fastapi import HTTPException, status
-from fastapi.responses import RedirectResponse
+from fastapi.responses import RedirectResponse, StreamingResponse
 import asyncio
 import logging
 from common.models import (
@@ -59,7 +59,7 @@ app.add_middleware(
     tags=["Meta"],
     status_code=status.HTTP_308_PERMANENT_REDIRECT,
 )
-async def root():
+async def root() -> RedirectResponse:
     """Redirect to the Swagger docs"""
     return RedirectResponse(url="/api/docs")
 
@@ -70,7 +70,7 @@ async def root():
     tags=["Meta"],
     status_code=status.HTTP_308_PERMANENT_REDIRECT,
 )
-async def docs():
+async def docs() -> RedirectResponse:
     """Redirect to the Swagger docs"""
     return RedirectResponse(url="/api/docs")
 
@@ -81,7 +81,7 @@ async def docs():
     tags=["Meta"],
     status_code=status.HTTP_308_PERMANENT_REDIRECT,
 )
-async def api():
+async def api() -> RedirectResponse:
     """Redirect to the Swagger docs"""
     return RedirectResponse(url="/api/docs")
 
@@ -92,7 +92,7 @@ async def api():
     tags=["Health"],
     status_code=status.HTTP_200_OK,
 )
-async def get_health():
+async def get_health() -> Message:
     """Return a health check."""
     return Message(message="ok")
 
@@ -103,7 +103,9 @@ async def get_health():
     tags=["Settings"],
     status_code=status.HTTP_200_OK,
 )
-async def get_settings(settings_file: str = f"{DATA_PATH}/settings.json"):
+async def get_settings(
+    settings_file: str = f"{DATA_PATH}/settings.json",
+) -> GlobalSettings:
     """Return settings from the provided file"""
     try:
         with open(settings_file, "r") as f:
@@ -136,7 +138,7 @@ async def set_settings(
     tags=["Sources"],
     status_code=status.HTTP_200_OK,
 )
-async def get_sources(sources_file: str = f"{DATA_PATH}/sources.json"):
+async def get_sources(sources_file: str = f"{DATA_PATH}/sources.json") -> List[Source]:
     """Return sources from the provided file"""
     try:
         with open(sources_file, "r") as f:
@@ -153,7 +155,7 @@ async def get_sources(sources_file: str = f"{DATA_PATH}/sources.json"):
 )
 async def set_sources(
     sources: List[Source], sources_file: str = f"{DATA_PATH}/sources.json"
-):
+) -> Message:
     """Set sources in the provided file"""
     try:
         with open(sources_file, "w") as f:
@@ -169,7 +171,7 @@ async def set_sources(
     tags=["Download"],
     status_code=status.HTTP_200_OK,
 )
-async def get_download_progress_by_id(task_id: str):
+async def get_download_progress_by_id(task_id: str) -> DownloadProgress:
     """Get download progress for a specific task"""
     download_progress = get_download_progress()
     if task_id not in download_progress:
@@ -183,7 +185,7 @@ async def get_download_progress_by_id(task_id: str):
     tags=["Download"],
     status_code=status.HTTP_200_OK,
 )
-async def get_all_download_progress():
+async def get_all_download_progress() -> Dict[str, DownloadProgress]:
     """Get all download progress tasks"""
     download_progress = get_download_progress()
     return {
@@ -198,7 +200,7 @@ async def get_all_download_progress():
     tags=["Download"],
     status_code=status.HTTP_200_OK,
 )
-async def cancel_download(task_id: str):
+async def cancel_download(task_id: str) -> Message:
     """Cancel a download task by task ID"""
     try:
         from common.state import cancel_download_task
@@ -224,7 +226,7 @@ async def download_all_files(
     file_type: Literal["m3u", "epg"],
     sources_file: str = f"{DATA_PATH}/sources.json",
     download_dir: str = f"{DATA_PATH}/sources",
-):
+) -> DownloadAllTasksResponse:
     """Start background download of all files of a specific type - one task per source"""
     try:
         with open(sources_file, "r") as f:
@@ -279,7 +281,7 @@ async def queue_file_for_download(
     source_name: str,
     sources_file: str = f"{DATA_PATH}/sources.json",
     download_dir: str = f"{DATA_PATH}/sources",
-):
+) -> DownloadTaskResponse:
     """Download file of a specific type for a specific source"""
     try:
         # Create unique task ID for each source
@@ -311,7 +313,7 @@ async def download_file_stream(
     source_name: str,
     file_type: str,
     sources_file: str = f"{DATA_PATH}/sources.json",
-):
+) -> StreamingResponse:
     """Stream a file directly to the browser for download"""
     try:
         # Validate file type
@@ -357,24 +359,23 @@ async def download_file_stream(
         async def stream_file():
             async with httpx.AsyncClient(timeout=30.0) as client:
                 try:
-                    async with client.stream('GET', file_url) as response:
+                    async with client.stream("GET", file_url) as response:
                         if response.status_code != 200:
                             raise HTTPException(
                                 status_code=response.status_code,
                                 detail=f"Failed to fetch file from {file_url}: {response.text}",
                             )
-                        
+
                         async for chunk in response.aiter_bytes(chunk_size=8192):
                             yield chunk
                 except httpx.RequestError as e:
                     raise HTTPException(
                         status_code=500,
-                        detail=f"Network error while fetching file: {str(e)}"
+                        detail=f"Network error while fetching file: {str(e)}",
                     )
                 except Exception as e:
                     raise HTTPException(
-                        status_code=500,
-                        detail=f"Error streaming file: {str(e)}"
+                        status_code=500, detail=f"Error streaming file: {str(e)}"
                     )
 
         # Return streaming response with appropriate headers

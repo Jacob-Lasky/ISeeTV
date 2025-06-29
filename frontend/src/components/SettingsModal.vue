@@ -103,7 +103,6 @@ import { apiGet, apiPost } from "../utils/apiUtils"
 
 // Import PrimeVue components
 import Dialog from "primevue/dialog"
-import ConfirmDialog from "primevue/confirmdialog"
 import Button from "primevue/button"
 import InputNumber from "primevue/inputnumber"
 import Select from "primevue/select"

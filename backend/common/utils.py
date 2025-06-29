@@ -13,5 +13,5 @@ def create_task_id(source_name: str, file_type: Literal["m3u", "epg"]):
 
 
 def log_info(message: str = ""):
-    func_name = inspect.currentframe().f_back.f_code.co_name
+    func_name = inspect.currentframe().f_back.f_code.co_name  # type: ignore
     logger.info(f"\t [{func_name}] {message}")

@@ -44,7 +44,7 @@ async def download_file_with_progress(
     task_id: str,
     item_name: str,
     fallback_size: Optional[int] = None,
-) -> Tuple[bool, int, str]:
+) -> Tuple[bool, int, Literal["success", "failed", "cancelled"]]:
     """Download a single file with real-time progress tracking by bytes"""
     log_info()
     try:
@@ -78,7 +78,9 @@ async def download_file_with_progress(
                     async for chunk in response.aiter_bytes(chunk_size=8192):
                         # Check for cancellation before processing each chunk
                         if is_task_cancelled(task_id):
-                            logger.info(f"Download task {task_id} cancelled, stopping download")
+                            logger.info(
+                                f"Download task {task_id} cancelled, stopping download"
+                            )
                             # Clean up the partial file
                             f.close()
                             if os.path.exists(filepath):
@@ -86,13 +88,13 @@ async def download_file_with_progress(
                             # Clean up cancellation state
                             remove_cancelled_task(task_id)
                             update_download_progress(
-                                task_id, 
-                                status="cancelled", 
+                                task_id,
+                                status="cancelled",
                                 error_message="Download cancelled by user",
-                                completed_at=datetime.now(timezone.utc).isoformat()
+                                completed_at=datetime.now(timezone.utc).isoformat(),
                             )
                             return False, 0, "cancelled"
-                        
+
                         if chunk:
                             f.write(chunk)
                             downloaded_size += len(chunk)
@@ -156,8 +158,10 @@ async def orchestrate_file_download_from_source(
 
                 if task_id:
                     # Set start timestamp when download begins
-                    source.update_file_metadata(download_type, url, set_start_timestamp=True)
-                    
+                    source.update_file_metadata(
+                        download_type, url, set_start_timestamp=True
+                    )
+
                     # Get fallback size from source metadata
                     fallback_size = (
                         file_metadata.last_size_bytes if file_metadata else None

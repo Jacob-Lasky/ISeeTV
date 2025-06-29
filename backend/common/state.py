@@ -31,19 +31,19 @@ def clear_download_progress() -> None:
 def cancel_download_task(task_id: str) -> bool:
     """Cancel a download task by adding it to the cancelled tasks set"""
     global cancelled_tasks
-    
+
     # Check if task exists in progress
     if task_id in download_progress:
         cancelled_tasks.add(task_id)
-        
+
         # Update the task status to 'failed' with cancellation message
         if task_id in download_progress:
-            download_progress[task_id]['status'] = 'failed'
-            download_progress[task_id]['error_message'] = 'Download cancelled by user'
-        
+            download_progress[task_id]["status"] = "failed"
+            download_progress[task_id]["error_message"] = "Download cancelled by user"
+
         logger.info(f"Download task {task_id} marked for cancellation")
         return True
-    
+
     return False
 
 
