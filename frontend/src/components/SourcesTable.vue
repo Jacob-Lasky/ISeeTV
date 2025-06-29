@@ -1528,12 +1528,12 @@ onMounted(async () => {
 
         // Verify sources are loaded before detecting downloads
         console.log(
-            `📊 Sources loaded, checking sourceFileRows:`,
+            `Sources loaded, checking sourceFileRows:`,
             sourceFileRows.value.length,
             "rows"
         )
         console.log(
-            `📊 First few rows:`,
+            `First few rows:`,
             sourceFileRows.value.slice(0, 3).map((r) => ({
                 sourceName: r.sourceName,
                 fileType: r.fileType,

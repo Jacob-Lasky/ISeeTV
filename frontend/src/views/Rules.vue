@@ -10,6 +10,6 @@ import PluginsTable from "../components/Plugins.vue"
 
 <style scoped>
 h1 {
-    color: #42b983;
+    margin-bottom: 1rem;
 }
 </style>

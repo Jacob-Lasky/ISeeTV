@@ -1,6 +1,6 @@
 <template>
     <div>
-        <h2>Sources</h2>
+        <h1>Sources</h1>
         <SourcesTable />
     </div>
 </template>
