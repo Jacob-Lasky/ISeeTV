@@ -14,7 +14,7 @@
                 <Button
                     label="Refresh All EPG"
                     icon="pi pi-refresh"
-                    severity="secondary"
+                    severity="info"
                     size="small"
                     :loading="refreshingAllEpg"
                     @click="refreshAllEpg"
@@ -1594,12 +1594,10 @@ onMounted(async () => {
         )
         console.log(
             `📊 First few rows:`,
-            sourceFileRows.value
-                .slice(0, 3)
-                .map((r) => ({
-                    sourceName: r.sourceName,
-                    fileType: r.fileType,
-                }))
+            sourceFileRows.value.slice(0, 3).map((r) => ({
+                sourceName: r.sourceName,
+                fileType: r.fileType,
+            }))
         )
 
         // Auto-detect and restore any active downloads after component mount

@@ -347,43 +347,56 @@ async def download_file_stream(
             )
 
         file_url = file_info["url"]
+        filename = f"{source_name}_{file_type}.{file_type}"
 
-        # Stream the file from the remote URL
-        import aiohttp
+        # Use httpx for better async streaming support
+        import httpx
+        from fastapi.responses import StreamingResponse
 
-        async with aiohttp.ClientSession() as session:
-            async with session.get(file_url) as response:
-                if response.status != 200:
+        # Create the streaming generator function
+        async def stream_file():
+            async with httpx.AsyncClient(timeout=30.0) as client:
+                try:
+                    async with client.stream('GET', file_url) as response:
+                        if response.status_code != 200:
+                            raise HTTPException(
+                                status_code=response.status_code,
+                                detail=f"Failed to fetch file from {file_url}: {response.text}",
+                            )
+                        
+                        async for chunk in response.aiter_bytes(chunk_size=8192):
+                            yield chunk
+                except httpx.RequestError as e:
                     raise HTTPException(
-                        status_code=response.status,
-                        detail=f"Failed to fetch file from {file_url}",
+                        status_code=500,
+                        detail=f"Network error while fetching file: {str(e)}"
+                    )
+                except Exception as e:
+                    raise HTTPException(
+                        status_code=500,
+                        detail=f"Error streaming file: {str(e)}"
                     )
 
-                # Get content type and filename
-                content_type = response.headers.get(
-                    "content-type", "application/octet-stream"
-                )
-                filename = f"{source_name}_{file_type}.{file_type}"
-
-                # Create streaming response
-                from fastapi.responses import StreamingResponse
-
-                async def generate():
-                    async for chunk in response.content.iter_chunked(8192):
-                        yield chunk
-
-                return StreamingResponse(
-                    generate(),
-                    media_type=content_type,
-                    headers={"Content-Disposition": f"attachment; filename={filename}"},
-                )
+        # Return streaming response with appropriate headers
+        return StreamingResponse(
+            stream_file(),
+            media_type="application/octet-stream",
+            headers={
+                "Content-Disposition": f"attachment; filename={filename}",
+                "Cache-Control": "no-cache",
+            },
+        )
 
     except FileNotFoundError:
         raise HTTPException(status_code=404, detail="Sources file not found")
     except json.JSONDecodeError:
         raise HTTPException(status_code=500, detail="Invalid sources file format")
+    except HTTPException:
+        # Re-raise HTTP exceptions as-is
+        raise
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"Unexpected error in download_file_stream: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
 
 
 if __name__ == "__main__":
