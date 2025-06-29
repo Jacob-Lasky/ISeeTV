@@ -1,12 +1,16 @@
+import logging
 import os
 import asyncio
 import httpx
 import json
 from datetime import datetime, timezone
-import pytz
 from typing import List, Optional, Tuple, Literal
 from common.models import Source
 from common.state import get_download_progress
+from common.utils import log_info
+from fastapi import HTTPException
+
+logger = logging.getLogger(__name__)
 
 
 # Atomic download utility functions
@@ -42,8 +46,13 @@ async def download_file_with_progress(
     fallback_size: Optional[int] = None,
 ) -> Tuple[bool, int]:
     """Download a single file with real-time progress tracking by bytes"""
+    log_info()
     try:
         update_download_progress(task_id, current_item=item_name, status="downloading")
+
+        # validate that the file exists
+        if not await validate_url(url):
+            raise HTTPException(status_code=500, detail=f"URL is not accessible: {url}")
 
         # Ensure directory exists
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
@@ -86,7 +95,7 @@ async def download_file_with_progress(
         return False, 0
 
 
-async def download_file(
+async def orchestrate_file_download_from_source(
     source_name: str,
     download_type: Literal["m3u", "epg"],
     sources_file: str,
@@ -94,30 +103,39 @@ async def download_file(
     task_id: Optional[str] = None,
 ) -> None:
     """Atomic download function for any file type with optional progress tracking"""
-    import json
-    from common.models import Source
-
-    # Map download type to file extension
-    type_config = {
-        "m3u": {"extension": "m3u"},
-        "epg": {"extension": "xml"},
-    }
-
-    if download_type not in type_config:
+    log_info()
+    if download_type == "m3u":
+        extension = "m3u"
+    elif download_type == "epg":
+        extension = "xml"
+    else:
         raise ValueError(f"Unsupported download type: {download_type}")
-
-    config = type_config[download_type]
 
     with open(sources_file, "r") as f:
         sources = [Source(**source) for source in json.load(f)]
 
+    if source_name not in [source.name for source in sources]:
+        raise HTTPException(
+            status_code=404,
+            detail=f"Source '{source_name}' not found in sources file. Expected one of [{', '.join([source.name for source in sources])}]",
+        )
+
     for source in sources:
         if source.name == source_name:
+            # If we get here, we found the source
+            # confirm that the download type exists
+            if download_type not in source.file_metadata:
+                raise HTTPException(
+                    status_code=404,
+                    detail=f"Download type '{download_type}' not found for source '{source_name}'",
+                )
+
             # Get URL from file metadata
             file_metadata = source.get_file_metadata(download_type)
             if file_metadata and file_metadata.url:
                 url = file_metadata.url
-                filepath = f"{download_dir}/{source.name}.{config['extension']}"
+
+                filepath = f"{download_dir}/{source.name}.{extension}"
 
                 if task_id:
                     # Get fallback size from source metadata
@@ -155,6 +173,7 @@ async def background_download_task(
     download_dir: str,
 ) -> None:
     """Background coroutine for downloading multiple files"""
+    log_info()
     try:
         update_download_progress(task_id, status="downloading")
 
@@ -214,6 +233,26 @@ async def background_download_task(
         )
 
 
+async def validate_url(url: str) -> bool:
+    """Validate that the URL is accessible"""
+    log_info()
+    try:
+        async with httpx.AsyncClient() as client:
+            response = await client.head(url)
+            response.raise_for_status()
+        return True
+    except Exception:
+        try:
+            # if the server doesn't support HEAD then fallback to a GET of just the first byte
+            headers = {"Range": "bytes=0-0"}
+            async with httpx.AsyncClient() as client:
+                response = await client.get(url, headers=headers)
+                response.raise_for_status()
+            return True
+        except Exception:
+            return False
+
+
 async def background_single_download_task(
     task_id: str,
     source_name: str,
@@ -222,13 +261,14 @@ async def background_single_download_task(
     download_dir: str,
 ) -> None:
     """Background coroutine for downloading a single source with progress tracking"""
+    log_info()
     try:
         update_download_progress(
             task_id, status="downloading", current_item=source_name
         )
 
         # Call the core download functions with progress tracking
-        await download_file(
+        await orchestrate_file_download_from_source(
             source_name, download_type, sources_file, download_dir, task_id
         )
 

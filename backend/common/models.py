@@ -1,6 +1,9 @@
 from pydantic import BaseModel
 from typing import Optional, Literal, Dict
-from datetime import datetime
+from datetime import datetime, timezone
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 class Message(BaseModel):

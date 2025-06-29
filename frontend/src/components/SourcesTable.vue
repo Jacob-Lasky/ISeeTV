@@ -1,5 +1,27 @@
 <template>
     <div>
+        <!-- Refresh All Actions -->
+        <div class="refresh-all-actions">
+            <div class="refresh-all-buttons">
+                <Button
+                    label="Refresh All M3U"
+                    icon="pi pi-refresh"
+                    severity="info"
+                    size="small"
+                    :loading="refreshingAllM3u"
+                    @click="refreshAllM3u"
+                />
+                <Button
+                    label="Refresh All EPG"
+                    icon="pi pi-refresh"
+                    severity="secondary"
+                    size="small"
+                    :loading="refreshingAllEpg"
+                    @click="refreshAllEpg"
+                />
+            </div>
+        </div>
+
         <DataTable
             v-model:editingRows="editingRows"
             :value="sourceFileRows"
@@ -434,7 +456,7 @@ import Tag from "primevue/tag"
 import DatePicker from "primevue/datepicker"
 import Skeleton from "primevue/skeleton"
 import { apiGet, apiPost } from "../utils/apiUtils"
-import type { Source, SourceFileRow } from "../types/types"
+import type { FileMetadata, Source, SourceFileRow } from "../types/types"
 import { timezoneOptions } from "../utils/timezones"
 
 // Reactive state for sources and UI
@@ -443,6 +465,10 @@ const editingRows = ref([])
 const loading = ref(true)
 const error = ref("")
 const saveSuccess = ref("")
+
+// Refresh all loading states
+const refreshingAllM3u = ref(false)
+const refreshingAllEpg = ref(false)
 
 // Data transformation
 const sourceFileRows = computed<SourceFileRow[]>(() => {
@@ -483,7 +509,6 @@ function transformSourcesToRows(sourcesData: Source[]): SourceFileRow[] {
                 fileLastRefresh: fileMetadata.last_refresh || null,
                 fileSizeBytes: fileMetadata.last_size_bytes,
                 fileStatus: determineFileStatus(fileMetadata),
-                fileLastError: null, // TODO: Add error tracking
 
                 // UI helpers for rowspan logic
                 isFirstFileForSource: fileIndex === 0,
@@ -525,7 +550,6 @@ function createSkeletonRows(): SourceFileRow[] {
                 fileLastRefresh: null,
                 fileSizeBytes: 0,
                 fileStatus: "active" as const,
-                fileLastError: null,
                 isFirstFileForSource: true,
                 rowSpanCount: 1,
                 _isSkeleton: true, // Flag to identify skeleton rows
@@ -657,19 +681,101 @@ function formatSubscriptionExpires(expiresDate: string | null): string {
  * Action handlers for file and source operations
  */
 
+async function loadSources() {
+    sources.value = await apiGet("/api/sources", false, {
+        showSuccessToast: true,
+        errorPrefix: "Failed to load sources",
+    })
+}
+
 // File-specific actions
-function refreshFile(fileRow: SourceFileRow) {
+async function refreshFile(fileRow: SourceFileRow) {
     console.log(
         `Refreshing ${fileRow.fileType.toUpperCase()} file for source: ${fileRow.sourceName}`
     )
-    // TODO: Implement file refresh logic
+
+    try {
+        const endpoint =
+            fileRow.fileType === "m3u"
+                ? `/api/download/m3u/${encodeURIComponent(fileRow.sourceName)}`
+                : `/api/download/epg/${encodeURIComponent(fileRow.sourceName)}`
+
+        await apiGet(endpoint, true, {
+            successMessage: `${fileRow.fileType.toUpperCase()} refresh started`,
+            errorPrefix: `${fileRow.fileType.toUpperCase()} refresh failed`,
+        })
+    } catch (error) {
+        console.error(
+            `Failed to refresh ${fileRow.fileType} for ${fileRow.sourceName}:`,
+            error
+        )
+    }
 }
 
-function downloadFile(fileRow: SourceFileRow) {
+// Refresh all M3U files
+async function refreshAllM3u() {
+    console.log("Refreshing all M3U files")
+
+    try {
+        refreshingAllM3u.value = true
+
+        await apiGet("/api/download/m3u/all", true, {
+            successMessage: "All M3U refresh started",
+            errorPrefix: "All M3U refresh failed",
+        })
+    } catch (error) {
+        console.error("Failed to refresh all M3U files:", error)
+    } finally {
+        refreshingAllM3u.value = false
+    }
+}
+
+// Refresh all EPG files
+async function refreshAllEpg() {
+    console.log("Refreshing all EPG files")
+
+    try {
+        refreshingAllEpg.value = true
+
+        await apiGet("/api/download/epg/all", true, {
+            successMessage: "All EPG refresh started",
+            errorPrefix: "All EPG refresh failed",
+        })
+    } catch (error) {
+        console.error("Failed to refresh all EPG files:", error)
+    } finally {
+        refreshingAllEpg.value = false
+    }
+}
+
+async function downloadFile(fileRow: SourceFileRow) {
     console.log(
         `Downloading ${fileRow.fileType.toUpperCase()} file for source: ${fileRow.sourceName}`
     )
-    // TODO: Implement file download logic
+
+    try {
+        const endpoint = `/api/download/file/${encodeURIComponent(fileRow.sourceName)}/${fileRow.fileType}`
+
+        // Create a temporary link to trigger the download
+        const link = document.createElement("a")
+        link.href = endpoint
+        link.download = `${fileRow.sourceName}_${fileRow.fileType}.${fileRow.fileType}`
+        link.style.display = "none"
+
+        // Add to DOM, click, and remove
+        document.body.appendChild(link)
+        link.click()
+        document.body.removeChild(link)
+
+        console.log(
+            `Download started for ${fileRow.fileType.toUpperCase()} file from ${fileRow.sourceName}`
+        )
+    } catch (error) {
+        console.error(
+            `Failed to download ${fileRow.fileType} for ${fileRow.sourceName}:`,
+            error
+        )
+    }
 }
 
 // Source-specific actions
@@ -1018,10 +1124,7 @@ onMounted(async () => {
         await fetchUserTimezone()
 
         // Load sources data
-        sources.value = await apiGet("/api/sources", false, {
-            showSuccessToast: true,
-            errorPrefix: "Failed to load sources",
-        })
+        loadSources()
     } catch (err) {
         error.value = `Failed to load sources: ${err instanceof Error ? err.message : String(err)}`
     } finally {
@@ -1107,6 +1210,28 @@ onMounted(async () => {
 .success {
     color: green;
     margin-top: 1rem;
+}
+
+/* Refresh All Actions */
+.refresh-all-actions {
+    margin-bottom: 1rem;
+    padding: 1rem;
+    background: var(--p-surface-section);
+    border: 1px solid var(--p-surface-border);
+    border-radius: 8px;
+}
+
+.refresh-all-buttons {
+    display: flex;
+    gap: 0.75rem;
+    align-items: center;
+}
+
+@media (max-width: 768px) {
+    .refresh-all-buttons {
+        flex-direction: column;
+        align-items: stretch;
+    }
 }
 
 /* Skeleton Cell Loading */

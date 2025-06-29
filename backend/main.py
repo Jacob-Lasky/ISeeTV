@@ -1,22 +1,25 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
-from typing import Dict, List
+from typing import Dict, List, Literal
 import uvicorn
 import json
 from fastapi import HTTPException, status
 from fastapi.responses import RedirectResponse
 import asyncio
-from datetime import datetime
+import logging
 from common.models import DownloadProgress, Message, Source, GlobalSettings
 from common.download_helper import (
     create_download_task,
     background_single_download_task,
-    download_file,
 )
 from common.state import get_download_progress
+from common.utils import create_task_id
 
 DATA_PATH = "/app/data"
+
+logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
+logger = logging.getLogger(__name__)
 
 app = FastAPI(
     title="ISeeTV API",
@@ -30,6 +33,7 @@ app = FastAPI(
         {"name": "Health", "description": "Health checks"},
         {"name": "Settings", "description": "Global app configuration"},
         {"name": "Sources", "description": "Manage IPTV sources (M3U, EPG, metadata)"},
+        {"name": "Download", "description": "Download operations"},
     ],
 )
 
@@ -153,141 +157,157 @@ async def set_sources(
 
 
 @app.get(
-    "/api/download/all_m3u",
+    "/api/download/{file_type}/all",
     response_model=Message,
-    tags=["Sources"],
+    tags=["Download"],
     status_code=status.HTTP_200_OK,
 )
-async def download_all_m3u(
+async def download_all_files(
+    file_type: Literal["m3u", "epg"],
     sources_file: str = f"{DATA_PATH}/sources.json",
     download_dir: str = f"{DATA_PATH}/sources",
 ):
-    """Start background download of all M3U files - one task per source"""
+    """Start background download of all files of a specific type - one task per source"""
     try:
         with open(sources_file, "r") as f:
             sources = [Source(**source) for source in json.load(f)]
 
-        # Filter sources with M3U URLs in file_metadata
-        m3u_sources = [
+        # Filter sources with file_type URLs in file_metadata
+        file_type_sources = [
             source
             for source in sources
-            if (m3u_meta := source.get_file_metadata("m3u")) and m3u_meta.url
+            if (file_type_meta := source.get_file_metadata(file_type))
+            and file_type_meta.url
         ]
 
-        if not m3u_sources:
-            return Message(message="No sources with M3U URLs found")
+        if not file_type_sources:
+            return Message(message="No sources with {file_type} URLs found")
 
-        # Create individual tasks for each source
-        task_ids = []
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        for source in m3u_sources:
-            # Create unique task ID for each source
-            task_id = f"m3u_{source.name}_{timestamp}"
-            task_ids.append(task_id)
-
-            # Create download task (1 item per task)
-            create_download_task(task_id, 1)
-
-            # Start background download task for this source
+        for source in file_type_sources:
             asyncio.create_task(
-                background_single_download_task(
-                    task_id, source.name, "m3u", sources_file, download_dir
+                queue_file_for_download(
+                    file_type, source.name, sources_file, download_dir
                 )
             )
 
         return Message(
-            message=f"M3U downloads started for {len(task_ids)} sources. Task IDs: {', '.join(task_ids)}"
+            message=f"{file_type} downloads started for {len(file_type_sources)} sources"
         )
     except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get(
-    "/api/download/m3u/{source_name}",
+    "/api/download/{file_type}/{source_name}",
     response_model=Message,
-    tags=["Sources"],
+    tags=["Download"],
     status_code=status.HTTP_200_OK,
 )
-async def download_m3u(
+async def queue_file_for_download(
+    file_type: Literal["m3u", "epg"],
     source_name: str,
     sources_file: str = f"{DATA_PATH}/sources.json",
     download_dir: str = f"{DATA_PATH}/sources",
 ):
-    """Download M3U file for a specific source"""
+    """Download file of a specific type for a specific source"""
     try:
-        await download_file(source_name, "m3u", sources_file, download_dir)
-        return Message(message=f"M3U file for {source_name} downloaded successfully")
+        # Create unique task ID for each source
+        task_id = create_task_id(source_name, file_type)
+
+        # Create download task (1 item per task)
+        create_download_task(task_id, 1)
+
+        # Start background download task for this source
+        asyncio.create_task(
+            background_single_download_task(
+                task_id, source_name, file_type, sources_file, download_dir
+            )
+        )
+        return Message(message=f"{file_type} file for {source_name} download started")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
 
 @app.get(
-    "/api/download/all_epg",
-    response_model=Message,
-    tags=["Sources"],
+    "/api/download/file/{source_name}/{file_type}",
+    tags=["Download"],
     status_code=status.HTTP_200_OK,
 )
-async def download_all_epg(
+async def download_file_stream(
+    source_name: str,
+    file_type: str,
     sources_file: str = f"{DATA_PATH}/sources.json",
-    download_dir: str = f"{DATA_PATH}/sources",
 ):
-    """Start background download of all EPG files - one task per source"""
+    """Stream a file directly to the browser for download"""
     try:
-        with open(sources_file, "r") as f:
-            sources = [Source(**source) for source in json.load(f)]
-
-        # Filter sources with EPG URLs in file_metadata
-        epg_sources = [
-            source
-            for source in sources
-            if (epg_meta := source.get_file_metadata("epg")) and epg_meta.url
-        ]
-
-        if not epg_sources:
-            return Message(message="No sources with EPG URLs found")
-
-        # Create individual tasks for each source
-        task_ids = []
-        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-
-        for source in epg_sources:
-            # Create unique task ID for each source
-            task_id = f"epg_{source.name}_{timestamp}"
-            task_ids.append(task_id)
-
-            # Create download task (1 item per task)
-            create_download_task(task_id, 1)
-
-            # Start background download task for this source
-            asyncio.create_task(
-                background_single_download_task(
-                    task_id, source.name, "epg", sources_file, download_dir
-                )
+        # Validate file type
+        if file_type not in ["m3u", "epg"]:
+            raise HTTPException(
+                status_code=400, detail="Invalid file type. Must be 'm3u' or 'epg'"
             )
 
-        return Message(
-            message=f"EPG downloads started for {len(task_ids)} sources. Task IDs: {', '.join(task_ids)}"
-        )
-    except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        # Load sources to get the file URL
+        with open(sources_file, "r") as f:
+            sources_data = json.load(f)
 
+        # Find the source
+        source_data = None
+        for source in sources_data:
+            if source["name"] == source_name:
+                source_data = source
+                break
 
-@app.get(
-    "/api/download/epg/{source_name}",
-    response_model=Message,
-    tags=["Sources"],
-    status_code=status.HTTP_200_OK,
-)
-async def download_epg(
-    source_name: str,
-    sources_file: str = f"{DATA_PATH}/sources.json",
-    download_dir: str = f"{DATA_PATH}/sources",
-):
-    """Download EPG file for a specific source"""
-    try:
-        await download_file(source_name, "epg", sources_file, download_dir)
-        return Message(message=f"EPG file for {source_name} downloaded successfully")
+        if not source_data:
+            raise HTTPException(
+                status_code=404, detail=f"Source '{source_name}' not found"
+            )
+
+        # Get file metadata
+        file_metadata = source_data.get("file_metadata", {})
+        file_info = file_metadata.get(file_type)
+
+        if not file_info or not file_info.get("url"):
+            raise HTTPException(
+                status_code=404,
+                detail=f"No {file_type.upper()} URL found for source '{source_name}'",
+            )
+
+        file_url = file_info["url"]
+
+        # Stream the file from the remote URL
+        import aiohttp
+
+        async with aiohttp.ClientSession() as session:
+            async with session.get(file_url) as response:
+                if response.status != 200:
+                    raise HTTPException(
+                        status_code=response.status,
+                        detail=f"Failed to fetch file from {file_url}",
+                    )
+
+                # Get content type and filename
+                content_type = response.headers.get(
+                    "content-type", "application/octet-stream"
+                )
+                filename = f"{source_name}_{file_type}.{file_type}"
+
+                # Create streaming response
+                from fastapi.responses import StreamingResponse
+
+                async def generate():
+                    async for chunk in response.content.iter_chunked(8192):
+                        yield chunk
+
+                return StreamingResponse(
+                    generate(),
+                    media_type=content_type,
+                    headers={"Content-Disposition": f"attachment; filename={filename}"},
+                )
+
+    except FileNotFoundError:
+        raise HTTPException(status_code=404, detail="Sources file not found")
+    except json.JSONDecodeError:
+        raise HTTPException(status_code=500, detail="Invalid sources file format")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -295,7 +315,7 @@ async def download_epg(
 @app.get(
     "/api/download/progress/{task_id}",
     response_model=DownloadProgress,
-    tags=["Sources"],
+    tags=["Download"],
     status_code=status.HTTP_200_OK,
 )
 async def get_download_progress_by_id(task_id: str):
@@ -309,7 +329,7 @@ async def get_download_progress_by_id(task_id: str):
 @app.get(
     "/api/download/progress",
     response_model=Dict[str, DownloadProgress],
-    tags=["Sources"],
+    tags=["Download"],
     status_code=status.HTTP_200_OK,
 )
 async def get_all_download_progress():

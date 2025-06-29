@@ -75,7 +75,6 @@ export interface SourceFileRow {
     fileLastRefresh?: string | null
     fileSizeBytes?: number
     fileStatus?: "active" | "inactive" | "error"
-    fileLastError?: string | null
 
     isFirstFileForSource?: boolean // for rowspan logic
     rowSpanCount?: number // number of files for this source

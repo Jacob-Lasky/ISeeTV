@@ -4,6 +4,9 @@ accessed across multiple modules.
 """
 
 from typing import Dict
+import logging
+
+logger = logging.getLogger(__name__)
 
 # Global state for tracking download progress
 # This is the single source of truth for all download progress data
