@@ -315,25 +315,9 @@
                         />
                     </div>
                     <div class="form-row">
-                        <label>M3U URL:</label>
-                        <InputText v-model="sourceForm.m3uUrl" required fluid />
-                    </div>
-                    <div class="form-row">
-                        <label>EPG URL:</label>
-                        <InputText v-model="sourceForm.epgUrl" fluid />
-                    </div>
-                    <div class="form-row">
                         <label>Connections:</label>
                         <InputNumber
                             v-model="sourceForm.connections"
-                            :min="1"
-                            fluid
-                        />
-                    </div>
-                    <div class="form-row">
-                        <label>Refresh Hours:</label>
-                        <InputNumber
-                            v-model="sourceForm.refreshHours"
                             :min="1"
                             fluid
                         />
@@ -357,6 +341,24 @@
                             showIcon
                             fluid
                         />
+                    </div>
+                    <div class="form-row">
+                        <label>Refresh Hours:</label>
+                        <InputNumber
+                            v-model="sourceForm.refreshHours"
+                            :min="1"
+                            fluid
+                        />
+                    </div>
+                    <!-- M3U section -->
+                    <div class="form-row">
+                        <label>M3U URL:</label>
+                        <InputText v-model="sourceForm.m3uUrl" required fluid />
+                    </div>
+                    <!-- EPG section -->
+                    <div class="form-row">
+                        <label>EPG URL:</label>
+                        <InputText v-model="sourceForm.epgUrl" fluid />
                     </div>
                 </div>
             </form>
