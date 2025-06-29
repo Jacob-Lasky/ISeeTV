@@ -6,7 +6,7 @@ import json
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple, Literal
 from common.models import Source
-from common.state import get_download_progress
+from common.state import get_download_progress, is_task_cancelled, remove_cancelled_task
 from common.utils import log_info
 from fastapi import HTTPException
 
@@ -44,7 +44,7 @@ async def download_file_with_progress(
     task_id: str,
     item_name: str,
     fallback_size: Optional[int] = None,
-) -> Tuple[bool, int]:
+) -> Tuple[bool, int, str]:
     """Download a single file with real-time progress tracking by bytes"""
     log_info()
     try:
@@ -76,6 +76,23 @@ async def download_file_with_progress(
 
                 with open(filepath, "wb") as f:
                     async for chunk in response.aiter_bytes(chunk_size=8192):
+                        # Check for cancellation before processing each chunk
+                        if is_task_cancelled(task_id):
+                            logger.info(f"Download task {task_id} cancelled, stopping download")
+                            # Clean up the partial file
+                            f.close()
+                            if os.path.exists(filepath):
+                                os.remove(filepath)
+                            # Clean up cancellation state
+                            remove_cancelled_task(task_id)
+                            update_download_progress(
+                                task_id, 
+                                status="cancelled", 
+                                error_message="Download cancelled by user",
+                                completed_at=datetime.now(timezone.utc).isoformat()
+                            )
+                            return False, 0, "cancelled"
+                        
                         if chunk:
                             f.write(chunk)
                             downloaded_size += len(chunk)
@@ -88,11 +105,11 @@ async def download_file_with_progress(
                             # Yield control to allow other coroutines to run
                             await asyncio.sleep(0)
 
-        # Return both success status and actual downloaded size
-        return True, downloaded_size
+        # Return success status, actual downloaded size, and completion status
+        return True, downloaded_size, "success"
     except Exception as e:
         update_download_progress(task_id, error_message=str(e))
-        return False, 0
+        return False, 0, "failed"
 
 
 async def orchestrate_file_download_from_source(
@@ -138,22 +155,24 @@ async def orchestrate_file_download_from_source(
                 filepath = f"{download_dir}/{source.name}.{extension}"
 
                 if task_id:
+                    # Set start timestamp when download begins
+                    source.update_file_metadata(download_type, url, set_start_timestamp=True)
+                    
                     # Get fallback size from source metadata
                     fallback_size = (
                         file_metadata.last_size_bytes if file_metadata else None
                     )
 
                     # Use progress tracking for background tasks
-                    success, size = await download_file_with_progress(
+                    success, size, status = await download_file_with_progress(
                         url, filepath, task_id, source_name, fallback_size
                     )
-                    # Update source metadata with actual downloaded size
-                    if success:
-                        source.update_file_metadata(download_type, url, size)
+                    # Update source metadata with actual downloaded size and status
+                    source.update_file_metadata(download_type, url, size, status=status)
 
-                        # Save updated sources back to file
-                        with open(sources_file, "w") as f:
-                            json.dump([s.dict() for s in sources], f, indent=2)
+                    # Save updated sources back to file
+                    with open(sources_file, "w") as f:
+                        json.dump([s.dict() for s in sources], f, indent=2)
                 else:
                     # Simple download for direct API calls
                     os.makedirs(download_dir, exist_ok=True)
@@ -185,6 +204,9 @@ async def background_download_task(
 
             url = file_metadata.url
 
+            # Set start timestamp when download begins
+            source.update_file_metadata(download_type, url, set_start_timestamp=True)
+
             # Create filepath
             extension = ".m3u" if download_type == "m3u" else ".xml"
             filepath = f"{download_dir}/{source.name}{extension}"
@@ -193,22 +215,21 @@ async def background_download_task(
             fallback_size = file_metadata.last_size_bytes if file_metadata else None
 
             # Download file with fallback size
-            success, actual_size = await download_file_with_progress(
+            success, actual_size, status = await download_file_with_progress(
                 url, filepath, task_id, source.name, fallback_size
             )
 
-            if success:
-                # Update source metadata with actual downloaded size
-                source.update_file_metadata(download_type, url, actual_size)
-                # Update source last_refresh
-                file_metadata.last_refresh = datetime.now(timezone.utc).isoformat()
+            # Update source metadata with actual downloaded size and status
+            source.update_file_metadata(download_type, url, actual_size, status=status)
 
+            if success:
                 download_progress = get_download_progress()
                 update_download_progress(
                     task_id,
                     completed_items=download_progress[task_id]["completed_items"] + 1,
                 )
             else:
+                # Mark task as failed if not successful (could be failed or cancelled)
                 update_download_progress(task_id, status="failed")
                 return
 

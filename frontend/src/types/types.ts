@@ -26,7 +26,7 @@ export interface DownloadAllTasksResponse {
  */
 export interface DownloadProgress {
     task_id: string
-    status: "pending" | "downloading" | "completed" | "failed"
+    status: "pending" | "downloading" | "completed" | "failed" | "cancelled"
     current_item?: string | null
     total_items: number
     completed_items: number
@@ -42,8 +42,10 @@ export interface DownloadProgress {
  */
 export interface FileMetadata {
     url: string
-    last_refresh?: string
+    last_refresh_started_timestamp?: string
     last_size_bytes?: number
+    last_refresh_status?: "success" | "failed" | "cancelled"
+    last_refresh_finished_timestamp?: string
 }
 
 /**
@@ -54,7 +56,6 @@ export interface Source {
     number_of_connections?: number | null
     refresh_every_hours?: number | null
     subscription_expires?: string | null
-    last_refresh?: string | null
     source_timezone?: string | null
     enabled: boolean
     file_metadata?: Record<string, FileMetadata>
@@ -68,7 +69,7 @@ export interface SourceFile {
     sourceId: string // reference to parent source
     type: "m3u" | "epg" // file type
     url: string
-    last_refresh?: string | null
+    last_refresh_started_timestamp?: string | null
     last_size_bytes?: number
     status?: "active" | "inactive" | "error"
     last_error?: string | null
@@ -104,9 +105,11 @@ export interface SourceFileRow {
     fileId: string
     fileType: "m3u" | "epg"
     fileUrl: string
-    fileLastRefresh?: string | null
+    fileLastRefreshStartedTimestamp?: string | null
+    fileLastRefreshFinishedTimestamp?: string | null
     fileSizeBytes?: number
     fileStatus?: "active" | "inactive" | "error"
+    fileMetadata?: FileMetadata // complete file metadata for status tracking
 
     isFirstFileForSource?: boolean // for rowspan logic
     rowSpanCount?: number // number of files for this source

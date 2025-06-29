@@ -8,7 +8,14 @@ from fastapi import HTTPException, status
 from fastapi.responses import RedirectResponse
 import asyncio
 import logging
-from common.models import DownloadProgress, Message, Source, GlobalSettings, DownloadTaskResponse, DownloadAllTasksResponse
+from common.models import (
+    DownloadProgress,
+    Message,
+    Source,
+    GlobalSettings,
+    DownloadTaskResponse,
+    DownloadAllTasksResponse,
+)
 from common.download_helper import (
     create_download_task,
     background_single_download_task,
@@ -156,7 +163,6 @@ async def set_sources(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# Progress routes must come BEFORE the general download routes to avoid conflicts
 @app.get(
     "/api/download/progress/{task_id}",
     response_model=DownloadProgress,
@@ -186,6 +192,28 @@ async def get_all_download_progress():
     }
 
 
+@app.delete(
+    "/api/download/cancel/{task_id}",
+    response_model=Message,
+    tags=["Download"],
+    status_code=status.HTTP_200_OK,
+)
+async def cancel_download(task_id: str):
+    """Cancel a download task by task ID"""
+    try:
+        from common.state import cancel_download_task
+
+        success = cancel_download_task(task_id)
+        if success:
+            return Message(message=f"Download task {task_id} cancelled successfully")
+        else:
+            raise HTTPException(
+                status_code=404, detail=f"Task {task_id} not found or already completed"
+            )
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 @app.get(
     "/api/download/{file_type}/all",
     response_model=DownloadAllTasksResponse,
@@ -212,8 +240,7 @@ async def download_all_files(
 
         if not file_type_sources:
             return DownloadAllTasksResponse(
-                message=f"No sources with {file_type} URLs found",
-                task_ids=[]
+                message=f"No sources with {file_type} URLs found", task_ids=[]
             )
 
         # Create task IDs and start downloads
@@ -222,10 +249,10 @@ async def download_all_files(
             # Create unique task ID for each source
             task_id = create_task_id(source.name, file_type)
             task_ids.append(task_id)
-            
+
             # Create download task (1 item per task)
             create_download_task(task_id, 1)
-            
+
             # Start background download task for this source
             asyncio.create_task(
                 background_single_download_task(
@@ -235,7 +262,7 @@ async def download_all_files(
 
         return DownloadAllTasksResponse(
             message=f"{file_type} downloads started for {len(file_type_sources)} sources",
-            task_ids=task_ids
+            task_ids=task_ids,
         )
     except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -269,7 +296,7 @@ async def queue_file_for_download(
         )
         return DownloadTaskResponse(
             message=f"{file_type} file for {source_name} download started",
-            task_id=task_id
+            task_id=task_id,
         )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))

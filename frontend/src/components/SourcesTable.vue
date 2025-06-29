@@ -176,17 +176,20 @@
                                             100
                                     )
                                 "
-                                style="height: 6px; margin-top: 4px"
+                                style="height: 12px; margin-top: 4px"
                             />
                             <ProgressBar
                                 v-else
                                 mode="indeterminate"
-                                style="height: 6px; margin-top: 4px"
+                                style="height: 12px; margin-top: 4px"
                             />
                         </div>
-                        <!-- Show last refresh time if not downloading -->
-                        <span v-else class="last-refresh-time">
-                            {{ formatLastRefresh(data.fileLastRefresh || "") }}
+                        <!-- Show last refresh status if not downloading -->
+                        <span
+                            v-else
+                            :class="getRefreshStatusClass(data.fileMetadata)"
+                        >
+                            {{ formatRefreshStatus(data.fileMetadata) }}
                         </span>
                     </div>
                 </template>
@@ -207,11 +210,21 @@
                         <Skeleton shape="circle" size="2rem"></Skeleton>
                     </div>
                     <div v-else class="action-buttons">
+                        <!-- Show stop button if file is downloading, refresh button otherwise -->
                         <Button
-                            icon="pi pi-refresh"
-                            severity="info"
+                            v-if="getProgressForFile(data.fileId)"
+                            icon="pi pi-stop"
+                            severity="danger"
                             size="small"
-                            text
+                            rounded
+                            :title="`Stop ${data.fileType.toUpperCase()} download`"
+                            @click="cancelDownload(data)"
+                        />
+                        <Button
+                            v-else
+                            icon="pi pi-refresh"
+                            severity="secondary"
+                            size="small"
                             rounded
                             :title="`Refresh ${data.fileType.toUpperCase()} file`"
                             @click="refreshFile(data)"
@@ -584,9 +597,13 @@ function transformSourcesToRows(sourcesData: Source[]): SourceFileRow[] {
                 fileId: `${sourceId}-${fileType}`,
                 fileType,
                 fileUrl: fileMetadata.url,
-                fileLastRefresh: fileMetadata.last_refresh || null,
+                fileLastRefreshStartedTimestamp:
+                    fileMetadata.last_refresh_started_timestamp || null,
+                fileLastRefreshFinishedTimestamp:
+                    fileMetadata.last_refresh_finished_timestamp || null,
                 fileSizeBytes: fileMetadata.last_size_bytes,
                 fileStatus: determineFileStatus(fileMetadata),
+                fileMetadata: fileMetadata,
 
                 // UI helpers for rowspan logic
                 isFirstFileForSource: fileIndex === 0,
@@ -605,7 +622,7 @@ function determineFileStatus(
     fileMetadata: FileMetadata
 ): "active" | "inactive" | "error" {
     if (!fileMetadata.url) return "inactive"
-    if (fileMetadata.last_refresh) return "active"
+    if (fileMetadata.last_refresh_started_timestamp) return "active"
     return "inactive"
 }
 
@@ -625,7 +642,8 @@ function createSkeletonRows(): SourceFileRow[] {
                 fileId: `skeleton-file-${index}-m3u`,
                 fileType: "m3u" as const,
                 fileUrl: "skeleton-url",
-                fileLastRefresh: null,
+                fileLastRefreshStartedTimestamp: null,
+                fileLastRefreshFinishedTimestamp: null,
                 fileSizeBytes: 0,
                 fileStatus: "active" as const,
                 isFirstFileForSource: true,
@@ -922,15 +940,75 @@ function getProgressForFile(fileId: string): DownloadProgress | null {
     return downloadProgress.value.get(taskId) || null
 }
 
-// Utility function to format bytes into human-readable format
-function formatBytes(bytes: number): string {
-    if (bytes === 0) return "0 B"
+// Utility function to format bytes
+function formatBytes(bytes: number, decimals = 2): string {
+    if (bytes === 0) return "0 Bytes"
 
     const k = 1024
-    const sizes = ["B", "KB", "MB", "GB", "TB"]
+    const dm = decimals < 0 ? 0 : decimals
+    const sizes = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"]
+
     const i = Math.floor(Math.log(bytes) / Math.log(k))
 
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i]
+}
+
+// Utility function to format refresh status with relative time
+function formatRefreshStatus(metadata: FileMetadata | undefined): string {
+    if (
+        !metadata ||
+        !metadata.last_refresh_status ||
+        !metadata.last_refresh_finished_timestamp
+    ) {
+        return "Never refreshed"
+    }
+
+    const timestamp = new Date(metadata.last_refresh_finished_timestamp)
+    const now = new Date()
+    const diffMs = now.getTime() - timestamp.getTime()
+
+    // Convert to relative time
+    const minutes = Math.floor(diffMs / (1000 * 60))
+    const hours = Math.floor(minutes / 60)
+    const days = Math.floor(hours / 24)
+
+    let timeAgo: string
+    if (minutes < 1) {
+        timeAgo = "Just now"
+    } else if (minutes < 60) {
+        timeAgo = `${minutes} minute${minutes === 1 ? "" : "s"} ago`
+    } else if (hours < 24) {
+        timeAgo = `${hours} hour${hours === 1 ? "" : "s"} ago`
+    } else {
+        timeAgo = `${days} day${days === 1 ? "" : "s"} ago`
+    }
+
+    // Format status with proper capitalization
+    const status =
+        metadata.last_refresh_status.charAt(0).toUpperCase() +
+        metadata.last_refresh_status.slice(1)
+
+    return `${status}: ${timeAgo}`
+}
+
+// Utility function to get CSS class based on refresh status
+function getRefreshStatusClass(metadata: FileMetadata | undefined): string {
+    const baseClass = "last-refresh-status"
+
+    if (!metadata || !metadata.last_refresh_status) {
+        return `${baseClass} status-never`
+    }
+
+    switch (metadata.last_refresh_status) {
+        case "success":
+            return `${baseClass} status-success`
+        case "failed":
+            return `${baseClass} status-failed`
+        case "cancelled":
+            return `${baseClass} status-cancelled`
+        default:
+            return `${baseClass} status-never`
+    }
 }
 
 async function downloadFile(fileRow: SourceFileRow) {
@@ -958,6 +1036,47 @@ async function downloadFile(fileRow: SourceFileRow) {
     } catch (error) {
         console.error(
             `Failed to download ${fileRow.fileType} for ${fileRow.sourceName}:`,
+            error
+        )
+    }
+}
+
+// Cancel download function
+async function cancelDownload(fileRow: SourceFileRow) {
+    console.log(
+        `Cancelling ${fileRow.fileType.toUpperCase()} download for source: ${fileRow.sourceName}`
+    )
+
+    try {
+        const taskId = activeTaskIds.value.get(fileRow.fileId)
+        if (!taskId) {
+            console.warn("No active task found for file:", fileRow.fileId)
+            return
+        }
+
+        const endpoint = `/api/download/cancel/${taskId}`
+
+        // Use apiGet with DELETE method (note: apiGet can handle different HTTP methods)
+        await fetch(endpoint, {
+            method: "DELETE",
+            headers: {
+                "Content-Type": "application/json",
+            },
+        }).then((response) => {
+            if (!response.ok) {
+                throw new Error(`HTTP ${response.status}`)
+            }
+            // Success - show a simple console message instead of toast
+            console.log(
+                `${fileRow.fileType.toUpperCase()} download cancelled successfully`
+            )
+        })
+
+        // Stop local progress polling immediately
+        stopProgressPolling(taskId, fileRow.fileId)
+    } catch (error) {
+        console.error(
+            `Failed to cancel ${fileRow.fileType} download for ${fileRow.sourceName}:`,
             error
         )
     }
@@ -1150,7 +1269,7 @@ function updateSourceFromForm(source: Source): Source {
         if (!updatedSource.file_metadata[fileConfig.fileType]) {
             updatedSource.file_metadata[fileConfig.fileType] = {
                 url: "",
-                last_refresh: "",
+                last_refresh_started_timestamp: "",
                 last_size_bytes: 0,
             }
         }
@@ -1179,7 +1298,7 @@ function createSourceFromForm(): Source {
         if (!newSource.file_metadata![fileConfig.fileType]) {
             newSource.file_metadata![fileConfig.fileType] = {
                 url: "",
-                last_refresh: "",
+                last_refresh_started_timestamp: "",
                 last_size_bytes: 0,
             }
         }
@@ -1454,6 +1573,29 @@ onMounted(async () => {
 .last-refresh-time {
     font-size: 0.875rem;
     color: var(--p-text-color);
+}
+
+.last-refresh-status {
+    font-size: 0.875rem;
+    font-style: italic;
+    font-weight: 500;
+}
+
+/* Status-based colors */
+.status-success {
+    color: var(--green-600);
+}
+
+.status-failed {
+    color: var(--red-600);
+}
+
+.status-cancelled {
+    color: var(--orange-600);
+}
+
+.status-never {
+    color: var(--text-color-secondary);
 }
 
 /* Skeleton Cell Loading */
