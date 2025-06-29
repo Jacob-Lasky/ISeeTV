@@ -784,6 +784,149 @@ async function loadSources() {
     })
 }
 
+// Smart reload that preserves active downloads
+async function preserveActiveDownloadsAndReload() {
+    // Capture current active downloads before reload
+    const activeDownloads = new Map(activeTaskIds.value)
+    const activeProgress = new Map(downloadProgress.value)
+
+    // Reload sources data
+    await loadSources()
+
+    // Restore active downloads and restart progress polling
+    for (const [fileId, taskId] of activeDownloads) {
+        // Check if this task is still active on the backend
+        try {
+            const progress = await fetch(`/api/download/progress/${taskId}`)
+            if (progress.ok) {
+                const progressData = await progress.json()
+                // Only restore if download is still active (not completed/failed/cancelled)
+                if (
+                    progressData.status === "downloading" ||
+                    progressData.status === "pending"
+                ) {
+                    activeTaskIds.value.set(fileId, taskId)
+                    downloadProgress.value.set(taskId, progressData)
+                    // Restart progress polling for this task
+                    startProgressPolling(taskId, fileId)
+                }
+            }
+        } catch (error) {
+            // If we can't check the task, assume it's no longer active
+            console.log(
+                `Task ${taskId} no longer active, not restoring progress polling`
+            )
+        }
+    }
+}
+
+// Auto-detect active downloads on component mount (for tab navigation persistence)
+async function detectAndRestoreActiveDownloads() {
+    console.log("Starting auto-detection of active downloads...")
+    try {
+        // Get all active downloads from the backend
+        const response = await fetch("/api/download/progress")
+        console.log("Fetch response status:", response.status, response.ok)
+
+        if (!response.ok) {
+            console.log("No active downloads to restore (response not ok)")
+            return
+        }
+
+        const allProgress = await response.json()
+        console.log("All progress data from backend:", allProgress)
+        console.log("Number of tasks found:", Object.keys(allProgress).length)
+
+        // For each active download, find the corresponding file and restore progress polling
+        for (const [taskId, progressData] of Object.entries(allProgress)) {
+            const progress = progressData as DownloadProgress
+            console.log(`Processing task ${taskId}:`, {
+                status: progress.status,
+                current_item: progress.current_item,
+                total_items: progress.total_items,
+                completed_items: progress.completed_items,
+            })
+
+            // Only restore downloads that are still active
+            if (
+                progress.status === "downloading" ||
+                progress.status === "pending"
+            ) {
+                console.log(
+                    `Task ${taskId} is active, looking for matching file...`
+                )
+
+                // Find the file that matches this task
+                const fileId = findFileIdForTask(taskId, progress.current_item)
+                console.log(`File ID match result for ${taskId}:`, fileId)
+
+                if (fileId) {
+                    console.log(
+                        `Restoring progress for ${progress.current_item} (${taskId}) -> ${fileId}`
+                    )
+                    activeTaskIds.value.set(fileId, taskId)
+                    downloadProgress.value.set(taskId, progress)
+                    // Start progress polling for this task
+                    startProgressPolling(taskId, fileId)
+                    console.log(`Progress polling started for ${taskId}`)
+                } else {
+                    console.log(
+                        `Could not find matching file for task ${taskId} (source: ${progress.current_item})`
+                    )
+                }
+            } else {
+                console.log(
+                    `Task ${taskId} is not active (status: ${progress.status}), skipping`
+                )
+            }
+        }
+
+        console.log("Auto-detection completed")
+    } catch (error) {
+        console.log("Failed to detect active downloads:", error)
+    }
+}
+
+// Helper function to find fileId based on task ID and source name
+function findFileIdForTask(
+    taskId: string,
+    sourceName: string | null
+): string | null {
+    console.log(`Finding file ID for task: ${taskId}, source: ${sourceName}`)
+
+    if (!sourceName) {
+        console.log(`No source name provided for task ${taskId}`)
+        return null
+    }
+
+    // Task ID format is typically: {fileType}_{sourceName}_{timestamp}
+    // Extract file type from task ID
+    const fileType = taskId.split("_")[0] // 'm3u' or 'epg'
+    console.log(`Extracted file type from task ID: ${fileType}`)
+    console.log(
+        `Available source rows:`,
+        sourceFileRows.value.map((row) => ({
+            fileId: row.fileId,
+            sourceName: row.sourceName,
+            fileType: row.fileType,
+        }))
+    )
+
+    // Find the matching file in our current sources
+    for (const row of sourceFileRows.value) {
+        console.log(
+            `Checking row: ${row.sourceName} (${row.fileType}) vs ${sourceName} (${fileType})`
+        )
+        if (row.sourceName === sourceName && row.fileType === fileType) {
+            console.log(`Found match! File ID: ${row.fileId}`)
+            return row.fileId
+        }
+    }
+
+    console.log(`No matching file found for ${sourceName} (${fileType})`)
+    return null
+}
+
 // File-specific actions
 async function refreshFile(fileRow: SourceFileRow) {
     console.log(
@@ -903,14 +1046,15 @@ function startProgressPolling(taskId: string, fileId: string) {
 
             downloadProgress.value.set(taskId, progress)
 
-            // Stop polling if task is completed or failed
+            // Check if download is complete
             if (
                 progress.status === "completed" ||
-                progress.status === "failed"
+                progress.status === "failed" ||
+                progress.status === "cancelled"
             ) {
                 stopProgressPolling(taskId, fileId)
-                // Refresh sources data to get updated last_refresh times
-                await loadSources()
+                // Note: Sources will be updated automatically when user refreshes or navigates
+                // No need to call loadSources() here as it causes excessive API calls
             }
         } catch (error) {
             console.error(`Failed to fetch progress for task ${taskId}:`, error)
@@ -1070,6 +1214,12 @@ async function cancelDownload(fileRow: SourceFileRow) {
             console.log(
                 `${fileRow.fileType.toUpperCase()} download cancelled successfully`
             )
+
+            // Preserve active downloads and only reload after a short delay
+            // This allows the backend to update the cancelled status
+            setTimeout(() => {
+                preserveActiveDownloadsAndReload()
+            }, 500)
         })
 
         // Stop local progress polling immediately
@@ -1427,12 +1577,36 @@ onMounted(async () => {
         // Load user timezone settings for accurate time formatting
         await fetchUserTimezone()
 
-        // Load sources data
-        loadSources()
+        // Load sources data and wait for it to complete
+        await loadSources()
+
+        // Set loading to false so sourceFileRows shows real data instead of skeleton
+        loading.value = false
+
+        // Wait a bit for reactive updates to complete
+        await new Promise((resolve) => setTimeout(resolve, 100))
+
+        // Verify sources are loaded before detecting downloads
+        console.log(
+            `📊 Sources loaded, checking sourceFileRows:`,
+            sourceFileRows.value.length,
+            "rows"
+        )
+        console.log(
+            `📊 First few rows:`,
+            sourceFileRows.value
+                .slice(0, 3)
+                .map((r) => ({
+                    sourceName: r.sourceName,
+                    fileType: r.fileType,
+                }))
+        )
+
+        // Auto-detect and restore any active downloads after component mount
+        await detectAndRestoreActiveDownloads()
     } catch (err) {
         error.value = `Failed to load sources: ${err instanceof Error ? err.message : String(err)}`
-    } finally {
-        loading.value = false
+        loading.value = false // Ensure loading is false even on error
     }
 })
 </script>
