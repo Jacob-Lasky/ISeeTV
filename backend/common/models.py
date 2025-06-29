@@ -10,6 +10,18 @@ class Message(BaseModel):
     message: str
 
 
+class DownloadTaskResponse(BaseModel):
+    """Response model for download operations that includes task ID for progress tracking"""
+    message: str
+    task_id: str
+
+
+class DownloadAllTasksResponse(BaseModel):
+    """Response model for download all operations that includes multiple task IDs"""
+    message: str
+    task_ids: list[str]
+
+
 class FileMetadata(BaseModel):
     """Atomic file metadata for downloadable resources"""
 

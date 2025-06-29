@@ -6,6 +6,38 @@ export interface ApiMessage {
 }
 
 /**
+ * Download task response with task ID for progress tracking
+ */
+export interface DownloadTaskResponse {
+    message: string
+    task_id: string
+}
+
+/**
+ * Download all tasks response with multiple task IDs
+ */
+export interface DownloadAllTasksResponse {
+    message: string
+    task_ids: string[]
+}
+
+/**
+ * Download progress tracking
+ */
+export interface DownloadProgress {
+    task_id: string
+    status: "pending" | "downloading" | "completed" | "failed"
+    current_item?: string | null
+    total_items: number
+    completed_items: number
+    bytes_downloaded: number
+    total_bytes: number
+    error_message?: string | null
+    started_at: string
+    completed_at?: string | null
+}
+
+/**
  * File metadata for downloadable resources, matches source.json
  */
 export interface FileMetadata {

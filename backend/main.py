@@ -8,7 +8,7 @@ from fastapi import HTTPException, status
 from fastapi.responses import RedirectResponse
 import asyncio
 import logging
-from common.models import DownloadProgress, Message, Source, GlobalSettings
+from common.models import DownloadProgress, Message, Source, GlobalSettings, DownloadTaskResponse, DownloadAllTasksResponse
 from common.download_helper import (
     create_download_task,
     background_single_download_task,
@@ -156,9 +156,39 @@ async def set_sources(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# Progress routes must come BEFORE the general download routes to avoid conflicts
+@app.get(
+    "/api/download/progress/{task_id}",
+    response_model=DownloadProgress,
+    tags=["Download"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_download_progress_by_id(task_id: str):
+    """Get download progress for a specific task"""
+    download_progress = get_download_progress()
+    if task_id not in download_progress:
+        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
+    return DownloadProgress(**download_progress[task_id])
+
+
+@app.get(
+    "/api/download/progress",
+    response_model=Dict[str, DownloadProgress],
+    tags=["Download"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_all_download_progress():
+    """Get all download progress tasks"""
+    download_progress = get_download_progress()
+    return {
+        task_id: DownloadProgress(**progress)
+        for task_id, progress in download_progress.items()
+    }
+
+
 @app.get(
     "/api/download/{file_type}/all",
-    response_model=Message,
+    response_model=DownloadAllTasksResponse,
     tags=["Download"],
     status_code=status.HTTP_200_OK,
 )
@@ -181,17 +211,31 @@ async def download_all_files(
         ]
 
         if not file_type_sources:
-            return Message(message="No sources with {file_type} URLs found")
+            return DownloadAllTasksResponse(
+                message=f"No sources with {file_type} URLs found",
+                task_ids=[]
+            )
 
+        # Create task IDs and start downloads
+        task_ids = []
         for source in file_type_sources:
+            # Create unique task ID for each source
+            task_id = create_task_id(source.name, file_type)
+            task_ids.append(task_id)
+            
+            # Create download task (1 item per task)
+            create_download_task(task_id, 1)
+            
+            # Start background download task for this source
             asyncio.create_task(
-                queue_file_for_download(
-                    file_type, source.name, sources_file, download_dir
+                background_single_download_task(
+                    task_id, source.name, file_type, sources_file, download_dir
                 )
             )
 
-        return Message(
-            message=f"{file_type} downloads started for {len(file_type_sources)} sources"
+        return DownloadAllTasksResponse(
+            message=f"{file_type} downloads started for {len(file_type_sources)} sources",
+            task_ids=task_ids
         )
     except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
         raise HTTPException(status_code=500, detail=str(e))
@@ -199,7 +243,7 @@ async def download_all_files(
 
 @app.get(
     "/api/download/{file_type}/{source_name}",
-    response_model=Message,
+    response_model=DownloadTaskResponse,
     tags=["Download"],
     status_code=status.HTTP_200_OK,
 )
@@ -223,7 +267,10 @@ async def queue_file_for_download(
                 task_id, source_name, file_type, sources_file, download_dir
             )
         )
-        return Message(message=f"{file_type} file for {source_name} download started")
+        return DownloadTaskResponse(
+            message=f"{file_type} file for {source_name} download started",
+            task_id=task_id
+        )
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
 
@@ -310,35 +357,6 @@ async def download_file_stream(
         raise HTTPException(status_code=500, detail="Invalid sources file format")
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
-
-
-@app.get(
-    "/api/download/progress/{task_id}",
-    response_model=DownloadProgress,
-    tags=["Download"],
-    status_code=status.HTTP_200_OK,
-)
-async def get_download_progress_by_id(task_id: str):
-    """Get download progress for a specific task"""
-    download_progress = get_download_progress()
-    if task_id not in download_progress:
-        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
-    return DownloadProgress(**download_progress[task_id])
-
-
-@app.get(
-    "/api/download/progress",
-    response_model=Dict[str, DownloadProgress],
-    tags=["Download"],
-    status_code=status.HTTP_200_OK,
-)
-async def get_all_download_progress():
-    """Get all download progress tasks"""
-    download_progress = get_download_progress()
-    return {
-        task_id: DownloadProgress(**progress)
-        for task_id, progress in download_progress.items()
-    }
 
 
 if __name__ == "__main__":

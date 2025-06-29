@@ -113,7 +113,7 @@
             <Column
                 field="fileLastRefresh"
                 header="Last Refresh"
-                style="min-width: 150px"
+                style="min-width: 200px"
             >
                 <template #body="{ data }">
                     <Skeleton
@@ -121,9 +121,74 @@
                         width="8rem"
                         height="1rem"
                     ></Skeleton>
-                    <span v-else>{{
-                        formatLastRefresh(data.fileLastRefresh || "")
-                    }}</span>
+                    <div v-else class="last-refresh-cell">
+                        <!-- Show progress bar if file is currently downloading -->
+                        <div
+                            v-if="getProgressForFile(data.fileId)"
+                            class="progress-container"
+                        >
+                            <div class="progress-info">
+                                <span class="progress-status">{{
+                                    getProgressForFile(data.fileId)?.status
+                                }}</span>
+                                <span
+                                    v-if="
+                                        getProgressForFile(data.fileId)
+                                            ?.total_bytes > 0
+                                    "
+                                    class="progress-bytes"
+                                >
+                                    {{
+                                        formatBytes(
+                                            getProgressForFile(data.fileId)
+                                                ?.bytes_downloaded || 0
+                                        )
+                                    }}
+                                    /
+                                    {{
+                                        formatBytes(
+                                            getProgressForFile(data.fileId)
+                                                ?.total_bytes || 0
+                                        )
+                                    }}
+                                </span>
+                                <span v-else class="progress-bytes">
+                                    {{
+                                        formatBytes(
+                                            getProgressForFile(data.fileId)
+                                                ?.bytes_downloaded || 0
+                                        )
+                                    }}
+                                    downloaded
+                                </span>
+                            </div>
+                            <ProgressBar
+                                v-if="
+                                    getProgressForFile(data.fileId)
+                                        ?.total_bytes > 0
+                                "
+                                :value="
+                                    Math.round(
+                                        ((getProgressForFile(data.fileId)
+                                            ?.bytes_downloaded || 0) /
+                                            (getProgressForFile(data.fileId)
+                                                ?.total_bytes || 1)) *
+                                            100
+                                    )
+                                "
+                                style="height: 6px; margin-top: 4px"
+                            />
+                            <ProgressBar
+                                v-else
+                                mode="indeterminate"
+                                style="height: 6px; margin-top: 4px"
+                            />
+                        </div>
+                        <!-- Show last refresh time if not downloading -->
+                        <span v-else class="last-refresh-time">
+                            {{ formatLastRefresh(data.fileLastRefresh || "") }}
+                        </span>
+                    </div>
                 </template>
             </Column>
 
@@ -455,8 +520,16 @@ import Dialog from "primevue/dialog"
 import Tag from "primevue/tag"
 import DatePicker from "primevue/datepicker"
 import Skeleton from "primevue/skeleton"
+import ProgressBar from "primevue/progressbar"
 import { apiGet, apiPost } from "../utils/apiUtils"
-import type { FileMetadata, Source, SourceFileRow } from "../types/types"
+import type {
+    FileMetadata,
+    Source,
+    SourceFileRow,
+    DownloadTaskResponse,
+    DownloadAllTasksResponse,
+    DownloadProgress,
+} from "../types/types"
 import { timezoneOptions } from "../utils/timezones"
 
 // Reactive state for sources and UI
@@ -469,6 +542,11 @@ const saveSuccess = ref("")
 // Refresh all loading states
 const refreshingAllM3u = ref(false)
 const refreshingAllEpg = ref(false)
+
+// Task ID tracking for progress bars
+const activeTaskIds = ref<Map<string, string>>(new Map()) // fileId -> taskId
+const downloadProgress = ref<Map<string, DownloadProgress>>(new Map()) // taskId -> progress
+const progressPollingIntervals = ref<Map<string, number>>(new Map()) // taskId -> interval
 
 // Data transformation
 const sourceFileRows = computed<SourceFileRow[]>(() => {
@@ -695,15 +773,15 @@ async function refreshFile(fileRow: SourceFileRow) {
     )
 
     try {
-        const endpoint =
-            fileRow.fileType === "m3u"
-                ? `/api/download/m3u/${encodeURIComponent(fileRow.sourceName)}`
-                : `/api/download/epg/${encodeURIComponent(fileRow.sourceName)}`
+        const endpoint = `/api/download/${fileRow.fileType}/${encodeURIComponent(fileRow.sourceName)}`
 
-        await apiGet(endpoint, true, {
+        const response = await apiGet<DownloadTaskResponse>(endpoint, true, {
             successMessage: `${fileRow.fileType.toUpperCase()} refresh started`,
             errorPrefix: `${fileRow.fileType.toUpperCase()} refresh failed`,
         })
+
+        // Start progress polling for this file
+        startProgressPolling(response.task_id, fileRow.fileId)
     } catch (error) {
         console.error(
             `Failed to refresh ${fileRow.fileType} for ${fileRow.sourceName}:`,
@@ -719,9 +797,29 @@ async function refreshAllM3u() {
     try {
         refreshingAllM3u.value = true
 
-        await apiGet("/api/download/m3u/all", true, {
-            successMessage: "All M3U refresh started",
-            errorPrefix: "All M3U refresh failed",
+        const response = await apiGet<DownloadAllTasksResponse>(
+            "/api/download/m3u/all",
+            true,
+            {
+                successMessage: "All M3U refresh started",
+                errorPrefix: "All M3U refresh failed",
+            }
+        )
+
+        // Start progress polling for each task
+        response.task_ids.forEach((taskId) => {
+            // Find the corresponding file for this task
+            const fileRows = sourceFileRows.value.filter(
+                (row) => row.fileType === "m3u"
+            )
+            const matchingRow = fileRows.find((row) => {
+                // Match by source name and file type (task ID format: sourceName_fileType_timestamp)
+                return taskId.includes(row.sourceName.replace(/\s+/g, "_"))
+            })
+
+            if (matchingRow) {
+                startProgressPolling(taskId, matchingRow.fileId)
+            }
         })
     } catch (error) {
         console.error("Failed to refresh all M3U files:", error)
@@ -737,15 +835,102 @@ async function refreshAllEpg() {
     try {
         refreshingAllEpg.value = true
 
-        await apiGet("/api/download/epg/all", true, {
-            successMessage: "All EPG refresh started",
-            errorPrefix: "All EPG refresh failed",
+        const response = await apiGet<DownloadAllTasksResponse>(
+            "/api/download/epg/all",
+            true,
+            {
+                successMessage: "All EPG refresh started",
+                errorPrefix: "All EPG refresh failed",
+            }
+        )
+
+        // Start progress polling for each task
+        response.task_ids.forEach((taskId) => {
+            // Find the corresponding file for this task
+            const fileRows = sourceFileRows.value.filter(
+                (row) => row.fileType === "epg"
+            )
+            const matchingRow = fileRows.find((row) => {
+                // Match by source name and file type (task ID format: sourceName_fileType_timestamp)
+                return taskId.includes(row.sourceName.replace(/\s+/g, "_"))
+            })
+
+            if (matchingRow) {
+                startProgressPolling(taskId, matchingRow.fileId)
+            }
         })
     } catch (error) {
         console.error("Failed to refresh all EPG files:", error)
     } finally {
         refreshingAllEpg.value = false
     }
+}
+
+// Progress tracking functions
+function startProgressPolling(taskId: string, fileId: string) {
+    // Store the task ID for this file
+    activeTaskIds.value.set(fileId, taskId)
+
+    // Start polling for progress
+    const interval = setInterval(async () => {
+        try {
+            const progress = await apiGet<DownloadProgress>(
+                `/api/download/progress/${taskId}`,
+                false,
+                {
+                    showSuccessToast: false,
+                    showErrorToast: false,
+                }
+            )
+
+            downloadProgress.value.set(taskId, progress)
+
+            // Stop polling if task is completed or failed
+            if (
+                progress.status === "completed" ||
+                progress.status === "failed"
+            ) {
+                stopProgressPolling(taskId, fileId)
+                // Refresh sources data to get updated last_refresh times
+                await loadSources()
+            }
+        } catch (error) {
+            console.error(`Failed to fetch progress for task ${taskId}:`, error)
+            // Stop polling on error
+            stopProgressPolling(taskId, fileId)
+        }
+    }, 1000) // Poll every second
+
+    progressPollingIntervals.value.set(taskId, interval)
+}
+
+function stopProgressPolling(taskId: string, fileId: string) {
+    const interval = progressPollingIntervals.value.get(taskId)
+    if (interval) {
+        clearInterval(interval)
+        progressPollingIntervals.value.delete(taskId)
+    }
+
+    activeTaskIds.value.delete(fileId)
+    downloadProgress.value.delete(taskId)
+}
+
+function getProgressForFile(fileId: string): DownloadProgress | null {
+    const taskId = activeTaskIds.value.get(fileId)
+    if (!taskId) return null
+
+    return downloadProgress.value.get(taskId) || null
+}
+
+// Utility function to format bytes into human-readable format
+function formatBytes(bytes: number): string {
+    if (bytes === 0) return "0 B"
+
+    const k = 1024
+    const sizes = ["B", "KB", "MB", "GB", "TB"]
+    const i = Math.floor(Math.log(bytes) / Math.log(k))
+
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + " " + sizes[i]
 }
 
 async function downloadFile(fileRow: SourceFileRow) {
@@ -1232,6 +1417,43 @@ onMounted(async () => {
         flex-direction: column;
         align-items: stretch;
     }
+}
+
+/* Last Refresh Cell with Progress Bar */
+.last-refresh-cell {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.progress-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.progress-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.875rem;
+}
+
+.progress-status {
+    font-weight: 600;
+    text-transform: capitalize;
+    color: var(--p-primary-color);
+}
+
+.progress-bytes {
+    font-size: 0.75rem;
+    color: var(--p-text-muted-color);
+    font-family: monospace;
+}
+
+.last-refresh-time {
+    font-size: 0.875rem;
+    color: var(--p-text-color);
 }
 
 /* Skeleton Cell Loading */
