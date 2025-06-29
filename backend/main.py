@@ -457,7 +457,7 @@ async def download_file_stream(
 
 @app.get(
     "/api/ingest/{file_type}/{source_name}",
-    response_model=List[Program],
+    response_model=Message,
     tags=["Ingest"],
     status_code=status.HTTP_200_OK,
 )
@@ -465,7 +465,7 @@ async def ingest_file(
     file_type: Literal["m3u", "epg"],
     source_name: str,
     sources_file: str = os.path.join(DATA_PATH, "sources.json"),
-) -> List[Program]:
+) -> Message:
     """Ingest an EPG file and return a list of programs"""
     try:
         with open(sources_file, "r") as f:
@@ -498,12 +498,16 @@ async def ingest_file(
             )
 
         if file_type == "m3u":
-            return parse_m3u(file_path)
+            parse_m3u(file_path)
         elif file_type == "epg":
             # Parse channels
             parse_epg_for_channels(file_path, source_name)
-            # Return the programs list
-            return parse_epg_for_programs(file_path, source_name)
+            # Parse programs
+            parse_epg_for_programs(file_path, source_name)
+
+        return Message(
+            message=f"{file_type.upper()} file for {source_name} ingested successfully",
+        )
 
     except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
         raise HTTPException(
