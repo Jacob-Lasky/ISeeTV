@@ -797,7 +797,11 @@ async function detectAndRestoreActiveDownloads() {
                 )
 
                 // Find the file that matches this task
-                const fileId = findFileIdForTask(taskId, progress.current_item)
+                const fileId = findFileIdForTask(
+                    taskId,
+                    progress.current_item,
+                    progress.file_type
+                )
                 console.log(`File ID match result for ${taskId}:`, fileId)
 
                 if (fileId) {
@@ -827,22 +831,21 @@ async function detectAndRestoreActiveDownloads() {
     }
 }
 
-// Helper function to find fileId based on task ID and source name
+// Helper function to find fileId based on progress data
 function findFileIdForTask(
     taskId: string,
-    sourceName: string | null
+    sourceName: string | null,
+    fileType?: string | null
 ): string | null {
-    console.log(`Finding file ID for task: ${taskId}, source: ${sourceName}`)
+    console.log(
+        `Finding file ID for task: ${taskId}, source: ${sourceName}, fileType: ${fileType}`
+    )
 
     if (!sourceName) {
         console.log(`No source name provided for task ${taskId}`)
         return null
     }
 
-    // Task ID format is typically: {fileType}_{sourceName}_{timestamp}
-    // Extract file type from task ID
-    const fileType = taskId.split("_")[0] // 'm3u' or 'epg'
-    console.log(`Extracted file type from task ID: ${fileType}`)
     console.log(
         `Available source rows:`,
         sourceFileRows.value.map((row) => ({

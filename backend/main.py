@@ -11,20 +11,22 @@ import logging
 import os
 from models.models import (
     DownloadProgress,
+    IngestProgress,
     Message,
     Source,
     GlobalSettings,
     DownloadTaskResponse,
     DownloadAllTasksResponse,
+    Program,
+    Channel,
 )
 from download.downloader import (
     create_download_task,
     background_single_download_task,
 )
-from common.state import get_download_progress
-from common.utils import create_task_id
-
-DATA_PATH = os.getenv("DATA_PATH", "/app/data")
+from common.state import get_progress
+from common.utils import create_task_id, get_progress_response
+from common.constants import DATA_PATH
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -113,7 +115,9 @@ async def get_settings(
         with open(settings_file, "r") as f:
             return GlobalSettings(**json.load(f))
     except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
 
 
 @app.post(
@@ -132,7 +136,9 @@ async def set_settings(
             json.dump(settings.dict(), f, indent=4)
         return Message(message="Settings saved successfully")
     except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
 
 
 @app.get(
@@ -149,7 +155,9 @@ async def get_sources(
         with open(sources_file, "r") as f:
             return [Source(**source) for source in json.load(f)]
     except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
 
 
 @app.post(
@@ -167,7 +175,12 @@ async def set_sources(
             json.dump([source.dict() for source in sources], f, indent=4)
         return Message(message="Sources saved successfully")
     except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
+
+
+
 
 
 @app.get(
@@ -178,10 +191,7 @@ async def set_sources(
 )
 async def get_download_progress_by_id(task_id: str) -> DownloadProgress:
     """Get download progress for a specific task"""
-    download_progress = get_download_progress()
-    if task_id not in download_progress:
-        raise HTTPException(status_code=404, detail=f"Task {task_id} not found")
-    return DownloadProgress(**download_progress[task_id])
+    return DownloadProgress(**get_progress_response(task_id, "download"))
 
 
 @app.get(
@@ -192,10 +202,9 @@ async def get_download_progress_by_id(task_id: str) -> DownloadProgress:
 )
 async def get_all_download_progress() -> Dict[str, DownloadProgress]:
     """Get all download progress tasks"""
-    download_progress = get_download_progress()
     return {
         task_id: DownloadProgress(**progress)
-        for task_id, progress in download_progress.items()
+        for task_id, progress in get_progress("download").items()
     }
 
 
@@ -215,10 +224,13 @@ async def cancel_download(task_id: str) -> Message:
             return Message(message=f"Download task {task_id} cancelled successfully")
         else:
             raise HTTPException(
-                status_code=404, detail=f"Task {task_id} not found or already completed"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Task {task_id} not found or already completed",
             )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
 
 
 @app.get(
@@ -254,7 +266,7 @@ async def download_all_files(
         task_ids = []
         for source in file_type_sources:
             # Create unique task ID for each source
-            task_id = create_task_id(source.name, file_type)
+            task_id = create_task_id(source.name, file_type, "download")
             task_ids.append(task_id)
 
             # Create download task (1 item per task)
@@ -272,7 +284,9 @@ async def download_all_files(
             task_ids=task_ids,
         )
     except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
 
 
 @app.get(
@@ -290,7 +304,7 @@ async def queue_file_for_download(
     """Download file of a specific type for a specific source"""
     try:
         # Create unique task ID for each source
-        task_id = create_task_id(source_name, file_type)
+        task_id = create_task_id(source_name, file_type, "download")
 
         # Create download task (1 item per task)
         create_download_task(task_id, 1)
@@ -306,7 +320,9 @@ async def queue_file_for_download(
             task_id=task_id,
         )
     except Exception as e:
-        raise HTTPException(status_code=500, detail=str(e))
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
 
 
 @app.get(
@@ -324,7 +340,8 @@ async def download_file_stream(
         # Validate file type
         if file_type not in ["m3u", "epg"]:
             raise HTTPException(
-                status_code=400, detail="Invalid file type. Must be 'm3u' or 'epg'"
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid file type. Must be 'm3u' or 'epg'",
             )
 
         # Load sources to get the file URL
@@ -340,7 +357,8 @@ async def download_file_stream(
 
         if not source_data:
             raise HTTPException(
-                status_code=404, detail=f"Source '{source_name}' not found"
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Source '{source_name}' not found",
             )
 
         # Get file metadata
@@ -349,7 +367,7 @@ async def download_file_stream(
 
         if not file_info or not file_info.get("url"):
             raise HTTPException(
-                status_code=404,
+                status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"No {file_type.upper()} URL found for source '{source_name}'",
             )
 
@@ -375,12 +393,13 @@ async def download_file_stream(
                             yield chunk
                 except httpx.RequestError as e:
                     raise HTTPException(
-                        status_code=500,
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                         detail=f"Network error while fetching file: {str(e)}",
                     )
                 except Exception as e:
                     raise HTTPException(
-                        status_code=500, detail=f"Error streaming file: {str(e)}"
+                        status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                        detail=f"Error streaming file: {str(e)}",
                     )
 
         # Return streaming response with appropriate headers
@@ -394,15 +413,26 @@ async def download_file_stream(
         )
 
     except FileNotFoundError:
-        raise HTTPException(status_code=404, detail="Sources file not found")
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND, detail="Sources file not found"
+        )
     except json.JSONDecodeError:
-        raise HTTPException(status_code=500, detail="Invalid sources file format")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Invalid sources file format",
+        )
     except HTTPException:
         # Re-raise HTTP exceptions as-is
         raise
     except Exception as e:
         logger.error(f"Unexpected error in download_file_stream: {str(e)}")
-        raise HTTPException(status_code=500, detail=f"Internal server error: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Internal server error: {str(e)}",
+        )
+
+
+
 
 
 if __name__ == "__main__":

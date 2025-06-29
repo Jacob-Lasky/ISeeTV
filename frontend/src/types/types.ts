@@ -27,11 +27,27 @@ export interface DownloadAllTasksResponse {
 export interface DownloadProgress {
     task_id: string
     status: "pending" | "downloading" | "completed" | "failed" | "cancelled"
+    file_type: "m3u" | "epg"
     current_item?: string | null
     total_items: number
     completed_items: number
     bytes_downloaded: number
     total_bytes: number
+    error_message?: string | null
+    started_at: string
+    completed_at?: string | null
+}
+
+/**
+ * Ingest progress tracking
+ */
+export interface IngestProgress {
+    task_id: string
+    status: "pending" | "ingesting" | "completed" | "failed" | "cancelled"
+    file_type: "m3u" | "epg"
+    current_item?: string | null
+    total_items: number
+    completed_items: number
     error_message?: string | null
     started_at: string
     completed_at?: string | null

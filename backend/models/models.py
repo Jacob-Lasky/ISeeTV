@@ -33,6 +33,7 @@ class FileMetadata(BaseModel):
     last_size_bytes: Optional[int] = 0  # Fallback size for progress tracking
     last_refresh_status: Optional[Literal["success", "failed", "cancelled"]] = None
     last_refresh_finished_timestamp: Optional[str] = ""
+    local_path: Optional[str] = ""
 
 
 class GlobalSettings(BaseModel):
@@ -44,6 +45,7 @@ class GlobalSettings(BaseModel):
 class DownloadProgress(BaseModel):
     task_id: str
     status: Literal["pending", "downloading", "completed", "failed", "cancelled"]
+    file_type: Literal["m3u", "epg"]
     current_item: Optional[str]
     total_items: int
     completed_items: int
@@ -57,6 +59,7 @@ class DownloadProgress(BaseModel):
 class IngestProgress(BaseModel):
     task_id: str
     status: Literal["pending", "ingesting", "completed", "failed", "cancelled"]
+    file_type: Literal["m3u", "epg"]
     current_item: Optional[str]
     total_items: int
     completed_items: int
@@ -89,6 +92,7 @@ class Source(BaseModel):
         size_bytes: Optional[int] = None,
         status: Literal["success", "failed", "cancelled"] = "success",
         set_start_timestamp: bool = False,
+        local_path: Optional[str] = None,
     ) -> None:
         """Update file metadata during or after download operation"""
         if file_type not in self.file_metadata:
@@ -109,6 +113,9 @@ class Source(BaseModel):
 
         if size_bytes is not None:
             metadata.last_size_bytes = size_bytes
+
+        if local_path is not None:
+            metadata.local_path = local_path
 
 
 class Channel(BaseModel):

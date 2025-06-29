@@ -6,9 +6,9 @@ import json
 from datetime import datetime, timezone
 from typing import List, Optional, Tuple, Literal
 from models.models import Source
-from common.state import get_download_progress, is_task_cancelled, remove_cancelled_task
+from common.state import get_progress, is_task_cancelled, remove_cancelled_task
 from common.utils import log_info
-from fastapi import HTTPException
+from fastapi import HTTPException, status
 
 logger = logging.getLogger(__name__)
 
@@ -16,7 +16,7 @@ logger = logging.getLogger(__name__)
 # Atomic download utility functions
 def create_download_task(task_id: str, total_items: int) -> None:
     """Create a new download task in progress tracking"""
-    download_progress = get_download_progress()
+    download_progress = get_progress("download")
     download_progress[task_id] = {
         "task_id": task_id,
         "status": "pending",
@@ -33,7 +33,7 @@ def create_download_task(task_id: str, total_items: int) -> None:
 
 def update_download_progress(task_id: str, **kwargs) -> None:
     """Update download progress atomically"""
-    download_progress = get_download_progress()
+    download_progress = get_progress("download")
     if task_id in download_progress:
         download_progress[task_id].update(kwargs)
 
@@ -52,7 +52,10 @@ async def download_file_with_progress(
 
         # validate that the file exists
         if not await validate_url(url):
-            raise HTTPException(status_code=500, detail=f"URL is not accessible: {url}")
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail=f"URL is not accessible: {url}",
+            )
 
         # Ensure directory exists
         os.makedirs(os.path.dirname(filepath), exist_ok=True)
@@ -133,7 +136,7 @@ async def orchestrate_file_download_from_source(
 
     if source_name not in [source.name for source in sources]:
         raise HTTPException(
-            status_code=404,
+            status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Source '{source_name}' not found in sources file. Expected one of [{', '.join([source.name for source in sources])}]",
         )
 
@@ -143,7 +146,7 @@ async def orchestrate_file_download_from_source(
             # confirm that the download type exists
             if download_type not in source.file_metadata:
                 raise HTTPException(
-                    status_code=404,
+                    status_code=status.HTTP_404_NOT_FOUND,
                     detail=f"Download type '{download_type}' not found for source '{source_name}'",
                 )
 
@@ -170,7 +173,9 @@ async def orchestrate_file_download_from_source(
                         url, filepath, task_id, source_name, fallback_size
                     )
                     # Update source metadata with actual downloaded size and status
-                    source.update_file_metadata(download_type, url, size, status=status)
+                    source.update_file_metadata(
+                        download_type, url, size, status=status, local_path=filepath
+                    )
 
                     # Save updated sources back to file
                     with open(sources_file, "w") as f:
@@ -225,7 +230,7 @@ async def background_download_task(
             source.update_file_metadata(download_type, url, actual_size, status=status)
 
             if success:
-                download_progress = get_download_progress()
+                download_progress = get_progress("download")
                 update_download_progress(
                     task_id,
                     completed_items=download_progress[task_id]["completed_items"] + 1,
@@ -287,7 +292,10 @@ async def background_single_download_task(
     log_info()
     try:
         update_download_progress(
-            task_id, status="downloading", current_item=source_name
+            task_id,
+            status="downloading",
+            current_item=source_name,
+            file_type=download_type,
         )
 
         # Call the core download functions with progress tracking
