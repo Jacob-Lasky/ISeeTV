@@ -561,24 +561,81 @@ function getFileTypeColor(fileType: "m3u" | "epg"): string {
     }
 }
 
-// Format last refresh time
-function formatLastRefresh(lastRefresh: string): string {
-    if (!lastRefresh) return "Never"
+// User timezone state for atomic timezone-aware formatting
+const userTimezone = ref<string>("UTC")
 
-    const date = new Date(lastRefresh)
-    if (isNaN(date.getTime())) return "Invalid date"
+// Atomic function to fetch user timezone from settings
+async function fetchUserTimezone(): Promise<void> {
+    try {
+        const settings = await apiGet("/api/settings", false, {
+            showSuccessToast: false,
+            errorPrefix: "Failed to load timezone settings",
+        })
+        if (settings?.user_timezone) {
+            userTimezone.value = settings.user_timezone
+        }
+    } catch (error) {
+        console.warn("Could not fetch user timezone, using UTC:", error)
+        userTimezone.value = "UTC"
+    }
+}
 
-    const now = new Date()
-    const diffMs = now.getTime() - date.getTime()
+// Atomic function to convert UTC timestamp to user's timezone
+function convertToUserTimezone(utcTimestamp: string, timezone: string): Date {
+    const date = new Date(utcTimestamp)
+    if (isNaN(date.getTime())) {
+        throw new Error("Invalid date")
+    }
+
+    // Convert to user's timezone using Intl.DateTimeFormat
+    const userDate = new Date(
+        date.toLocaleString("en-US", { timeZone: timezone })
+    )
+    return userDate
+}
+
+// Atomic function to calculate time difference in a timezone-aware manner
+function calculateTimeDifference(
+    pastDate: Date,
+    currentDate: Date
+): { days: number; hours: number } {
+    const diffMs = currentDate.getTime() - pastDate.getTime()
     const diffHours = Math.floor(diffMs / (1000 * 60 * 60))
     const diffDays = Math.floor(diffHours / 24)
 
-    if (diffDays > 0) {
-        return `${diffDays} day${diffDays > 1 ? "s" : ""} ago`
-    } else if (diffHours > 0) {
-        return `${diffHours} hour${diffHours > 1 ? "s" : ""} ago`
-    } else {
-        return "Less than 1 hour ago"
+    return { days: diffDays, hours: diffHours }
+}
+
+// Enhanced format last refresh time with timezone awareness
+function formatLastRefresh(lastRefresh: string): string {
+    if (!lastRefresh) return "Never"
+
+    try {
+        // Convert both timestamps to user's timezone for accurate comparison
+        const refreshDate = convertToUserTimezone(
+            lastRefresh,
+            userTimezone.value
+        )
+        const nowInUserTz = convertToUserTimezone(
+            new Date().toISOString(),
+            userTimezone.value
+        )
+
+        const { days, hours } = calculateTimeDifference(
+            refreshDate,
+            nowInUserTz
+        )
+
+        if (days > 0) {
+            return `${days} day${days > 1 ? "s" : ""} ago`
+        } else if (hours > 0) {
+            return `${hours} hour${hours > 1 ? "s" : ""} ago`
+        } else {
+            return "Less than 1 hour ago"
+        }
+    } catch (error) {
+        console.warn("Error formatting last refresh time:", error)
+        return "Invalid date"
     }
 }
 
@@ -957,6 +1014,10 @@ const onRowEditSave = async (event: {
 
 onMounted(async () => {
     try {
+        // Load user timezone settings for accurate time formatting
+        await fetchUserTimezone()
+
+        // Load sources data
         sources.value = await apiGet("/api/sources", false, {
             showSuccessToast: true,
             errorPrefix: "Failed to load sources",

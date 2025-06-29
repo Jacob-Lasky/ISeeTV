@@ -44,7 +44,7 @@ class Source(BaseModel):
 
         metadata = self.file_metadata[file_type]
         metadata.url = url
-        metadata.last_refresh = datetime.now().isoformat()
+        metadata.last_refresh = datetime.now(timezone.utc).isoformat()
         if size_bytes is not None:
             metadata.last_size_bytes = size_bytes
 
