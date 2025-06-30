@@ -1,6 +1,6 @@
 """
 Ingest task management for ISeeTV ETL pipeline.
-Atomic functions for creating and updating ingest progress tracking.
+ functions for creating and updating ingest progress tracking.
 """
 
 import datetime as dt
@@ -9,10 +9,7 @@ from common.state import get_progress
 
 
 def create_ingest_task(
-    task_id: str, 
-    file_type: str, 
-    total_items: int,
-    source_name: str
+    task_id: str, file_type: str, total_items: int, source_name: str
 ) -> None:
     """Create a new ingest task in progress tracking"""
     ingest_progress = get_progress("ingest")
@@ -32,7 +29,7 @@ def create_ingest_task(
 
 
 def update_ingest_progress(task_id: str, **kwargs) -> None:
-    """Update ingest progress atomically"""
+    """Update ingest progress"""
     ingest_progress = get_progress("ingest")
     if task_id in ingest_progress:
         # Update timestamp for any progress update
@@ -43,9 +40,7 @@ def update_ingest_progress(task_id: str, **kwargs) -> None:
 def start_ingest_task(task_id: str) -> None:
     """Mark ingest task as started"""
     update_ingest_progress(
-        task_id,
-        status="ingesting",
-        started_at=dt.datetime.now(dt.timezone.utc)
+        task_id, status="ingesting", started_at=dt.datetime.now(dt.timezone.utc)
     )
 
 
@@ -55,7 +50,7 @@ def complete_ingest_task(task_id: str, message: Optional[str] = None) -> None:
         task_id,
         status="completed",
         completed_at=dt.datetime.now(dt.timezone.utc),
-        current_item=message or "Completed successfully"
+        current_item=message or "Completed successfully",
     )
 
 
@@ -65,24 +60,21 @@ def fail_ingest_task(task_id: str, error_message: str) -> None:
         task_id,
         status="failed",
         error_message=error_message,
-        completed_at=dt.datetime.now(dt.timezone.utc)
+        completed_at=dt.datetime.now(dt.timezone.utc),
     )
 
 
 def update_ingest_item_progress(
-    task_id: str, 
-    current_item: str, 
+    task_id: str,
+    current_item: str,
     completed_items: int,
-    current_phase: Optional[str] = None
+    current_phase: Optional[str] = None,
 ) -> None:
     """Update current item being processed"""
-    kwargs = {
-        "current_item": current_item,
-        "completed_items": completed_items
-    }
+    kwargs = {"current_item": current_item, "completed_items": completed_items}
     if current_phase:
         kwargs["current_phase"] = current_phase
-    
+
     update_ingest_progress(task_id, **kwargs)
 
 

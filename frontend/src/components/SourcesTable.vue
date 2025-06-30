@@ -356,7 +356,7 @@
                 <div v-else class="source-group-header">
                     <div class="source-header-main">
                         <div class="source-name">
-                            <i class="pi pi-server" style="color: #6366f1"></i>
+                            <i class="pi pi-server"></i>
                             <span class="font-bold text-lg">{{
                                 data.sourceName
                             }}</span>
@@ -568,6 +568,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue"
+import { useRouter } from "vue-router"
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
 import Button from "primevue/button"
@@ -579,6 +580,7 @@ import Tag from "primevue/tag"
 import DatePicker from "primevue/datepicker"
 import Skeleton from "primevue/skeleton"
 import ProgressBar from "primevue/progressbar"
+import { useToast } from "primevue/usetoast"
 import { apiGet, apiPost } from "../utils/apiUtils"
 import type {
     FileMetadata,
@@ -589,6 +591,13 @@ import type {
     DownloadProgress,
 } from "../types/types"
 import { timezoneOptions } from "../utils/timezones"
+import { getFileTypeIcon } from "../utils/fileUtils"
+
+// Toast service for notifications
+const toast = useToast()
+
+// Router for navigation
+const router = useRouter()
 
 // Reactive state for sources and UI
 const sources = ref<Source[]>([])
@@ -702,30 +711,7 @@ function createSkeletonRows(): SourceFileRow[] {
  * Utility functions for UI display and interactions
  */
 
-// Atomic utility functions for file type operations
-const getFileTypeIcon = (fileType: string): string => {
-    switch (fileType.toLowerCase()) {
-        case "m3u":
-            return "pi pi-list"
-        case "epg":
-            return "pi pi-calendar"
-        default:
-            return "pi pi-file"
-    }
-}
-
-const getFileTypeColor = (fileType: string): string => {
-    switch (fileType.toLowerCase()) {
-        case "m3u":
-            return "var(--green-500)"
-        case "epg":
-            return "var(--blue-500)"
-        default:
-            return "var(--surface-500)"
-    }
-}
-
-// Atomic table configuration interface
+//  table configuration interface
 interface TableOption {
     key: string
     label: string
@@ -734,17 +720,17 @@ interface TableOption {
     description: string
 }
 
-// Atomic function to get available tables for a file type
+//  function to get available tables for a file type
 const getAvailableTables = (fileType: string): TableOption[] => {
     switch (fileType.toLowerCase()) {
         case "m3u":
             return [
                 {
-                    key: "m3u_programs",
-                    label: "Programs",
+                    key: "m3u_channels",
+                    label: "Channels",
                     icon: getFileTypeIcon("m3u"),
                     tableName: "m3u_channels",
-                    description: "View M3U channel programs",
+                    description: "View M3U channel data",
                 },
             ]
         case "epg":
@@ -752,14 +738,14 @@ const getAvailableTables = (fileType: string): TableOption[] => {
                 {
                     key: "epg_programs",
                     label: "Programs",
-                    icon: "pi pi-video",
+                    icon: getFileTypeIcon("epg-programs"),
                     tableName: "programs",
                     description: "View EPG program data",
                 },
                 {
                     key: "epg_channels",
                     label: "Channels",
-                    icon: getFileTypeIcon("epg"),
+                    icon: getFileTypeIcon("epg-channels"),
                     tableName: "epg_channels",
                     description: "View EPG channel data",
                 },
@@ -769,7 +755,7 @@ const getAvailableTables = (fileType: string): TableOption[] => {
     }
 }
 
-// Atomic function to handle table viewing
+//  function to handle table viewing
 const viewTable = (fileRow: SourceFileRow, table: TableOption) => {
     console.log(
         `Viewing ${table.label} table for ${fileRow.sourceName} (${fileRow.fileType})`,
@@ -782,21 +768,28 @@ const viewTable = (fileRow: SourceFileRow, table: TableOption) => {
         }
     )
 
-    // TODO: Implement actual table viewing logic
-    // This could navigate to a table view component or open a modal
-    // For now, we'll show a toast message
+    // Navigate to the TableViewer page with source and table parameters
+    router.push({
+        name: "TableViewer",
+        params: {
+            sourceName: fileRow.sourceName,
+            tableName: table.tableName,
+        },
+    })
+
+    // Show confirmation toast
     toast.add({
         severity: "info",
-        summary: "Table View",
-        detail: `Opening ${table.description} for ${fileRow.sourceName}`,
-        life: 3000,
+        summary: "Opening Table",
+        detail: `Loading ${table.description} for ${fileRow.sourceName}`,
+        life: 2000,
     })
 }
 
-// User timezone state for atomic timezone-aware formatting
+// User timezone state for timezone-aware formatting
 const userTimezone = ref<string>("UTC")
 
-// Atomic function to fetch user timezone from settings
+//  function to fetch user timezone from settings
 async function fetchUserTimezone(): Promise<void> {
     try {
         const settings = await apiGet("/api/settings", false, {

@@ -26,7 +26,7 @@ class DownloadAllTasksResponse(BaseModel):
 
 
 class FileMetadata(BaseModel):
-    """Atomic file metadata for downloadable resources"""
+    """file metadata for downloadable resources"""
 
     url: str
     last_refresh_started_timestamp: Optional[str] = ""

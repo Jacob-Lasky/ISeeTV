@@ -78,7 +78,7 @@ export interface Source {
 }
 
 /**
- * Atomic file representation - single responsibility for file-specific data
+ *  file representation - single responsibility for file-specific data
  */
 export interface SourceFile {
     id: string // unique identifier: sourceId + fileType
@@ -92,7 +92,7 @@ export interface SourceFile {
 }
 
 /**
- * Atomic source representation - single responsibility for source-specific metadata
+ *  source representation - single responsibility for source-specific metadata
  */
 export interface SourceProvider {
     id: string // unique identifier

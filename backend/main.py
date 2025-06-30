@@ -35,7 +35,7 @@ from ingest.ingest_tasks import (
     start_ingest_task,
     complete_ingest_task,
     fail_ingest_task,
-    update_ingest_item_progress
+    update_ingest_item_progress,
 )
 from common.db import init_db, engine, SessionLocal
 from common.utils import create_task_id
@@ -515,22 +515,22 @@ async def load_file_to_db(
 
         # Create task ID and initialize task
         task_id = create_task_id(source_name, file_type, "load")
-        
+
         # Estimate total items (rough estimate for progress tracking)
         # We'll update this with actual counts during parsing
         estimated_items = 1000000 if file_type == "epg" else 500000
-        
+
         create_ingest_task(task_id, file_type, estimated_items, source_name)
-        
+
         # Start background task
         asyncio.create_task(
             background_load_task(task_id, file_type, file_path, source_name)
         )
-        
+
         return {
             "task_id": task_id,
             "message": f"Started loading {file_type.upper()} file for {source_name}",
-            "status": "pending"
+            "status": "pending",
         }
 
     except HTTPException:
@@ -538,46 +538,50 @@ async def load_file_to_db(
     except Exception as e:
         logger.error(f"Error starting load task: {e}")
         raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
-            detail=str(e)
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
 
 
 async def background_load_task(
-    task_id: str, 
-    file_type: str, 
-    file_path: str, 
-    source_name: str
+    task_id: str, file_type: str, file_path: str, source_name: str
 ) -> None:
     """Background task to load file data into database with progress tracking"""
     session = SessionLocal()
     try:
         # Start the task
         start_ingest_task(task_id)
-        logger.info(f"Started background load task {task_id} for {file_type} file: {file_path}")
-        
+        logger.info(
+            f"Started background load task {task_id} for {file_type} file: {file_path}"
+        )
+
         # Count total items for accurate progress tracking
         total_processed = 0
-        
+
         # Load data using async generators with task tracking
         if file_type == "m3u":
-            async for result in load_m3u_file_async(session, file_path, source_name, task_id):
+            async for result in load_m3u_file_async(
+                session, file_path, source_name, task_id
+            ):
                 total_processed += 1
                 if result.status == "error":
                     logger.warning(f"Load error in task {task_id}: {result.message}")
         elif file_type == "epg":
-            async for result in load_epg_file_async(session, file_path, source_name, task_id):
+            async for result in load_epg_file_async(
+                session, file_path, source_name, task_id
+            ):
                 total_processed += 1
                 if result.status == "error":
                     logger.warning(f"Load error in task {task_id}: {result.message}")
-        
+
         # Complete the task
         complete_ingest_task(
-            task_id, 
-            f"Successfully loaded {total_processed} records from {file_type.upper()} file"
+            task_id,
+            f"Successfully loaded {total_processed} records from {file_type.upper()} file",
         )
-        logger.info(f"Completed background load task {task_id}: {total_processed} records processed")
-        
+        logger.info(
+            f"Completed background load task {task_id}: {total_processed} records processed"
+        )
+
     except Exception as e:
         logger.error(f"Background load task {task_id} failed: {e}")
         fail_ingest_task(task_id, str(e))
@@ -600,6 +604,66 @@ async def get_db_table_head(table: str) -> List[Dict[str, Any]]:
 
 
 @app.get(
+    "/api/tables/{table_name}",
+    response_model=Dict[str, Any],
+    tags=["Database"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_table_data(
+    table_name: str,
+    source: str = None,
+) -> Dict[str, Any]:
+    """Return paginated table data with optional source filtering"""
+    # Validate table name to prevent SQL injection
+    valid_tables = ["epg_channels", "m3u_channels", "programs"]
+    if table_name not in valid_tables:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid table name. Must be one of: {', '.join(valid_tables)}",
+        )
+
+    try:
+        with SessionLocal() as session:
+            # Build base query
+            base_query = f"SELECT * FROM {table_name}"
+            count_query = f"SELECT COUNT(*) FROM {table_name}"
+
+            # Add source filtering if provided
+            params = {}
+            if source:
+                base_query += " WHERE source = :source"
+                count_query += " WHERE source = :source"
+                params["source"] = source
+
+            # Add ordering and pagination
+            base_query += " ORDER BY id ASC"
+
+            # Execute queries
+            total_result = session.execute(text(count_query), params)
+            total_count = total_result.scalar()
+
+            data_result = session.execute(text(base_query), params)
+            records = [dict(row._mapping) for row in data_result]
+
+            return {
+                "success": True,
+                "data": {
+                    "records": records,
+                    "total": total_count,
+                    "table_name": table_name,
+                    "source_filter": source,
+                },
+            }
+
+    except Exception as e:
+        logger.error(f"Error fetching table data for {table_name}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch table data: {str(e)}",
+        )
+
+
+@app.get(
     "/api/db/summary",
     response_model=Dict[str, Any],
     tags=["Database"],
@@ -614,22 +678,26 @@ async def get_db_summary() -> Dict[str, Any]:
         for table_name in inspector.get_table_names():
             # Get columns
             columns = [col["name"] for col in inspector.get_columns(table_name)]
-            
+
             # Get row count
-            row_count = session.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
-            
+            row_count = session.execute(
+                text(f"SELECT COUNT(*) FROM {table_name}")
+            ).scalar()
+
             # Get a sample of the first 5 rows
             result = session.execute(text(f"SELECT * FROM {table_name} LIMIT 1"))
             rows = [dict(row._mapping) for row in result]
 
-            summary.append({
-                "table": table_name,
-                "columns": columns,
-                "primary_key": inspector.get_pk_constraint(table_name),
-                "indexes": inspector.get_indexes(table_name),
-                "row_count": row_count,
-                "sample_row": rows[0] if rows else ""
-            })
+            summary.append(
+                {
+                    "table": table_name,
+                    "columns": columns,
+                    "primary_key": inspector.get_pk_constraint(table_name),
+                    "indexes": inspector.get_indexes(table_name),
+                    "row_count": row_count,
+                    "sample_row": rows[0] if rows else "",
+                }
+            )
 
     return {"tables": summary}
 

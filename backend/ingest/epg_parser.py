@@ -65,7 +65,7 @@ As we parse the above XML, we would see something like this:
 
 logger = logging.getLogger(__name__)
 
-# Expected structure definitions - atomic configuration
+# Expected structure definitions - configuration
 EXPECTED_ROOT_TAGS = {"channel", "programme"}  # Only these tags allowed under <tv>
 EXPECTED_ROOT_ATTRS = {
     "generator-info-name",
@@ -141,14 +141,14 @@ validation_results = ValidationResults()
 
 
 def validate_root_element(root_elem: _Element) -> None:
-    """Atomic function to validate root <tv> element attributes"""
+    """function to validate root <tv> element attributes"""
     for attr in root_elem.attrib.keys():
         if attr not in EXPECTED_ROOT_ATTRS:
             validation_results.unexpected_root_attrs.add(attr)
 
 
 def validate_channel_element(channel_elem: _Element) -> str:
-    """Atomic function to validate channel element structure and return channel_id"""
+    """function to validate channel element structure and return channel_id"""
     channel_id = channel_elem.attrib.get("id", "Unknown")
 
     # Validate channel attributes
@@ -165,7 +165,7 @@ def validate_channel_element(channel_elem: _Element) -> str:
 
 
 def validate_programme_element(programme_elem: _Element) -> str:
-    """Atomic function to validate programme element structure and return programme_id"""
+    """function to validate programme element structure and return programme_id"""
     programme_id = programme_elem.attrib.get("program-id") or programme_elem.attrib.get(
         "channel", "Unknown"
     )

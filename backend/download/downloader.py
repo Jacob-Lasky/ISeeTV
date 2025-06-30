@@ -13,7 +13,7 @@ from fastapi import HTTPException, status
 logger = logging.getLogger(__name__)
 
 
-# Atomic download utility functions
+#  download utility functions
 def create_download_task(task_id: str, total_items: int) -> None:
     """Create a new download task in progress tracking"""
     download_progress = get_progress("download")
@@ -32,7 +32,7 @@ def create_download_task(task_id: str, total_items: int) -> None:
 
 
 def update_download_progress(task_id: str, **kwargs) -> None:
-    """Update download progress atomically"""
+    """Update download progress"""
     download_progress = get_progress("download")
     if task_id in download_progress:
         download_progress[task_id].update(kwargs)
@@ -126,7 +126,7 @@ async def orchestrate_file_download_from_source(
     download_dir: str,
     task_id: Optional[str] = None,
 ) -> None:
-    """Atomic download function for any file type with optional progress tracking"""
+    """download function for any file type with optional progress tracking"""
     log_info()
     if download_type == "m3u":
         extension = "m3u"
