@@ -28,6 +28,7 @@ from common.utils import create_task_id, get_progress_response
 from common.constants import DATA_PATH
 from ingest.epg_parser import parse_epg_for_programs, parse_epg_for_channels
 from ingest.m3u_parser import parse_m3u
+from common.db import init_db
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -56,6 +57,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+init_db()
 
 
 @app.get(
