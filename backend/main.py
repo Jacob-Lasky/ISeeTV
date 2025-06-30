@@ -2,7 +2,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
 from typing import Dict, List, Literal, Any
-from sqlalchemy import inspect
+from sqlalchemy import inspect, text
 import uvicorn
 import json
 from fastapi import HTTPException, status
@@ -28,6 +28,8 @@ from common.utils import create_task_id, get_progress_response
 from common.constants import DATA_PATH
 from ingest.epg_parser import parse_epg_for_programs, parse_epg_for_channels
 from ingest.m3u_parser import parse_m3u
+from ingest.epg_loader import load_epg_file_async
+from ingest.m3u_loader import load_m3u_file_async
 from common.db import init_db, engine, SessionLocal
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
@@ -461,63 +463,67 @@ async def download_file_stream(
 
 
 @app.get(
-    "/api/ingest/{file_type}/{source_name}",
-    response_model=Message,
-    tags=["Ingest"],
+    "/api/load/{file_type}/{source_name}",
+    tags=["Database"],
     status_code=status.HTTP_200_OK,
 )
-async def ingest_file(
+async def load_file_to_db(
     file_type: Literal["m3u", "epg"],
     source_name: str,
     sources_file: str = os.path.join(DATA_PATH, "sources.json"),
-) -> Message:
-    """Ingest an EPG file and return a list of programs"""
-    try:
-        with open(sources_file, "r") as f:
-            sources = [Source(**source) for source in json.load(f)]
+):
+    """Load parsed file data into database with streaming results"""
+    async def generate_load_results():
+        session = SessionLocal()
+        try:
+            # Load sources configuration
+            with open(sources_file, "r") as f:
+                sources = [Source(**source) for source in json.load(f)]
 
-        # Find the source
-        source = next(
-            (source for source in sources if source.name == source_name), None
-        )
-        if not source:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Source '{source_name}' not found",
+            # Find the source
+            source = next(
+                (source for source in sources if source.name == source_name), None
             )
+            if not source:
+                yield f"data: {{\"error\": \"Source '{source_name}' not found\"}}\n\n"
+                return
 
-        # Get file metadata
-        file_metadata = source.get_file_metadata(file_type)
-        if not file_metadata or not file_metadata.local_path:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No {file_type.upper()} file defined for source '{source_name}'",
-            )
+            # Get file metadata
+            file_metadata = source.get_file_metadata(file_type)
+            if not file_metadata or not file_metadata.local_path:
+                yield f"data: {{\"error\": \"No {file_type.upper()} file defined for source '{source_name}'\"}}\n\n"
+                return
 
-        file_path = file_metadata.local_path
+            file_path = file_metadata.local_path
 
-        if not os.path.exists(file_path):
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"File '{file_path}' not found for source '{source_name}'",
-            )
+            if not os.path.exists(file_path):
+                yield f"data: {{\"error\": \"File '{file_path}' not found for source '{source_name}'\"}}\n\n"
+                return
 
-        if file_type == "m3u":
-            parse_m3u(file_path)
-        elif file_type == "epg":
-            # Parse channels
-            parse_epg_for_channels(file_path, source_name)
-            # Parse programs
-            parse_epg_for_programs(file_path, source_name)
+            # Start loading with async generators
+            if file_type == "m3u":
+                async for result in load_m3u_file_async(session, file_path, source_name):
+                    yield f"data: {{\"type\": \"{result.record_type}\", \"id\": \"{result.record_id}\", \"status\": \"{result.status}\", \"message\": \"{result.message}\"}}\n\n"
+            elif file_type == "epg":
+                async for result in load_epg_file_async(session, file_path, source_name):
+                    yield f"data: {{\"type\": \"{result.record_type}\", \"id\": \"{result.record_id}\", \"status\": \"{result.status}\", \"message\": \"{result.message}\"}}\n\n"
 
-        return Message(
-            message=f"{file_type.upper()} file for {source_name} ingested successfully",
-        )
+            yield f"data: {{\"complete\": true, \"message\": \"{file_type.upper()} file for {source_name} loaded successfully\"}}\n\n"
 
-    except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
-        )
+        except Exception as e:
+            logger.error(f"Error loading {file_type} file: {e}")
+            yield f"data: {{\"error\": \"{str(e)}\"}}\n\n"
+        finally:
+            session.close()
+
+    return StreamingResponse(
+        generate_load_results(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+        },
+    )
 
 
 @app.get(
@@ -554,15 +560,15 @@ async def get_db_summary() -> Dict[str, Any]:
             
             # Get a sample of the first 5 rows
             result = session.execute(text(f"SELECT * FROM {table_name} LIMIT 1"))
-            rows = [dict(row._mapping) for row in result][0]
+            rows = [dict(row._mapping) for row in result]
 
             summary.append({
                 "table": table_name,
                 "columns": columns,
-                "primary_key": inspector.get_primary_key(table_name),
+                "primary_key": inspector.get_pk_constraint(table_name),
                 "indexes": inspector.get_indexes(table_name),
                 "row_count": row_count,
-                "sample_row": rows
+                "sample_row": rows[0] if rows else ""
             })
 
     return {"tables": summary}
