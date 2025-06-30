@@ -13,6 +13,7 @@ from sqlalchemy import select
 from models.models import M3uChannel
 from models.db_models import M3uChannelTable
 from ingest.m3u_parser import parse_m3u
+from ingest.ingest_tasks import update_ingest_item_progress
 
 logger = logging.getLogger(__name__)
 
@@ -85,6 +86,7 @@ async def load_m3u_channels_async(
     session: Session, 
     file_path: str, 
     source_name: str,
+    task_id: Optional[str] = None,
     batch_size: int = 200
 ) -> AsyncGenerator[LoadResult, None]:
     """Async generator that loads M3U channels and yields results as they're processed"""
@@ -95,13 +97,33 @@ async def load_m3u_channels_async(
         channels = parse_m3u(file_path, source_name)
         logger.info(f"Parsed {len(channels)} M3U channels")
         
+        # Update task progress if task_id provided
+        if task_id:
+            update_ingest_item_progress(
+                task_id, 
+                "Loading M3U channels...", 
+                0, 
+                "channels"
+            )
+        
         # Process in batches to avoid blocking
+        completed_count = 0
         for i in range(0, len(channels), batch_size):
             batch = channels[i:i + batch_size]
             
             for j, channel in enumerate(batch):
                 result = _upsert_m3u_channel(session, channel)
                 yield result
+                completed_count += 1
+                
+                # Update progress periodically
+                if task_id and completed_count % 50 == 0:
+                    update_ingest_item_progress(
+                        task_id,
+                        f"Processing channel: {channel.name}",
+                        completed_count,
+                        "channels"
+                    )
                 
                 # Yield control periodically to avoid blocking
                 if j % 25 == 0:
@@ -120,13 +142,14 @@ async def load_m3u_channels_async(
 async def load_m3u_file_async(
     session: Session, 
     file_path: str, 
-    source_name: str
+    source_name: str,
+    task_id: Optional[str] = None
 ) -> AsyncGenerator[LoadResult, None]:
     """Main async function to load complete M3U file"""
     logger.info(f"Starting complete M3U file load: {file_path} for {source_name}")
     
     # Load all M3U channels
-    async for result in load_m3u_channels_async(session, file_path, source_name):
+    async for result in load_m3u_channels_async(session, file_path, source_name, task_id):
         yield result
     
     logger.info(f"Completed M3U file load for {source_name}")

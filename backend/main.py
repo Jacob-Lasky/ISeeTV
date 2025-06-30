@@ -30,7 +30,15 @@ from ingest.epg_parser import parse_epg_for_programs, parse_epg_for_channels
 from ingest.m3u_parser import parse_m3u
 from ingest.epg_loader import load_epg_file_async
 from ingest.m3u_loader import load_m3u_file_async
+from ingest.ingest_tasks import (
+    create_ingest_task,
+    start_ingest_task,
+    complete_ingest_task,
+    fail_ingest_task,
+    update_ingest_item_progress
+)
 from common.db import init_db, engine, SessionLocal
+from common.utils import create_task_id
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -462,68 +470,120 @@ async def download_file_stream(
         )
 
 
-@app.get(
+@app.post(
     "/api/load/{file_type}/{source_name}",
+    response_model=Dict[str, str],
     tags=["Database"],
-    status_code=status.HTTP_200_OK,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 async def load_file_to_db(
     file_type: Literal["m3u", "epg"],
     source_name: str,
     sources_file: str = os.path.join(DATA_PATH, "sources.json"),
-):
-    """Load parsed file data into database with streaming results"""
-    async def generate_load_results():
-        session = SessionLocal()
-        try:
-            # Load sources configuration
-            with open(sources_file, "r") as f:
-                sources = [Source(**source) for source in json.load(f)]
+) -> Dict[str, str]:
+    """Start async database loading task for parsed file data"""
+    try:
+        # Load sources configuration
+        with open(sources_file, "r") as f:
+            sources = [Source(**source) for source in json.load(f)]
 
-            # Find the source
-            source = next(
-                (source for source in sources if source.name == source_name), None
+        # Find the source
+        source = next(
+            (source for source in sources if source.name == source_name), None
+        )
+        if not source:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Source '{source_name}' not found",
             )
-            if not source:
-                yield f"data: {{\"error\": \"Source '{source_name}' not found\"}}\n\n"
-                return
 
-            # Get file metadata
-            file_metadata = source.get_file_metadata(file_type)
-            if not file_metadata or not file_metadata.local_path:
-                yield f"data: {{\"error\": \"No {file_type.upper()} file defined for source '{source_name}'\"}}\n\n"
-                return
+        # Get file metadata
+        file_metadata = source.get_file_metadata(file_type)
+        if not file_metadata or not file_metadata.local_path:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No {file_type.upper()} file defined for source '{source_name}'",
+            )
 
-            file_path = file_metadata.local_path
+        file_path = file_metadata.local_path
 
-            if not os.path.exists(file_path):
-                yield f"data: {{\"error\": \"File '{file_path}' not found for source '{source_name}'\"}}\n\n"
-                return
+        if not os.path.exists(file_path):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"File '{file_path}' not found for source '{source_name}'",
+            )
 
-            # Start loading with async generators
-            if file_type == "m3u":
-                async for result in load_m3u_file_async(session, file_path, source_name):
-                    yield f"data: {{\"type\": \"{result.record_type}\", \"id\": \"{result.record_id}\", \"status\": \"{result.status}\", \"message\": \"{result.message}\"}}\n\n"
-            elif file_type == "epg":
-                async for result in load_epg_file_async(session, file_path, source_name):
-                    yield f"data: {{\"type\": \"{result.record_type}\", \"id\": \"{result.record_id}\", \"status\": \"{result.status}\", \"message\": \"{result.message}\"}}\n\n"
+        # Create task ID and initialize task
+        task_id = create_task_id(source_name, file_type, "load")
+        
+        # Estimate total items (rough estimate for progress tracking)
+        # We'll update this with actual counts during parsing
+        estimated_items = 1000000 if file_type == "epg" else 500000
+        
+        create_ingest_task(task_id, file_type, estimated_items, source_name)
+        
+        # Start background task
+        asyncio.create_task(
+            background_load_task(task_id, file_type, file_path, source_name)
+        )
+        
+        return {
+            "task_id": task_id,
+            "message": f"Started loading {file_type.upper()} file for {source_name}",
+            "status": "pending"
+        }
 
-            yield f"data: {{\"complete\": true, \"message\": \"{file_type.upper()} file for {source_name} loaded successfully\"}}\n\n"
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error starting load task: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, 
+            detail=str(e)
+        )
 
-        except Exception as e:
-            logger.error(f"Error loading {file_type} file: {e}")
-            yield f"data: {{\"error\": \"{str(e)}\"}}\n\n"
-        finally:
-            session.close()
 
-    return StreamingResponse(
-        generate_load_results(),
-        media_type="text/event-stream",
-        headers={
-            "Cache-Control": "no-cache",
-            "Connection": "keep-alive",
-        },
-    )
+async def background_load_task(
+    task_id: str, 
+    file_type: str, 
+    file_path: str, 
+    source_name: str
+) -> None:
+    """Background task to load file data into database with progress tracking"""
+    session = SessionLocal()
+    try:
+        # Start the task
+        start_ingest_task(task_id)
+        logger.info(f"Started background load task {task_id} for {file_type} file: {file_path}")
+        
+        # Count total items for accurate progress tracking
+        total_processed = 0
+        
+        # Load data using async generators with task tracking
+        if file_type == "m3u":
+            async for result in load_m3u_file_async(session, file_path, source_name, task_id):
+                total_processed += 1
+                if result.status == "error":
+                    logger.warning(f"Load error in task {task_id}: {result.message}")
+        elif file_type == "epg":
+            async for result in load_epg_file_async(session, file_path, source_name, task_id):
+                total_processed += 1
+                if result.status == "error":
+                    logger.warning(f"Load error in task {task_id}: {result.message}")
+        
+        # Complete the task
+        complete_ingest_task(
+            task_id, 
+            f"Successfully loaded {total_processed} records from {file_type.upper()} file"
+        )
+        logger.info(f"Completed background load task {task_id}: {total_processed} records processed")
+        
+    except Exception as e:
+        logger.error(f"Background load task {task_id} failed: {e}")
+        fail_ingest_task(task_id, str(e))
+        session.rollback()
+    finally:
+        session.close()
 
 
 @app.get(

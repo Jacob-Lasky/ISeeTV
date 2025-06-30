@@ -13,6 +13,7 @@ from sqlalchemy import select
 from models.models import EpgChannel, Program
 from models.db_models import EpgChannelTable, ProgramTable
 from ingest.epg_parser import parse_epg_for_channels, parse_epg_for_programs
+from ingest.ingest_tasks import update_ingest_item_progress
 
 logger = logging.getLogger(__name__)
 
@@ -134,6 +135,7 @@ async def load_epg_channels_async(
     session: Session, 
     file_path: str, 
     source_name: str,
+    task_id: Optional[str] = None,
     batch_size: int = 100
 ) -> AsyncGenerator[LoadResult, None]:
     """Async generator that loads EPG channels and yields results as they're processed"""
@@ -144,13 +146,33 @@ async def load_epg_channels_async(
         channels = parse_epg_for_channels(file_path, source_name)
         logger.info(f"Parsed {len(channels)} EPG channels")
         
+        # Update task progress if task_id provided
+        if task_id:
+            update_ingest_item_progress(
+                task_id, 
+                "Loading EPG channels...", 
+                0, 
+                "channels"
+            )
+        
         # Process in batches to avoid blocking
+        completed_count = 0
         for i in range(0, len(channels), batch_size):
             batch = channels[i:i + batch_size]
             
             for channel in batch:
                 result = _upsert_epg_channel(session, channel)
                 yield result
+                completed_count += 1
+                
+                # Update progress periodically
+                if task_id and completed_count % 25 == 0:
+                    update_ingest_item_progress(
+                        task_id,
+                        f"Processing channel: {channel.display_name}",
+                        completed_count,
+                        "channels"
+                    )
                 
                 # Yield control periodically to avoid blocking
                 if i % 10 == 0:
@@ -170,6 +192,7 @@ async def load_programs_async(
     session: Session, 
     file_path: str, 
     source_name: str,
+    task_id: Optional[str] = None,
     batch_size: int = 500
 ) -> AsyncGenerator[LoadResult, None]:
     """Async generator that loads programs and yields results as they're processed"""
@@ -180,13 +203,33 @@ async def load_programs_async(
         programs = parse_epg_for_programs(file_path, source_name)
         logger.info(f"Parsed {len(programs)} programs")
         
+        # Update task progress if task_id provided
+        if task_id:
+            update_ingest_item_progress(
+                task_id, 
+                "Loading EPG programs...", 
+                0, 
+                "programs"
+            )
+        
         # Process in batches to avoid blocking
+        completed_count = 0
         for i in range(0, len(programs), batch_size):
             batch = programs[i:i + batch_size]
             
             for j, program in enumerate(batch):
                 result = _upsert_program(session, program)
                 yield result
+                completed_count += 1
+                
+                # Update progress periodically
+                if task_id and completed_count % 100 == 0:
+                    update_ingest_item_progress(
+                        task_id,
+                        f"Processing program: {program.title or 'Untitled'}",
+                        completed_count,
+                        "programs"
+                    )
                 
                 # Yield control more frequently for large datasets
                 if j % 50 == 0:
@@ -205,17 +248,18 @@ async def load_programs_async(
 async def load_epg_file_async(
     session: Session, 
     file_path: str, 
-    source_name: str
+    source_name: str,
+    task_id: Optional[str] = None
 ) -> AsyncGenerator[LoadResult, None]:
     """Main async function to load complete EPG file (channels + programs)"""
     logger.info(f"Starting complete EPG file load: {file_path} for {source_name}")
     
     # Load channels first
-    async for result in load_epg_channels_async(session, file_path, source_name):
+    async for result in load_epg_channels_async(session, file_path, source_name, task_id):
         yield result
     
     # Then load programs
-    async for result in load_programs_async(session, file_path, source_name):
+    async for result in load_programs_async(session, file_path, source_name, task_id):
         yield result
     
     logger.info(f"Completed EPG file load for {source_name}")

@@ -66,6 +66,9 @@ class IngestProgress(BaseModel):
     error_message: Optional[str]
     started_at: dt.datetime
     completed_at: Optional[dt.datetime]
+    source_name: Optional[str] = None  # Source being processed
+    current_phase: Optional[str] = None  # For EPG: "channels" or "programs"
+    updated_at: Optional[dt.datetime] = None  # Last update timestamp
 
 
 class Source(BaseModel):
