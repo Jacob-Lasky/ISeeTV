@@ -61,6 +61,10 @@
                 field="fileType"
                 header="File Type"
                 style="min-width: 120px"
+                :pt="{
+                    headercell: { style: 'width: 120px; min-width: 80px' },
+                    bodycell: { style: 'width: 120px; min-width: 80px' },
+                }"
             >
                 <template #body="{ data }">
                     <div
@@ -90,6 +94,10 @@
                 field="viewTables"
                 header="View Tables"
                 style="min-width: 200px"
+                :pt="{
+                    headercell: { style: 'width: 200px; min-width: 120px' },
+                    bodycell: { style: 'width: 200px; min-width: 120px' },
+                }"
             >
                 <template #body="{ data }">
                     <div v-if="data._isSkeleton" class="table-buttons">
@@ -123,6 +131,10 @@
             <Column
                 header="File Actions"
                 style="width: 150px; min-width: 120px"
+                :pt="{
+                    headercell: { style: 'width: 150px; min-width: 120px' },
+                    bodycell: { style: 'width: 150px; min-width: 120px' },
+                }"
             >
                 <template #body="{ data }">
                     <div v-if="data._isSkeleton" class="action-buttons">
@@ -171,6 +183,10 @@
                 field="fileLastRefresh"
                 header="Last Refresh"
                 style="min-width: 200px"
+                :pt="{
+                    headercell: { style: 'width: 200px; min-width: 120px' },
+                    bodycell: { style: 'width: 200px; min-width: 120px' },
+                }"
             >
                 <template #body="{ data }">
                     <Skeleton
@@ -1966,9 +1982,25 @@ onMounted(async () => {
         max-width: 250px;
     }
 
+    /* Keep action buttons side-by-side on mobile */
     .action-buttons {
-        flex-direction: column;
+        flex-direction: row;
+        gap: 0.25rem;
+        justify-content: center;
+    }
+
+    /* Make table buttons more compact on mobile */
+    .table-buttons {
         gap: 0.125rem;
+    }
+
+    .table-view-button {
+        font-size: 0.75rem;
+        padding: 0.25rem 0.5rem;
+    }
+
+    .table-view-button .p-button-icon {
+        margin-right: 0.25rem;
     }
 
     .source-header-main {
