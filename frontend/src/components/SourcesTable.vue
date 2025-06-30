@@ -78,14 +78,43 @@
                         v-else
                         style="display: flex; align-items: center; gap: 16px"
                     >
-                        <i
-                            :class="getFileTypeIcon(data.fileType)"
-                            :style="{ color: getFileTypeColor(data.fileType) }"
-                        ></i>
                         <span
                             style="text-transform: uppercase; font-weight: 600"
                             >{{ data.fileType }}</span
                         >
+                    </div>
+                </template>
+            </Column>
+            <!-- Tables buttons for viewing EPG and M3U tables  -->
+            <Column
+                field="viewTables"
+                header="View Tables"
+                style="min-width: 200px"
+            >
+                <template #body="{ data }">
+                    <div v-if="data._isSkeleton" class="table-buttons">
+                        <Skeleton
+                            shape="rectangle"
+                            width="100%"
+                            height="2rem"
+                        ></Skeleton>
+                    </div>
+                    <div v-else class="table-buttons">
+                        <div
+                            v-for="table in getAvailableTables(data.fileType)"
+                            :key="table.key"
+                            class="table-button-item"
+                        >
+                            <Button
+                                :icon="table.icon"
+                                :label="table.label"
+                                severity="info"
+                                size="small"
+                                outlined
+                                class="table-view-button"
+                                @click="viewTable(data, table)"
+                            />
+                        </div>
                     </div>
                 </template>
             </Column>
@@ -657,9 +686,9 @@ function createSkeletonRows(): SourceFileRow[] {
  * Utility functions for UI display and interactions
  */
 
-// Get file type icon
-function getFileTypeIcon(fileType: "m3u" | "epg"): string {
-    switch (fileType) {
+// Atomic utility functions for file type operations
+const getFileTypeIcon = (fileType: string): string => {
+    switch (fileType.toLowerCase()) {
         case "m3u":
             return "pi pi-list"
         case "epg":
@@ -669,16 +698,83 @@ function getFileTypeIcon(fileType: "m3u" | "epg"): string {
     }
 }
 
-// Get file type color
-function getFileTypeColor(fileType: "m3u" | "epg"): string {
-    switch (fileType) {
+const getFileTypeColor = (fileType: string): string => {
+    switch (fileType.toLowerCase()) {
         case "m3u":
-            return "#10b981" // green
+            return "var(--green-500)"
         case "epg":
-            return "#3b82f6" // blue
+            return "var(--blue-500)"
         default:
-            return "#6b7280" // gray
+            return "var(--surface-500)"
     }
+}
+
+// Atomic table configuration interface
+interface TableOption {
+    key: string
+    label: string
+    icon: string
+    tableName: string
+    description: string
+}
+
+// Atomic function to get available tables for a file type
+const getAvailableTables = (fileType: string): TableOption[] => {
+    switch (fileType.toLowerCase()) {
+        case "m3u":
+            return [
+                {
+                    key: "m3u_programs",
+                    label: "Programs",
+                    icon: getFileTypeIcon("m3u"),
+                    tableName: "m3u_channels",
+                    description: "View M3U channel programs",
+                },
+            ]
+        case "epg":
+            return [
+                {
+                    key: "epg_programs",
+                    label: "Programs",
+                    icon: "pi pi-video",
+                    tableName: "programs",
+                    description: "View EPG program data",
+                },
+                {
+                    key: "epg_channels",
+                    label: "Channels",
+                    icon: getFileTypeIcon("epg"),
+                    tableName: "epg_channels",
+                    description: "View EPG channel data",
+                },
+            ]
+        default:
+            return []
+    }
+}
+
+// Atomic function to handle table viewing
+const viewTable = (fileRow: SourceFileRow, table: TableOption) => {
+    console.log(
+        `Viewing ${table.label} table for ${fileRow.sourceName} (${fileRow.fileType})`,
+        {
+            sourceName: fileRow.sourceName,
+            fileType: fileRow.fileType,
+            tableKey: table.key,
+            tableName: table.tableName,
+            description: table.description,
+        }
+    )
+
+    // TODO: Implement actual table viewing logic
+    // This could navigate to a table view component or open a modal
+    // For now, we'll show a toast message
+    toast.add({
+        severity: "info",
+        summary: "Table View",
+        detail: `Opening ${table.description} for ${fileRow.sourceName}`,
+        life: 3000,
+    })
 }
 
 // User timezone state for atomic timezone-aware formatting
@@ -1751,6 +1847,33 @@ onMounted(async () => {
     display: flex;
     gap: 0.25rem;
     justify-content: center;
+}
+
+/* Table View Button Styling */
+.table-buttons {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+    width: 100%;
+}
+
+.table-button-item {
+    width: 100%;
+}
+
+.table-view-button {
+    width: 100%;
+    justify-content: flex-start;
+    font-size: 0.875rem;
+}
+
+.table-view-button .p-button-label {
+    flex: 1;
+    text-align: left;
+}
+
+.table-view-button .p-button-icon {
+    margin-right: 0.5rem;
 }
 
 /* Row Group Styling */
