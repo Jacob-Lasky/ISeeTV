@@ -1,7 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
-from typing import Dict, List, Literal
+from typing import Dict, List, Literal, Any
+from sqlalchemy import inspect
 import uvicorn
 import json
 from fastapi import HTTPException, status
@@ -17,7 +18,6 @@ from models.models import (
     GlobalSettings,
     DownloadTaskResponse,
     DownloadAllTasksResponse,
-    Program,
 )
 from download.downloader import (
     create_download_task,
@@ -28,7 +28,7 @@ from common.utils import create_task_id, get_progress_response
 from common.constants import DATA_PATH
 from ingest.epg_parser import parse_epg_for_programs, parse_epg_for_channels
 from ingest.m3u_parser import parse_m3u
-from common.db import init_db
+from common.db import init_db, engine, SessionLocal
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -46,6 +46,7 @@ app = FastAPI(
         {"name": "Sources", "description": "Manage IPTV sources (M3U, EPG, metadata)"},
         {"name": "Download", "description": "Download operations"},
         {"name": "Ingest", "description": "Ingest operations"},
+        {"name": "Database", "description": "Database operations"},
         {"name": "Redirect", "description": "Redirect operations"},
     ],
 )
@@ -517,6 +518,54 @@ async def ingest_file(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
+
+
+@app.get(
+    "/api/db/{table}/head",
+    response_model=List[Dict[str, Any]],
+    tags=["Database"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_db_table_head(table: str) -> List[Dict[str, Any]]:
+    """Return the first 10 rows of a table"""
+    with SessionLocal() as session:
+        result = session.execute(text(f"SELECT * FROM {table} LIMIT 10"))
+        return result.fetchall()
+
+
+@app.get(
+    "/api/db/summary",
+    response_model=Dict[str, Any],
+    tags=["Database"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_db_summary() -> Dict[str, Any]:
+    """Return a summary of the database"""
+    inspector = inspect(engine)
+    summary = []
+
+    with SessionLocal() as session:
+        for table_name in inspector.get_table_names():
+            # Get columns
+            columns = [col["name"] for col in inspector.get_columns(table_name)]
+            
+            # Get row count
+            row_count = session.execute(text(f"SELECT COUNT(*) FROM {table_name}")).scalar()
+            
+            # Get a sample of the first 5 rows
+            result = session.execute(text(f"SELECT * FROM {table_name} LIMIT 1"))
+            rows = [dict(row._mapping) for row in result][0]
+
+            summary.append({
+                "table": table_name,
+                "columns": columns,
+                "primary_key": inspector.get_primary_key(table_name),
+                "indexes": inspector.get_indexes(table_name),
+                "row_count": row_count,
+                "sample_row": rows
+            })
+
+    return {"tables": summary}
 
 
 if __name__ == "__main__":
