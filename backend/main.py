@@ -32,13 +32,16 @@ from ingest.epg_loader import load_epg_file_async
 from ingest.m3u_loader import load_m3u_file_async
 from ingest.ingest_tasks import (
     create_ingest_task,
+    update_ingest_item_progress,
+    update_ingest_step_progress,
     start_ingest_task,
     complete_ingest_task,
     fail_ingest_task,
-    update_ingest_item_progress,
+    get_ingest_task,
 )
+from utils.filter_utils import precompute_filter_values, get_all_filter_values
 from common.db import init_db, engine, SessionLocal
-from common.utils import create_task_id
+from common.utils import create_task_id, log_function
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -81,6 +84,7 @@ init_db()
 )
 async def root() -> RedirectResponse:
     """Redirect to the Swagger docs"""
+    log_function("Redirecting to Swagger docs")
     return RedirectResponse(url="/api/docs")
 
 
@@ -92,6 +96,7 @@ async def root() -> RedirectResponse:
 )
 async def docs() -> RedirectResponse:
     """Redirect to the Swagger docs"""
+    log_function("Redirecting to Swagger docs")
     return RedirectResponse(url="/api/docs")
 
 
@@ -103,6 +108,7 @@ async def docs() -> RedirectResponse:
 )
 async def api() -> RedirectResponse:
     """Redirect to the Swagger docs"""
+    log_function("Redirecting to Swagger docs")
     return RedirectResponse(url="/api/docs")
 
 
@@ -114,6 +120,7 @@ async def api() -> RedirectResponse:
 )
 async def get_health() -> Message:
     """Return a health check."""
+    log_function()
     return Message(message="ok")
 
 
@@ -127,6 +134,7 @@ async def get_settings(
     settings_file: str = os.path.join(DATA_PATH, "settings.json"),
 ) -> GlobalSettings:
     """Return settings from the provided file"""
+    log_function(level="debug")
     try:
         with open(settings_file, "r") as f:
             return GlobalSettings(**json.load(f))
@@ -147,6 +155,7 @@ async def set_settings(
     settings_file: str = os.path.join(DATA_PATH, "settings.json"),
 ):
     """Set settings in the provided file"""
+    log_function(level="debug")
     try:
         with open(settings_file, "w") as f:
             json.dump(settings.dict(), f, indent=4)
@@ -167,6 +176,7 @@ async def get_sources(
     sources_file: str = os.path.join(DATA_PATH, "sources.json")
 ) -> List[Source]:
     """Return sources from the provided file"""
+    log_function(level="debug")
     try:
         with open(sources_file, "r") as f:
             return [Source(**source) for source in json.load(f)]
@@ -186,6 +196,7 @@ async def set_sources(
     sources: List[Source], sources_file: str = os.path.join(DATA_PATH, "sources.json")
 ) -> Message:
     """Set sources in the provided file"""
+    log_function(level="debug")
     try:
         with open(sources_file, "w") as f:
             json.dump([source.dict() for source in sources], f, indent=4)
@@ -204,21 +215,21 @@ async def set_sources(
 )
 async def get_ingest_progress_by_id(task_id: str) -> IngestProgress:
     """Get ingest progress for a specific task"""
+    log_function(f"Getting ingest progress for: {task_id}")
     return IngestProgress(**get_progress_response(task_id, "ingest"))
 
 
 @app.get(
     "/api/ingest/progress",
-    response_model=Dict[str, IngestProgress],
-    tags=["Ingest"],
+    response_model=Dict[str, Dict],
+    tags=["Database"],
     status_code=status.HTTP_200_OK,
 )
-async def get_all_ingest_progress() -> Dict[str, IngestProgress]:
-    """Get all ingest progress tasks"""
-    return {
-        task_id: IngestProgress(**progress)
-        for task_id, progress in get_progress("ingest").items()
-    }
+async def get_ingest_progress() -> Dict[str, Dict]:
+    """Get all ingest progress"""
+    log_function("Getting ingest progress")
+    ingest_progress = get_progress("ingest")
+    return {"ingest": ingest_progress}
 
 
 @app.get(
@@ -229,6 +240,7 @@ async def get_all_ingest_progress() -> Dict[str, IngestProgress]:
 )
 async def get_download_progress_by_id(task_id: str) -> DownloadProgress:
     """Get download progress for a specific task"""
+    log_function(f"Getting download progress for: {task_id}")
     return DownloadProgress(**get_progress_response(task_id, "download"))
 
 
@@ -240,6 +252,7 @@ async def get_download_progress_by_id(task_id: str) -> DownloadProgress:
 )
 async def get_all_download_progress() -> Dict[str, DownloadProgress]:
     """Get all download progress tasks"""
+    log_function(level="debug")
     return {
         task_id: DownloadProgress(**progress)
         for task_id, progress in get_progress("download").items()
@@ -254,10 +267,11 @@ async def get_all_download_progress() -> Dict[str, DownloadProgress]:
 )
 async def cancel_download(task_id: str) -> Message:
     """Cancel a download task by task ID"""
+    log_function(f"Canceling download task {task_id}")
     try:
-        from common.state import cancel_download_task
+        from common.state import cancel_task
 
-        success = cancel_download_task(task_id)
+        success = cancel_task(task_id, "download")
         if success:
             return Message(message=f"Download task {task_id} cancelled successfully")
         else:
@@ -283,6 +297,7 @@ async def download_all_files(
     download_dir: str = os.path.join(DATA_PATH, "sources"),
 ) -> DownloadAllTasksResponse:
     """Start background download of all files of a specific type - one task per source"""
+    log_function(f"Downloading all {file_type} files")
     try:
         with open(sources_file, "r") as f:
             sources = [Source(**source) for source in json.load(f)]
@@ -340,6 +355,7 @@ async def queue_file_for_download(
     download_dir: str = os.path.join(DATA_PATH, "sources"),
 ) -> DownloadTaskResponse:
     """Download file of a specific type for a specific source"""
+    log_function(f"Downloading {file_type} file for source {source_name}")
     try:
         # Create unique task ID for each source
         task_id = create_task_id(source_name, file_type, "download")
@@ -374,6 +390,7 @@ async def download_file_stream(
     sources_file: str = os.path.join(DATA_PATH, "sources.json"),
 ) -> StreamingResponse:
     """Stream a file directly to the browser for download"""
+    log_function(f"Downloading {file_type} file for source {source_name}")
     try:
         # Validate file type
         if file_type not in ["m3u", "epg"]:
@@ -482,6 +499,7 @@ async def load_file_to_db(
     sources_file: str = os.path.join(DATA_PATH, "sources.json"),
 ) -> Dict[str, str]:
     """Start async database loading task for parsed file data"""
+    log_function(f"Loading {file_type} file to database for {source_name}")
     try:
         # Load sources configuration
         with open(sources_file, "r") as f:
@@ -516,11 +534,18 @@ async def load_file_to_db(
         # Create task ID and initialize task
         task_id = create_task_id(source_name, file_type, "load")
 
-        # Estimate total items (rough estimate for progress tracking)
-        # We'll update this with actual counts during parsing
-        estimated_items = 1000000 if file_type == "epg" else 500000
+        # Extract total records for progress tracking
+        total_records = 0
+        if file_metadata.total_records:
+            if file_type == "m3u":
+                total_records = file_metadata.total_records.channels or 0
+            elif file_type == "epg":
+                # For EPG, use channels + programs
+                channels = file_metadata.total_records.channels or 0
+                programs = file_metadata.total_records.programs or 0
+                total_records = channels + programs
 
-        create_ingest_task(task_id, file_type, estimated_items, source_name)
+        create_ingest_task(task_id, file_type, source_name, total_records)
 
         # Start background task
         asyncio.create_task(
@@ -545,14 +570,29 @@ async def load_file_to_db(
 async def background_load_task(
     task_id: str, file_type: str, file_path: str, source_name: str
 ) -> None:
-    """Background task to load file data into database with progress tracking"""
+    """Background task to load file data into database with multi-step progress tracking"""
+    log_function()
     session = SessionLocal()
     try:
-        # Start the task
+        # Start the task (Step 1: Download already completed)
         start_ingest_task(task_id)
+
+        # Step 1: Download (already completed, set to 100%)
+        update_ingest_step_progress(task_id, 1, "downloading", 100)
+        logger.info(f"Step 1/3: Download completed for task {task_id}")
+
+        # Step 2: Parsing
+        update_ingest_step_progress(task_id, 2, "parsing", 0)
+        logger.info(f"Step 2/3: Starting parsing for task {task_id}")
+
         logger.info(
             f"Started background load task {task_id} for {file_type} file: {file_path}"
         )
+
+        # Step 2: Parsing completed, Step 3: Loading
+        update_ingest_step_progress(task_id, 2, "parsing", 100)
+        update_ingest_step_progress(task_id, 3, "loading", 0)
+        logger.info(f"Step 3/3: Starting database loading for task {task_id}")
 
         # Count total items for accurate progress tracking
         total_processed = 0
@@ -573,13 +613,33 @@ async def background_load_task(
                 if result.status == "error":
                     logger.warning(f"Load error in task {task_id}: {result.message}")
 
+        # Step 3: Loading completed
+        update_ingest_step_progress(task_id, 3, "loading", 100)
+        logger.info(f"Step 3/3: Database loading completed for task {task_id}")
+
+        # Precompute filter values for the affected tables
+        if file_type == "m3u":
+            precompute_filter_values(session, "m3u_channels")
+            logger.info(
+                f"Precomputed filter values for m3u_channels after task {task_id}"
+            )
+        elif file_type == "epg":
+            precompute_filter_values(session, "epg_channels")
+            precompute_filter_values(session, "programs")
+            logger.info(
+                f"Precomputed filter values for epg_channels and programs after task {task_id}"
+            )
+
+        # Add a small delay to ensure frontend can display progress bars
+        await asyncio.sleep(2)
+
         # Complete the task
         complete_ingest_task(
             task_id,
-            f"Successfully loaded {total_processed} records from {file_type.upper()} file",
+            f"Successfully loaded {total_processed} records from {file_type.upper()} file and precomputed filter values",
         )
         logger.info(
-            f"Completed background load task {task_id}: {total_processed} records processed"
+            f"Completed background load task {task_id}: {total_processed} records processed, filter values precomputed"
         )
 
     except Exception as e:
@@ -700,6 +760,39 @@ async def get_db_summary() -> Dict[str, Any]:
             )
 
     return {"tables": summary}
+
+
+@app.get(
+    "/api/tables/{table_name}/filters",
+    response_model=Dict[str, Any],
+    tags=["Database"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_table_filter_values(table_name: str) -> Dict[str, Any]:
+    """Get precomputed filter values for a table's filterable columns"""
+    # Validate table name to prevent SQL injection
+    valid_tables = ["epg_channels", "m3u_channels", "programs"]
+    if table_name not in valid_tables:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid table name. Must be one of: {valid_tables}",
+        )
+
+    try:
+        with SessionLocal() as session:
+            filter_values = get_all_filter_values(session, table_name)
+
+            return {
+                "success": True,
+                "data": filter_values,
+                "table_name": table_name,
+            }
+
+    except Exception as e:
+        logger.error(f"Error getting filter values for table {table_name}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
 
 
 if __name__ == "__main__":

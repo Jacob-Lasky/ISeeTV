@@ -126,22 +126,44 @@
                         </span>
                     </template>
                     <template #filter="{ filterModel, filterCallback }">
-                        <InputText
-                            v-if="column.type !== 'datetime'"
+                        <!-- Source column filter -->
+                        <Select
+                            v-if="column.field === 'source'"
                             v-model="filterModel.value"
-                            type="text"
-                            @input="filterCallback()"
-                            :placeholder="`Search ${column.header.toLowerCase()}...`"
+                            @change="filterCallback()"
+                            :options="sourceOptions"
+                            placeholder="All Sources"
                             class="w-full"
+                            :show-clear="true"
                         />
+                        <!-- Group column filter (M3U channels only) -->
+                        <Select
+                            v-else-if="column.field === 'group' && tableName === 'm3u_channels'"
+                            v-model="filterModel.value"
+                            @change="filterCallback()"
+                            :options="groupOptions"
+                            placeholder="All Groups"
+                            class="w-full"
+                            :show-clear="true"
+                        />
+                        <!-- Date column filter -->
                         <DatePicker
-                            v-else
+                            v-else-if="column.type === 'datetime'"
                             v-model="filterModel.value"
                             @date-select="filterCallback()"
                             @clear-click="filterCallback()"
                             :placeholder="`Filter ${column.header.toLowerCase()}...`"
                             show-time
                             hour-format="24"
+                            class="w-full"
+                        />
+                        <!-- Default text input filter -->
+                        <InputText
+                            v-else
+                            v-model="filterModel.value"
+                            type="text"
+                            @input="filterCallback()"
+                            :placeholder="`Search ${column.header.toLowerCase()}...`"
                             class="w-full"
                         />
                     </template>
@@ -189,6 +211,7 @@ import InputText from "primevue/inputtext"
 import IconField from "primevue/iconfield"
 import InputIcon from "primevue/inputicon"
 import DatePicker from "primevue/datepicker"
+import Select from "primevue/select"
 
 // Route and navigation
 const route = useRoute()
@@ -211,6 +234,10 @@ const tableData = ref([])
 const filters = ref({})
 const globalFilterFields = ref([])
 const totalRecords = ref(0)
+
+// Column filter options
+const sourceOptions = ref([])
+const groupOptions = ref([])
 
 // Skeleton data for loading state (20 empty rows)
 const skeletonData = ref(new Array(20).fill({}))
@@ -478,6 +505,9 @@ const loadTableData = async () => {
         if (response.success && response.data) {
             tableData.value = response.data.records || []
             totalRecords.value = response.data.total || tableData.value.length
+            
+            // Load precomputed filter values from backend
+            await loadFilterOptions()
 
             console.log(
                 `Loaded ${tableData.value.length} records from ${tableName.value}`
@@ -498,6 +528,42 @@ const loadTableData = async () => {
         })
     } finally {
         loading.value = false
+    }
+}
+
+// Load precomputed filter values from backend API
+const loadFilterOptions = async () => {
+    try {
+        console.log(`Loading filter options for table: ${tableName.value}`)
+        
+        const response = await apiGet(
+            `/api/tables/${tableName.value}/filters`,
+            false,
+            { showSuccessToast: false }
+        )
+        
+        if (response.success && response.data) {
+            const filterData = response.data
+            
+            // Set source options
+            if (filterData.source) {
+                sourceOptions.value = filterData.source.map(item => item.value)
+                console.log(`Loaded ${sourceOptions.value.length} source options`)
+            }
+            
+            // Set group options for M3U channels
+            if (tableName.value === 'm3u_channels' && filterData.group) {
+                groupOptions.value = filterData.group.map(item => item.value)
+                console.log(`Loaded ${groupOptions.value.length} group options`)
+            }
+        } else {
+            console.warn(`No filter data received for table: ${tableName.value}`)
+        }
+    } catch (err) {
+        console.error(`Error loading filter options for ${tableName.value}:`, err)
+        // Fallback to empty arrays
+        sourceOptions.value = []
+        groupOptions.value = []
     }
 }
 

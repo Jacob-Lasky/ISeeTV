@@ -7,7 +7,7 @@ import datetime as dt
 from typing import List, Optional, Tuple, Literal
 from models.models import Source
 from common.state import get_progress, is_task_cancelled, remove_cancelled_task
-from common.utils import log_info
+from common.utils import log_function
 from fastapi import HTTPException, status
 
 logger = logging.getLogger(__name__)
@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 #  download utility functions
 def create_download_task(task_id: str, total_items: int) -> None:
     """Create a new download task in progress tracking"""
+    log_function(f"Creating download task {task_id}")
     download_progress = get_progress("download")
     download_progress[task_id] = {
         "task_id": task_id,
@@ -46,7 +47,7 @@ async def download_file_with_progress(
     fallback_size: Optional[int] = None,
 ) -> Tuple[bool, int, Literal["success", "failed", "cancelled"]]:
     """Download a single file with real-time progress tracking by bytes"""
-    log_info()
+    log_function(f"Downloading {item_name} from {url}: {task_id}")
     try:
         update_download_progress(task_id, current_item=item_name, status="downloading")
 
@@ -127,7 +128,7 @@ async def orchestrate_file_download_from_source(
     task_id: Optional[str] = None,
 ) -> None:
     """download function for any file type with optional progress tracking"""
-    log_info()
+    log_function(f"Orchestrating download for {source_name} {download_type}: {task_id}")
     if download_type == "m3u":
         extension = "m3u"
     elif download_type == "epg":
@@ -201,7 +202,7 @@ async def background_download_task(
     download_dir: str,
 ) -> None:
     """Background coroutine for downloading multiple files"""
-    log_info()
+    log_function(f"Background download task {task_id}")
     try:
         update_download_progress(task_id, status="downloading")
 
@@ -265,7 +266,7 @@ async def background_download_task(
 
 async def validate_url(url: str) -> bool:
     """Validate that the URL is accessible"""
-    log_info()
+    log_function(f"Validating URL {url}")
     try:
         async with httpx.AsyncClient() as client:
             response = await client.head(url)
@@ -291,7 +292,7 @@ async def background_single_download_task(
     download_dir: str,
 ) -> None:
     """Background coroutine for downloading a single source with progress tracking"""
-    log_info()
+    log_function(f"Background single download task {task_id}")
     try:
         update_download_progress(
             task_id,

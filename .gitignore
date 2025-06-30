@@ -6,3 +6,4 @@ data/settings.json
 data/sources.json
 data/sources/*
 data/iseetv.db
+data/iseetv.db-journal

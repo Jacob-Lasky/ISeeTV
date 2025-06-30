@@ -74,3 +74,23 @@ class ProgramTable(Base):
         Index("idx_program_time_range", "start_time", "end_time"),
         Index("idx_program_source", "source"),
     )
+
+
+class FilterValueTable(Base):
+    """SQLAlchemy table model for precomputed filter values"""
+
+    __tablename__ = "filter_values"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    table_name = Column(String, nullable=False)  # e.g., 'm3u_channels', 'epg_channels', 'programs'
+    column_name = Column(String, nullable=False)  # e.g., 'source', 'group'
+    value = Column(String, nullable=False)  # The unique value
+    count = Column(Integer, nullable=False, default=0)  # Number of records with this value
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    # Composite unique constraint for table + column + value
+    __table_args__ = (
+        Index("idx_filter_table_column_value", "table_name", "column_name", "value", unique=True),
+        Index("idx_filter_table_column", "table_name", "column_name"),
+    )

@@ -6,7 +6,7 @@ from lxml.etree import _Element
 import datetime as dt
 import logging
 from collections import defaultdict
-from common.utils import log_info
+from common.utils import log_function
 
 # EPG are usually XML-based with a structure similar to:
 """
@@ -185,7 +185,7 @@ def validate_programme_element(programme_elem: _Element) -> str:
 
 def parse_epg_for_channels(epg_file: str, source: str) -> List[EpgChannel]:
     """parse an EPG file  and return a list of Channel objects."""
-    log_info(f"Parsing EPG file for channels: {epg_file}")
+    log_function(f"Parsing EPG file for channels: {epg_file}")
 
     # Parse the entire tree at once
     tree = etree.parse(epg_file)
@@ -241,7 +241,7 @@ def parse_epg_for_channels(epg_file: str, source: str) -> List[EpgChannel]:
 
 def parse_epg_for_programs(epg_file: str, source: str) -> List[Program]:
     """Parse an EPG file and return a list of Program objects."""
-    log_info(f"Parsing EPG file for programs: {epg_file}")
+    log_function(f"Parsing EPG file for programs: {epg_file}")
 
     # Parse the entire tree at once
     tree = etree.parse(epg_file)

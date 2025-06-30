@@ -1,6 +1,6 @@
 from typing import List, Optional
 from models.models import M3uChannel
-from common.utils import log_info
+from common.utils import log_function
 from collections import defaultdict
 import logging
 import re
@@ -137,7 +137,7 @@ def validate_m3u_channel(
 
 def parse_m3u(m3u_file: str, source: str = "m3u") -> List[M3uChannel]:
     """Parse an M3U file and return a list of M3uChannel objects"""
-    log_info(f"Parsing M3U file: {m3u_file}")
+    log_function(f"Parsing M3U file: {m3u_file}")
 
     channels = []
     current_extinf_attrs = None
@@ -199,5 +199,5 @@ def parse_m3u(m3u_file: str, source: str = "m3u") -> List[M3uChannel]:
     # Log validation results
     validation_results.log_results(context=f"parse_m3u")
 
-    log_info(f"Successfully parsed {len(channels)} channels from M3U file")
+    log_function(f"Successfully parsed {len(channels)} channels from M3U file")
     return channels

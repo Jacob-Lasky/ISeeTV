@@ -25,6 +25,11 @@ class DownloadAllTasksResponse(BaseModel):
     task_ids: list[str]
 
 
+class TotalRecords(BaseModel):
+    channels: Optional[int] = 0
+    programs: Optional[int] = 0
+
+
 class FileMetadata(BaseModel):
     """file metadata for downloadable resources"""
 
@@ -34,6 +39,7 @@ class FileMetadata(BaseModel):
     last_refresh_status: Optional[Literal["success", "failed", "cancelled"]] = None
     last_refresh_finished_timestamp: Optional[str] = ""
     local_path: Optional[str] = ""
+    total_records: Optional[TotalRecords] = None
 
 
 class GlobalSettings(BaseModel):

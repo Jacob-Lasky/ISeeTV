@@ -164,6 +164,7 @@
                             rounded
                             :title="`Refresh ${data.fileType.toUpperCase()} file`"
                             @click="refreshFile(data)"
+                            :disabled="isFileRefreshing(data.fileId)"
                         />
                         <Button
                             icon="pi pi-download"
@@ -195,15 +196,86 @@
                         height="1rem"
                     ></Skeleton>
                     <div v-else class="last-refresh-cell">
-                        <!-- Show progress bar if file is currently downloading -->
+                        <!-- Show multi-step progress if file is being processed -->
                         <div
-                            v-if="getProgressForFile(data.fileId)"
-                            class="progress-container"
+                            v-if="getIngestProgressForFile(data.fileId)"
+                            class="ingest-progress-container"
+                        >
+                            <div class="step-info">
+                                <span class="step-indicator">
+                                    Step
+                                    {{
+                                        getIngestProgressForFile(data.fileId)
+                                            ?.current_step || 1
+                                    }}/{{
+                                        getIngestProgressForFile(data.fileId)
+                                            ?.total_steps || 3
+                                    }}:
+                                </span>
+                                <span class="step-name">
+                                    {{
+                                        formatStepName(
+                                            getIngestProgressForFile(
+                                                data.fileId
+                                            )?.step_name
+                                        )
+                                    }}
+                                </span>
+                            </div>
+                            <div class="progress-details">
+                                <span
+                                    v-if="
+                                        getIngestProgressForFile(data.fileId)
+                                            ?.total_items > 0
+                                    "
+                                    class="progress-items"
+                                >
+                                    {{
+                                        getIngestProgressForFile(data.fileId)
+                                            ?.completed_items || 0
+                                    }}
+                                    /
+                                    {{
+                                        getIngestProgressForFile(data.fileId)
+                                            ?.total_items
+                                    }}
+                                    items
+                                </span>
+                                <span
+                                    v-else-if="getIngestProgressForFile(data.fileId)?.completed_items > 0"
+                                    class="progress-items"
+                                >
+                                    {{
+                                        formatNumber(getIngestProgressForFile(data.fileId)?.completed_items || 0)
+                                    }}
+                                    records processed
+                                </span>
+                                <span
+                                    v-else-if="getIngestProgressForFile(data.fileId)?.current_item"
+                                    class="progress-current-item"
+                                >
+                                    {{ getIngestProgressForFile(data.fileId)?.current_item }}
+                                </span>
+                            </div>
+                            <!-- Progress bar: step-specific progress or indeterminate -->
+                            <ProgressBar
+                                v-if="getStepProgressValue(data.fileId) !== null"
+                                :value="getStepProgressValue(data.fileId)"
+                                style="height: 12px; margin-top: 4px"
+                            />
+                            <ProgressBar
+                                v-else
+                                mode="indeterminate"
+                                style="height: 12px; margin-top: 4px"
+                            />
+                        </div>
+                        <!-- Show download progress if file is downloading -->
+                        <div
+                            v-else-if="getProgressForFile(data.fileId)"
+                            class="download-progress-container"
                         >
                             <div class="progress-info">
-                                <span class="progress-status">{{
-                                    getProgressForFile(data.fileId)?.status
-                                }}</span>
+                                <span class="progress-status">Downloading</span>
                                 <span
                                     v-if="
                                         getProgressForFile(data.fileId)
@@ -370,6 +442,15 @@
                                 rounded
                                 title="Edit source"
                                 @click="editSource(data.sourceId)"
+                            />
+                            <Button
+                                icon="pi pi-refresh"
+                                severity="secondary"
+                                size="small"
+                                text
+                                @click="refreshFile(data)"
+                                :title="`Refresh ${data.fileType.toUpperCase()} file`"
+                                :disabled="isFileRefreshing(data.fileId)"
                             />
                             <Button
                                 icon="pi pi-trash"
@@ -614,6 +695,10 @@ const refreshingAllEpg = ref(false)
 const activeTaskIds = ref<Map<string, string>>(new Map()) // fileId -> taskId
 const downloadProgress = ref<Map<string, DownloadProgress>>(new Map()) // taskId -> progress
 const progressPollingIntervals = ref<Map<string, number>>(new Map()) // taskId -> interval
+
+// Ingest task tracking for multi-step progress
+const activeIngestTaskIds = ref<Map<string, string>>(new Map()) // fileId -> taskId
+const ingestProgress = ref<Map<string, any>>(new Map()) // taskId -> ingest progress
 
 // Data transformation
 const sourceFileRows = computed<SourceFileRow[]>(() => {
@@ -982,15 +1067,43 @@ async function refreshFile(fileRow: SourceFileRow) {
     )
 
     try {
-        const endpoint = `/api/download/${fileRow.fileType}/${encodeURIComponent(fileRow.sourceName)}`
+        // Step 1: Start download
+        const downloadEndpoint = `/api/download/${fileRow.fileType}/${encodeURIComponent(fileRow.sourceName)}`
+        const downloadResponse = await apiGet<DownloadTaskResponse>(
+            downloadEndpoint,
+            true,
+            {
+                successMessage: `${fileRow.fileType.toUpperCase()} download started`,
+                errorPrefix: `${fileRow.fileType.toUpperCase()} download failed`,
+            }
+        )
 
-        const response = await apiGet<DownloadTaskResponse>(endpoint, true, {
-            successMessage: `${fileRow.fileType.toUpperCase()} refresh started`,
-            errorPrefix: `${fileRow.fileType.toUpperCase()} refresh failed`,
-        })
+        // Start download progress polling and wait for completion
+        await startProgressPollingAndWait(
+            downloadResponse.task_id,
+            fileRow.fileId
+        )
 
-        // Start progress polling for this file
-        startProgressPolling(response.task_id, fileRow.fileId)
+        // Step 2: Only start ingest after download is complete
+        console.log(
+            `Download completed for ${fileRow.fileType}, starting ingest process...`
+        )
+        const ingestEndpoint = `/api/load/${fileRow.fileType}/${encodeURIComponent(fileRow.sourceName)}`
+        const ingestResponse = await apiPost<{
+            task_id: string
+            message: string
+            status: string
+        }>(
+            ingestEndpoint,
+            {},
+            {
+                successMessage: `${fileRow.fileType.toUpperCase()} processing started`,
+                errorPrefix: `${fileRow.fileType.toUpperCase()} processing failed`,
+            }
+        )
+
+        // Start ingest progress polling
+        startIngestProgressPolling(ingestResponse.task_id, fileRow.fileId)
     } catch (error) {
         console.error(
             `Failed to refresh ${fileRow.fileType} for ${fileRow.sourceName}:`,
@@ -1101,8 +1214,10 @@ function startProgressPolling(taskId: string, fileId: string) {
                 progress.status === "cancelled"
             ) {
                 stopProgressPolling(taskId, fileId)
-                // Note: Sources will be updated automatically when user refreshes or navigates
-                // No need to call loadSources() here as it causes excessive API calls
+                console.log(
+                    `Download task ${taskId} completed with status: ${progress.status}`
+                )
+                // Don't refresh sources here - let ingest completion handle it
             }
         } catch (error) {
             console.error(`Failed to fetch progress for task ${taskId}:`, error)
@@ -1114,15 +1229,156 @@ function startProgressPolling(taskId: string, fileId: string) {
     progressPollingIntervals.value.set(taskId, interval)
 }
 
+// Progress tracking with completion waiting
+function startProgressPollingAndWait(
+    taskId: string,
+    fileId: string
+): Promise<void> {
+    return new Promise((resolve, reject) => {
+        // Store the task ID for this file
+        activeTaskIds.value.set(fileId, taskId)
+
+        // Start polling for progress
+        const interval = setInterval(async () => {
+            try {
+                const progress = await apiGet<DownloadProgress>(
+                    `/api/download/progress/${taskId}`,
+                    false,
+                    {
+                        showSuccessToast: false,
+                        showErrorToast: false,
+                    }
+                )
+
+                downloadProgress.value.set(taskId, progress)
+
+                // Check if download is complete
+                if (progress.status === "completed") {
+                    console.log(
+                        `Download task ${taskId} completed successfully`
+                    )
+                    stopProgressPolling(taskId, fileId)
+                    resolve() // Resolve the promise when download completes
+                } else if (
+                    progress.status === "failed" ||
+                    progress.status === "cancelled"
+                ) {
+                    console.log(
+                        `Download task ${taskId} failed with status: ${progress.status}`
+                    )
+                    stopProgressPolling(taskId, fileId)
+                    reject(
+                        new Error(
+                            `Download ${progress.status}: ${progress.error_message || "Unknown error"}`
+                        )
+                    )
+                }
+            } catch (error) {
+                console.error(
+                    `Failed to fetch progress for task ${taskId}:`,
+                    error
+                )
+                stopProgressPolling(taskId, fileId)
+                reject(error)
+            }
+        }, 1000) // Poll every second
+
+        progressPollingIntervals.value.set(taskId, interval)
+    })
+}
+
 function stopProgressPolling(taskId: string, fileId: string) {
+    // Clear the interval
     const interval = progressPollingIntervals.value.get(taskId)
     if (interval) {
         clearInterval(interval)
         progressPollingIntervals.value.delete(taskId)
     }
 
-    activeTaskIds.value.delete(fileId)
+    // Remove progress data
     downloadProgress.value.delete(taskId)
+    activeTaskIds.value.delete(fileId)
+}
+
+// Ingest progress tracking functions
+function startIngestProgressPolling(taskId: string, fileId: string) {
+    // Store the task ID for this file
+    activeIngestTaskIds.value.set(fileId, taskId)
+
+    let pollCount = 0
+    const maxPolls = 300 // Stop after 5 minutes if no completion detected
+
+    // Start polling for ingest progress
+    const interval = setInterval(async () => {
+        pollCount++
+
+        try {
+            const progress = await apiGet<any>(`/api/ingest/progress`, false, {
+                showSuccessToast: false,
+                showErrorToast: false,
+            })
+
+            // Find our specific task in the progress response
+            const taskProgress = progress.ingest?.[taskId]
+            if (taskProgress) {
+                ingestProgress.value.set(taskId, taskProgress)
+
+                // Check if ingest is complete
+                if (
+                    taskProgress.status === "completed" ||
+                    taskProgress.status === "failed" ||
+                    taskProgress.status === "cancelled"
+                ) {
+                    console.log(
+                        `Ingest task ${taskId} completed with status: ${taskProgress.status}`
+                    )
+                    stopIngestProgressPolling(taskId, fileId)
+                    // Refresh sources to show updated last refresh time
+                    await loadSources()
+                    return
+                }
+            } else if (pollCount > 10) {
+                // If task disappears from progress after 10 polls, assume it completed
+                console.log(
+                    `Task ${taskId} no longer in progress response, assuming completed ${pollCount}`
+                )
+                stopIngestProgressPolling(taskId, fileId)
+                await loadSources()
+                return
+            }
+
+            // Stop polling after max attempts to prevent infinite polling
+            if (pollCount >= maxPolls) {
+                console.log(
+                    `Stopping ingest progress polling for ${taskId} after ${maxPolls} attempts`
+                )
+                stopIngestProgressPolling(taskId, fileId)
+                await loadSources()
+            }
+        } catch (error) {
+            console.error(
+                `Failed to fetch ingest progress for task ${taskId}:`,
+                error
+            )
+            // Stop polling on error
+            stopIngestProgressPolling(taskId, fileId)
+        }
+    }, 1000) // Poll every second
+
+    progressPollingIntervals.value.set(`ingest_${taskId}`, interval)
+}
+
+function stopIngestProgressPolling(taskId: string, fileId: string) {
+    // Clear the interval
+    const interval = progressPollingIntervals.value.get(`ingest_${taskId}`)
+    if (interval) {
+        clearInterval(interval)
+        progressPollingIntervals.value.delete(`ingest_${taskId}`)
+    }
+
+    // Remove progress data
+    ingestProgress.value.delete(taskId)
+    activeIngestTaskIds.value.delete(fileId)
 }
 
 function getProgressForFile(fileId: string): DownloadProgress | null {
@@ -1132,17 +1388,94 @@ function getProgressForFile(fileId: string): DownloadProgress | null {
     return downloadProgress.value.get(taskId) || null
 }
 
+// Get ingest progress for a specific file
+function getIngestProgressForFile(fileId: string): any | null {
+    const taskId = activeIngestTaskIds.value.get(fileId)
+    if (!taskId) return null
+
+    return ingestProgress.value.get(taskId) || null
+}
+
+// Check if a file is currently being refreshed (downloaded or ingested)
+function isFileRefreshing(fileId: string): boolean {
+    // Check if file is downloading
+    const downloadTaskId = activeTaskIds.value.get(fileId)
+    if (downloadTaskId && downloadProgress.value.has(downloadTaskId)) {
+        return true
+    }
+    
+    // Check if file is being ingested
+    const ingestTaskId = activeIngestTaskIds.value.get(fileId)
+    if (ingestTaskId && ingestProgress.value.has(ingestTaskId)) {
+        return true
+    }
+    
+    return false
+}
+
+// Get step-specific progress value or null for indeterminate
+function getStepProgressValue(fileId: string): number | null {
+    const taskProgress = getIngestProgressForFile(fileId)
+    if (!taskProgress) return null
+    
+    const currentStep = taskProgress.current_step
+    const stepName = taskProgress.step_name
+    
+    // Step 1: Download - always show 100% since download is complete before ingest starts
+    if (currentStep === 1 || stepName === "downloading") {
+        return 100
+    }
+    
+    // Step 2: Parsing - show step progress if available
+    if (currentStep === 2 || stepName === "parsing") {
+        return taskProgress.step_progress !== undefined ? Math.round(taskProgress.step_progress) : null
+    }
+    
+    // Step 3: Loading - show progress based on completed items if total is known
+    if (currentStep === 3 || stepName === "loading") {
+        if (taskProgress.total_items > 0 && taskProgress.completed_items !== undefined) {
+            return Math.round((taskProgress.completed_items / taskProgress.total_items) * 100)
+        }
+        // If total_items is 0 or unknown, show indeterminate (return null)
+        if (taskProgress.total_items === 0) {
+            return null
+        }
+        // If no total items, show step progress if available
+        return taskProgress.step_progress !== undefined ? Math.round(taskProgress.step_progress) : null
+    }
+    
+    // Default: return step progress if available, otherwise null for indeterminate
+    return taskProgress.step_progress !== undefined ? Math.round(taskProgress.step_progress) : null
+}
+
+// Format step name for display
+function formatStepName(stepName: string | undefined): string {
+    if (!stepName) return "Processing"
+
+    switch (stepName.toLowerCase()) {
+        case "downloading":
+            return "Downloading"
+        case "parsing":
+            return "Parsing"
+        case "loading":
+            return "Loading to Database"
+        default:
+            return stepName.charAt(0).toUpperCase() + stepName.slice(1)
+    }
+}
+
 // Utility function to format bytes
-function formatBytes(bytes: number, decimals = 2): string {
+function formatBytes(bytes: number): string {
     if (bytes === 0) return "0 Bytes"
-
     const k = 1024
-    const dm = decimals < 0 ? 0 : decimals
-    const sizes = ["Bytes", "KB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"]
-
+    const sizes = ["Bytes", "KB", "MB", "GB"]
     const i = Math.floor(Math.log(bytes) / Math.log(k))
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + " " + sizes[i]
+}
 
-    return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i]
+// Format numbers with commas for display
+function formatNumber(num: number): string {
+    return num.toLocaleString()
 }
 
 // Utility function to format refresh status with relative time
@@ -1620,6 +1953,43 @@ const onRowEditSave = async (event: {
  * Component lifecycle
  */
 
+// Resume active ingest progress polling on mount
+async function resumeActiveIngestPolling() {
+    try {
+        // Check for any active ingest tasks from the backend
+        const progress = await apiGet<any>(`/api/ingest/progress`, false, {
+            showSuccessToast: false,
+            showErrorToast: false,
+        })
+
+        // Resume polling for any active ingest tasks
+        if (progress.ingest) {
+            for (const [taskId, taskProgress] of Object.entries(progress.ingest)) {
+                const taskData = taskProgress as any
+                if (taskData.status === "ingesting" || taskData.status === "pending") {
+                    // Find the file ID for this task based on source name and file type
+                    const fileId = findFileIdBySourceAndType(taskData.source_name, taskData.file_type)
+                    if (fileId) {
+                        console.log(`Resuming ingest progress polling for task ${taskId} (${taskData.source_name} ${taskData.file_type})`)
+                        startIngestProgressPolling(taskId, fileId)
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error("Failed to resume active ingest polling:", error)
+    }
+}
+
+// Helper function to find file ID by source name and file type
+function findFileIdBySourceAndType(sourceName: string, fileType: string): string | null {
+    const sourceFileRows = transformSourcesToRows(sources.value)
+    const matchingRow = sourceFileRows.find(
+        row => row.sourceName === sourceName && row.fileType === fileType
+    )
+    return matchingRow ? matchingRow.fileId : null
+}
+
 onMounted(async () => {
     try {
         // Load user timezone settings for accurate time formatting
@@ -1627,6 +1997,9 @@ onMounted(async () => {
 
         // Load sources data and wait for it to complete
         await loadSources()
+
+        // Resume any active ingest progress polling after sources are loaded
+        await resumeActiveIngestPolling()
 
         // Set loading to false so sourceFileRows shows real data instead of skeleton
         loading.value = false
@@ -1765,7 +2138,8 @@ onMounted(async () => {
     gap: 0.25rem;
 }
 
-.progress-container {
+.progress-container,
+.download-progress-container {
     display: flex;
     flex-direction: column;
     gap: 0.25rem;
@@ -1788,6 +2162,49 @@ onMounted(async () => {
     font-size: 0.75rem;
     color: var(--p-text-muted-color);
     font-family: monospace;
+}
+
+/* Multi-step ingest progress styles */
+.ingest-progress-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.step-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.step-indicator {
+    font-weight: 600;
+    color: var(--p-primary-color);
+    font-size: 0.75rem;
+}
+
+.step-name {
+    font-weight: 500;
+    color: var(--p-text-color);
+    text-transform: capitalize;
+}
+
+.progress-details {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+    color: var(--p-text-muted-color);
+}
+
+.progress-items {
+    font-weight: 500;
+}
+
+.overall-progress {
+    font-weight: 600;
+    color: var(--p-primary-color);
 }
 
 .last-refresh-time {
