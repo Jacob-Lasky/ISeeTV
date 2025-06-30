@@ -1,163 +1,221 @@
 <template>
     <div class="table-viewer">
-        <div class="table-viewer-header">
-            <div class="header-content">
-                <Button
-                    icon="pi pi-arrow-left"
-                    label="Back to Sources"
-                    severity="secondary"
-                    class="back-button"
-                    @click="goBack"
-                />
-                <div class="table-info">
-                    <h2 class="table-title">
-                        <i :class="tableConfig.icon" class="table-icon"></i>
-                        {{ tableConfig.displayName }}
-                    </h2>
-                    <p class="table-description">
-                        {{ tableConfig.description }}
-                    </p>
-                    <div class="table-metadata">
-                        <span class="metadata-item">
-                            <i class="pi pi-server"></i>
-                            Source: {{ sourceName }}
-                        </span>
-                        <span v-if="totalRecords > 0" class="metadata-item">
-                            <i class="pi pi-list"></i>
-                            {{ formatNumber(totalRecords) }} records
-                        </span>
+        <!-- Header with back button and table info -->
+        <div class="table-header mb-4">
+            <div class="flex items-center justify-between">
+                <div class="flex items-center gap-3">
+                    <Button
+                        icon="pi pi-arrow-left"
+                        label="Back to Sources"
+                        @click="goBack"
+                        outlined
+                        size="small"
+                    />
+                    <div class="table-info">
+                        <h2 class="text-2xl font-semibold text-gray-800">
+                            {{ tableConfig.displayName }}
+                        </h2>
+                        <p class="text-gray-600">
+                            Source: {{ sourceName }} •
+                            {{ tableData.length }} records
+                        </p>
                     </div>
                 </div>
             </div>
         </div>
 
-        <div class="table-content">
-            <div v-if="loading" class="data-table-container">
-                <DataTable
-                    :value="skeletonData"
-                    scrollable
-                    scroll-height="calc(100vh - 280px)"
-                    table-style="min-width: 50rem"
-                    show-gridlines
-                    striped-rows
-                    class="virtual-table skeleton-table"
+        <!-- Loading state with skeleton -->
+        <div v-if="loading" class="loading-container">
+            <DataTable
+                :value="skeletonData"
+                scrollable
+                scroll-height="calc(100vh - 320px)"
+                table-style="min-width: 50rem"
+                striped-rows
+                class="virtual-table skeleton-table"
+            >
+                <template #header>
+                    <div class="flex justify-end">
+                        <IconField>
+                            <InputIcon>
+                                <i class="pi pi-search" />
+                            </InputIcon>
+                            <InputText placeholder="Loading..." disabled />
+                        </IconField>
+                    </div>
+                </template>
+                <Column
+                    v-for="column in tableConfig.columns"
+                    :key="column.field"
+                    :field="column.field"
+                    :header="column.header"
+                    :style="column.style"
                 >
-                    <Column
-                        v-for="column in tableConfig.columns"
-                        :key="column.field"
-                        :field="column.field"
-                        :header="column.header"
-                        :style="column.style"
-                    >
-                        <template #body>
-                            <Skeleton
-                                height="1rem"
-                                class="skeleton-cell"
-                            ></Skeleton>
-                        </template>
-                    </Column>
-                </DataTable>
-            </div>
+                    <template #body>
+                        <Skeleton height="1rem" class="mb-2" />
+                    </template>
+                </Column>
+            </DataTable>
+        </div>
 
-            <div v-else-if="error" class="error-state">
-                <i class="pi pi-exclamation-triangle"></i>
-                <h3>Error Loading Table</h3>
-                <p>{{ error }}</p>
-                <Button
-                    label="Retry"
-                    icon="pi pi-refresh"
-                    severity="secondary"
-                    @click="loadTableData"
-                />
-            </div>
-
-            <div v-else-if="tableData.length === 0" class="empty-state">
-                <i class="pi pi-inbox"></i>
-                <h3>No Data Available</h3>
-                <p>This table doesn't contain any data yet.</p>
-            </div>
-
-            <div v-else class="data-table-container">
-                <DataTable
-                    :value="tableData"
-                    scrollable
-                    scroll-height="calc(100vh - 280px)"
-                    :virtual-scroller-options="{ itemSize: 44 }"
-                    table-style="min-width: 50rem"
-                    show-gridlines
-                    striped-rows
-                    :loading="loading"
-                    class="virtual-table"
+        <!-- Main data table with search and filters -->
+        <div v-else-if="!error && tableData.length > 0" class="data-container">
+            <DataTable
+                v-model:filters="filters"
+                :value="tableData"
+                scrollable
+                scroll-height="calc(100vh - 320px)"
+                :virtual-scroller-options="{ itemSize: 44 }"
+                table-style="min-width: 50rem"
+                striped-rows
+                :loading="loading"
+                filter-display="row"
+                :global-filter-fields="globalFilterFields"
+                class="virtual-table"
+            >
+                <template #header>
+                    <div class="flex justify-end">
+                        <IconField>
+                            <InputIcon>
+                                <i class="pi pi-search" />
+                            </InputIcon>
+                            <InputText
+                                v-model="filters['global'].value"
+                                placeholder="Search all columns..."
+                                class="w-80"
+                            />
+                        </IconField>
+                    </div>
+                </template>
+                <template #empty>
+                    <div class="text-center py-8">
+                        <i class="pi pi-search text-4xl text-gray-400 mb-4"></i>
+                        <p class="text-gray-600">
+                            No records found matching your search criteria.
+                        </p>
+                        <p class="text-sm text-gray-500 mt-2">
+                            Try adjusting your filters or search terms.
+                        </p>
+                    </div>
+                </template>
+                <Column
+                    v-for="column in tableConfig.columns"
+                    :key="column.field"
+                    :field="column.field"
+                    :header="column.header"
+                    :style="column.style"
+                    :sortable="column.sortable !== false"
+                    :filter-field="column.field"
                 >
-                    <Column
-                        v-for="column in tableConfig.columns"
-                        :key="column.field"
-                        :field="column.field"
-                        :header="column.header"
-                        :style="column.style"
-                        :sortable="column.sortable !== false"
-                    >
-                        <template
-                            v-if="column.type === 'datetime'"
-                            #body="{ data }"
+                    <template #body="{ data }">
+                        <span v-if="column.type === 'datetime'">
+                            {{ formatDateTime(data[column.field]) }}
+                        </span>
+                        <a
+                            v-else-if="
+                                column.type === 'url' && data[column.field]
+                            "
+                            :href="data[column.field]"
+                            target="_blank"
+                            class="text-blue-600 hover:text-blue-800 underline"
                         >
-                            <span class="datetime-cell">
-                                {{ formatDateTime(data[column.field]) }}
-                            </span>
-                        </template>
-                        <template
-                            v-else-if="column.type === 'url'"
-                            #body="{ data }"
-                        >
-                            <span class="url-cell" :title="data[column.field]">
-                                {{ data[column.field] }}
-                            </span>
-                        </template>
-                        <template
-                            v-else-if="column.type === 'id'"
-                            #body="{ data }"
-                        >
-                            <span class="id-cell">
-                                {{ data[column.field] }}
-                            </span>
-                        </template>
-                    </Column>
-                </DataTable>
-            </div>
+                            {{ data[column.field] }}
+                        </a>
+                        <span v-else>
+                            {{ data[column.field] || "N/A" }}
+                        </span>
+                    </template>
+                    <template #filter="{ filterModel, filterCallback }">
+                        <InputText
+                            v-if="column.type !== 'datetime'"
+                            v-model="filterModel.value"
+                            type="text"
+                            @input="filterCallback()"
+                            :placeholder="`Search ${column.header.toLowerCase()}...`"
+                            class="w-full"
+                        />
+                        <DatePicker
+                            v-else
+                            v-model="filterModel.value"
+                            @date-select="filterCallback()"
+                            @clear-click="filterCallback()"
+                            :placeholder="`Filter ${column.header.toLowerCase()}...`"
+                            show-time
+                            hour-format="24"
+                            class="w-full"
+                        />
+                    </template>
+                </Column>
+            </DataTable>
+        </div>
+
+        <!-- Error state -->
+        <div v-else-if="error" class="error-state">
+            <i class="pi pi-exclamation-triangle"></i>
+            <h3>Error Loading Table</h3>
+            <p>{{ error }}</p>
+            <Button
+                label="Retry"
+                icon="pi pi-refresh"
+                severity="secondary"
+                @click="loadTableData"
+            />
+        </div>
+
+        <!-- Empty state -->
+        <div v-else-if="tableData.length === 0" class="empty-state">
+            <i class="pi pi-inbox"></i>
+            <h3>No Data Available</h3>
+            <p>This table doesn't contain any data yet.</p>
         </div>
     </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from "vue"
+import { ref, computed, onMounted } from "vue"
 import { useRoute, useRouter } from "vue-router"
+import { FilterMatchMode } from "@primevue/core/api"
 import { useToast } from "primevue/usetoast"
-import Button from "primevue/button"
+import { apiGet } from "@/utils/apiUtils"
+import { getFileTypeIcon } from "@/utils/fileUtils"
+import { useToastListener } from "@/services/toastService"
+
+// PrimeVue components
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
+import Button from "primevue/button"
 import Skeleton from "primevue/skeleton"
-import { apiGet } from "../utils/apiUtils"
-import { getFileTypeIcon } from "../utils/fileUtils"
+import InputText from "primevue/inputtext"
+import IconField from "primevue/iconfield"
+import InputIcon from "primevue/inputicon"
+import DatePicker from "primevue/datepicker"
 
 // Route and navigation
 const route = useRoute()
 const router = useRouter()
+
+// Toast setup
 const toast = useToast()
+const toastListener = useToastListener()
 
 // Props from route params
 const sourceName = computed(() => route.params.sourceName as string)
 const tableName = computed(() => route.params.tableName as string)
 
-// Component state
+// Reactive state
 const loading = ref(true)
 const error = ref("")
-const tableData = ref<any[]>([])
+const tableData = ref([])
+
+// Search and filtering state
+const filters = ref({})
+const globalFilterFields = ref([])
 const totalRecords = ref(0)
 
 // Skeleton data for loading state (20 empty rows)
 const skeletonData = ref(new Array(20).fill({}))
 
-//  table configuration interface
+// Table configuration interface
 interface TableColumn {
     field: string
     header: string
@@ -173,7 +231,7 @@ interface TableConfig {
     columns: TableColumn[]
 }
 
-//  function to get table configuration
+// Function to get table configuration
 const getTableConfig = (tableName: string): TableConfig => {
     switch (tableName) {
         case "epg_channels":
@@ -357,7 +415,35 @@ const getTableConfig = (tableName: string): TableConfig => {
 // Computed table configuration
 const tableConfig = computed(() => getTableConfig(tableName.value))
 
-//  utility functions
+// Initialize filters when table config changes
+const initializeFilters = () => {
+    const config = tableConfig.value
+    const newFilters = {
+        global: { value: null, matchMode: FilterMatchMode.CONTAINS },
+    }
+
+    // Set up global filter fields
+    globalFilterFields.value = config.columns.map((col) => col.field)
+
+    // Set up individual column filters
+    config.columns.forEach((column) => {
+        if (column.type === "datetime") {
+            newFilters[column.field] = {
+                value: null,
+                matchMode: FilterMatchMode.DATE_IS,
+            }
+        } else {
+            newFilters[column.field] = {
+                value: null,
+                matchMode: FilterMatchMode.CONTAINS,
+            }
+        }
+    })
+
+    filters.value = newFilters
+}
+
+// Utility functions
 const formatDateTime = (dateString: string): string => {
     if (!dateString) return "N/A"
     try {
@@ -375,7 +461,7 @@ const goBack = () => {
     router.push("/sources")
 }
 
-//  function to load table data
+// Function to load table data
 const loadTableData = async () => {
     loading.value = true
     error.value = ""
@@ -417,12 +503,23 @@ const loadTableData = async () => {
 
 // Load data on component mount
 onMounted(() => {
+    // Set up toast listener for API notifications
+    toastListener.subscribe((message) => {
+        toast.add({
+            severity: message.severity,
+            summary: message.summary,
+            detail: message.detail,
+            life: message.life || 3000,
+        })
+    })
+
     if (!sourceName.value || !tableName.value) {
         error.value = "Missing required parameters"
         loading.value = false
         return
     }
 
+    initializeFilters()
     loadTableData()
 })
 </script>

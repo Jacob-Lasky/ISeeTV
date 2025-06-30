@@ -99,7 +99,7 @@
 <script setup lang="ts">
 import { ref, onMounted, watch, computed } from "vue"
 import { useConfirm } from "primevue/useconfirm"
-import { apiGet, apiPost } from "../utils/apiUtils"
+import { apiGet, apiPost } from "@/utils/apiUtils"
 
 // Import PrimeVue components
 import Dialog from "primevue/dialog"
@@ -110,8 +110,8 @@ import Skeleton from "primevue/skeleton"
 import Message from "primevue/message"
 
 // Import utilities and stores
-import { timezoneOptions } from "../utils/timezones"
-import { useThemeStore, type ThemeMode } from "../stores/themeStore"
+import { timezoneOptions } from "@/utils/timezones"
+import { useThemeStore, type ThemeMode } from "@/stores/themeStore"
 
 // Define interface for settings structure
 interface AppSettings {

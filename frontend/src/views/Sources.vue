@@ -6,7 +6,7 @@
 </template>
 
 <script setup lang="ts">
-import SourcesTable from "../components/SourcesTable.vue"
+import SourcesTable from "@/components/SourcesTable.vue"
 </script>
 
 <style scoped>

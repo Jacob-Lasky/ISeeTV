@@ -5,7 +5,7 @@
 </template>
 
 <!-- <script setup lang="ts">
-import ChannelsTable from "../components/ChannelsTable.vue"
+import ChannelsTable from "@/components/ChannelsTable.vue"
 </script> -->
 
 <style scoped>

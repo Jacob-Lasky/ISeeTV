@@ -581,7 +581,7 @@ import DatePicker from "primevue/datepicker"
 import Skeleton from "primevue/skeleton"
 import ProgressBar from "primevue/progressbar"
 import { useToast } from "primevue/usetoast"
-import { apiGet, apiPost } from "../utils/apiUtils"
+import { apiGet, apiPost } from "@/utils/apiUtils"
 import type {
     FileMetadata,
     Source,
@@ -589,9 +589,9 @@ import type {
     DownloadTaskResponse,
     DownloadAllTasksResponse,
     DownloadProgress,
-} from "../types/types"
-import { timezoneOptions } from "../utils/timezones"
-import { getFileTypeIcon } from "../utils/fileUtils"
+} from "@/types/types"
+import { timezoneOptions } from "@/utils/timezones"
+import { getFileTypeIcon } from "@/utils/fileUtils"
 
 // Toast service for notifications
 const toast = useToast()

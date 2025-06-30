@@ -1,5 +1,5 @@
-import { toastService } from "../services/toastService"
-import type { ApiMessage } from "../types/types"
+import { toastService } from "@/services/toastService"
+import type { ApiMessage } from "@/types/types"
 
 /**
  * Options for API requests

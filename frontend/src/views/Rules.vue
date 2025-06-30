@@ -5,7 +5,7 @@
 </template>
 
 <!-- <script setup lang="ts">
-import PluginsTable from "../components/Plugins.vue"
+import PluginsTable from "@/components/Plugins.vue"
 </script> -->
 
 <style scoped>
