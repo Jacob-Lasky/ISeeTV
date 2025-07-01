@@ -23,7 +23,9 @@
                 </div>
 
                 <div class="header-right">
-                    <h1>ISeeTV</h1>
+                    <h1>
+                        <img src="@/favicons/logo32.png" alt="ISeeTV" />ISeeTV
+                    </h1>
                     <Button
                         icon="pi pi-cog"
                         text
