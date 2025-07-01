@@ -7,9 +7,9 @@
                     <Button
                         icon="pi pi-arrow-left"
                         label="Back to Sources"
-                        @click="goBack"
-                        outlined
                         size="small"
+                        outlined
+                        @click="goBack"
                     />
                     <div class="table-info">
                         <h2 class="text-2xl font-semibold text-gray-800">
@@ -130,41 +130,44 @@
                         <Select
                             v-if="column.field === 'source'"
                             v-model="filterModel.value"
-                            @change="filterCallback()"
                             :options="sourceOptions"
                             placeholder="All Sources"
                             class="w-full"
                             :show-clear="true"
+                            @change="filterCallback()"
                         />
                         <!-- Group column filter (M3U channels only) -->
                         <Select
-                            v-else-if="column.field === 'group' && tableName === 'm3u_channels'"
+                            v-else-if="
+                                column.field === 'group' &&
+                                tableName === 'm3u_channels'
+                            "
                             v-model="filterModel.value"
-                            @change="filterCallback()"
                             :options="groupOptions"
                             placeholder="All Groups"
                             class="w-full"
                             :show-clear="true"
+                            @change="filterCallback()"
                         />
                         <!-- Date column filter -->
                         <DatePicker
                             v-else-if="column.type === 'datetime'"
                             v-model="filterModel.value"
-                            @date-select="filterCallback()"
-                            @clear-click="filterCallback()"
                             :placeholder="`Filter ${column.header.toLowerCase()}...`"
                             show-time
                             hour-format="24"
                             class="w-full"
+                            @date-select="filterCallback()"
+                            @clear-click="filterCallback()"
                         />
                         <!-- Default text input filter -->
                         <InputText
                             v-else
                             v-model="filterModel.value"
                             type="text"
-                            @input="filterCallback()"
                             :placeholder="`Search ${column.header.toLowerCase()}...`"
                             class="w-full"
+                            @input="filterCallback()"
                         />
                     </template>
                 </Column>
@@ -480,10 +483,6 @@ const formatDateTime = (dateString: string): string => {
     }
 }
 
-const formatNumber = (num: number): string => {
-    return new Intl.NumberFormat().format(num)
-}
-
 const goBack = () => {
     router.push("/sources")
 }
@@ -505,7 +504,7 @@ const loadTableData = async () => {
         if (response.success && response.data) {
             tableData.value = response.data.records || []
             totalRecords.value = response.data.total || tableData.value.length
-            
+
             // Load precomputed filter values from backend
             await loadFilterOptions()
 
@@ -535,32 +534,41 @@ const loadTableData = async () => {
 const loadFilterOptions = async () => {
     try {
         console.log(`Loading filter options for table: ${tableName.value}`)
-        
+
         const response = await apiGet(
             `/api/tables/${tableName.value}/filters`,
             false,
             { showSuccessToast: false }
         )
-        
+
         if (response.success && response.data) {
             const filterData = response.data
-            
+
             // Set source options
             if (filterData.source) {
-                sourceOptions.value = filterData.source.map(item => item.value)
-                console.log(`Loaded ${sourceOptions.value.length} source options`)
+                sourceOptions.value = filterData.source.map(
+                    (item) => item.value
+                )
+                console.log(
+                    `Loaded ${sourceOptions.value.length} source options`
+                )
             }
-            
+
             // Set group options for M3U channels
-            if (tableName.value === 'm3u_channels' && filterData.group) {
-                groupOptions.value = filterData.group.map(item => item.value)
+            if (tableName.value === "m3u_channels" && filterData.group) {
+                groupOptions.value = filterData.group.map((item) => item.value)
                 console.log(`Loaded ${groupOptions.value.length} group options`)
             }
         } else {
-            console.warn(`No filter data received for table: ${tableName.value}`)
+            console.warn(
+                `No filter data received for table: ${tableName.value}`
+            )
         }
     } catch (err) {
-        console.error(`Error loading filter options for ${tableName.value}:`, err)
+        console.error(
+            `Error loading filter options for ${tableName.value}:`,
+            err
+        )
         // Fallback to empty arrays
         sourceOptions.value = []
         groupOptions.value = []

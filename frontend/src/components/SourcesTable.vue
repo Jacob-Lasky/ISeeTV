@@ -163,8 +163,8 @@
                             size="small"
                             rounded
                             :title="`Refresh ${data.fileType.toUpperCase()} file`"
-                            @click="refreshFile(data)"
                             :disabled="isFileRefreshing(data.fileId)"
+                            @click="refreshFile(data)"
                         />
                         <Button
                             icon="pi pi-download"
@@ -242,24 +242,39 @@
                                     items
                                 </span>
                                 <span
-                                    v-else-if="getIngestProgressForFile(data.fileId)?.completed_items > 0"
+                                    v-else-if="
+                                        getIngestProgressForFile(data.fileId)
+                                            ?.completed_items > 0
+                                    "
                                     class="progress-items"
                                 >
                                     {{
-                                        formatNumber(getIngestProgressForFile(data.fileId)?.completed_items || 0)
+                                        formatNumber(
+                                            getIngestProgressForFile(
+                                                data.fileId
+                                            )?.completed_items || 0
+                                        )
                                     }}
                                     records processed
                                 </span>
                                 <span
-                                    v-else-if="getIngestProgressForFile(data.fileId)?.current_item"
+                                    v-else-if="
+                                        getIngestProgressForFile(data.fileId)
+                                            ?.current_item
+                                    "
                                     class="progress-current-item"
                                 >
-                                    {{ getIngestProgressForFile(data.fileId)?.current_item }}
+                                    {{
+                                        getIngestProgressForFile(data.fileId)
+                                            ?.current_item
+                                    }}
                                 </span>
                             </div>
                             <!-- Progress bar: step-specific progress or indeterminate -->
                             <ProgressBar
-                                v-if="getStepProgressValue(data.fileId) !== null"
+                                v-if="
+                                    getStepProgressValue(data.fileId) !== null
+                                "
                                 :value="getStepProgressValue(data.fileId)"
                                 style="height: 12px; margin-top: 4px"
                             />
@@ -448,9 +463,9 @@
                                 severity="secondary"
                                 size="small"
                                 text
-                                @click="refreshFile(data)"
-                                :title="`Refresh ${data.fileType.toUpperCase()} file`"
                                 :disabled="isFileRefreshing(data.fileId)"
+                                :title="`Refresh ${data.fileType.toUpperCase()} file`"
+                                @click="refreshFile(data)"
                             />
                             <Button
                                 icon="pi pi-trash"
@@ -698,7 +713,7 @@ const progressPollingIntervals = ref<Map<string, number>>(new Map()) // taskId -
 
 // Ingest task tracking for multi-step progress
 const activeIngestTaskIds = ref<Map<string, string>>(new Map()) // fileId -> taskId
-const ingestProgress = ref<Map<string, any>>(new Map()) // taskId -> ingest progress
+const ingestProgress = ref<Map<string, IngestProgress>>(new Map()) // taskId -> ingest progress
 
 // Data transformation
 const sourceFileRows = computed<SourceFileRow[]>(() => {
@@ -1313,7 +1328,9 @@ function startIngestProgressPolling(taskId: string, fileId: string) {
         pollCount++
 
         try {
-            const progress = await apiGet<any>(`/api/ingest/progress`, false, {
+            const progress = await apiGet<{
+                ingest: Record<string, IngestProgress>
+            }>(`/api/ingest/progress`, false, {
                 showSuccessToast: false,
                 showErrorToast: false,
             })
@@ -1389,7 +1406,7 @@ function getProgressForFile(fileId: string): DownloadProgress | null {
 }
 
 // Get ingest progress for a specific file
-function getIngestProgressForFile(fileId: string): any | null {
+function getIngestProgressForFile(fileId: string): IngestProgress | null {
     const taskId = activeIngestTaskIds.value.get(fileId)
     if (!taskId) return null
 
@@ -1403,13 +1420,13 @@ function isFileRefreshing(fileId: string): boolean {
     if (downloadTaskId && downloadProgress.value.has(downloadTaskId)) {
         return true
     }
-    
+
     // Check if file is being ingested
     const ingestTaskId = activeIngestTaskIds.value.get(fileId)
     if (ingestTaskId && ingestProgress.value.has(ingestTaskId)) {
         return true
     }
-    
+
     return false
 }
 
@@ -1417,35 +1434,46 @@ function isFileRefreshing(fileId: string): boolean {
 function getStepProgressValue(fileId: string): number | null {
     const taskProgress = getIngestProgressForFile(fileId)
     if (!taskProgress) return null
-    
+
     const currentStep = taskProgress.current_step
     const stepName = taskProgress.step_name
-    
+
     // Step 1: Download - always show 100% since download is complete before ingest starts
     if (currentStep === 1 || stepName === "downloading") {
         return 100
     }
-    
+
     // Step 2: Parsing - show step progress if available
     if (currentStep === 2 || stepName === "parsing") {
-        return taskProgress.step_progress !== undefined ? Math.round(taskProgress.step_progress) : null
+        return taskProgress.step_progress !== undefined
+            ? Math.round(taskProgress.step_progress)
+            : null
     }
-    
+
     // Step 3: Loading - show progress based on completed items if total is known
     if (currentStep === 3 || stepName === "loading") {
-        if (taskProgress.total_items > 0 && taskProgress.completed_items !== undefined) {
-            return Math.round((taskProgress.completed_items / taskProgress.total_items) * 100)
+        if (
+            taskProgress.total_items > 0 &&
+            taskProgress.completed_items !== undefined
+        ) {
+            return Math.round(
+                (taskProgress.completed_items / taskProgress.total_items) * 100
+            )
         }
         // If total_items is 0 or unknown, show indeterminate (return null)
         if (taskProgress.total_items === 0) {
             return null
         }
         // If no total items, show step progress if available
-        return taskProgress.step_progress !== undefined ? Math.round(taskProgress.step_progress) : null
+        return taskProgress.step_progress !== undefined
+            ? Math.round(taskProgress.step_progress)
+            : null
     }
-    
+
     // Default: return step progress if available, otherwise null for indeterminate
-    return taskProgress.step_progress !== undefined ? Math.round(taskProgress.step_progress) : null
+    return taskProgress.step_progress !== undefined
+        ? Math.round(taskProgress.step_progress)
+        : null
 }
 
 // Format step name for display
@@ -1957,20 +1985,32 @@ const onRowEditSave = async (event: {
 async function resumeActiveIngestPolling() {
     try {
         // Check for any active ingest tasks from the backend
-        const progress = await apiGet<any>(`/api/ingest/progress`, false, {
+        const progress = await apiGet<{
+            ingest: Record<string, IngestProgress>
+        }>(`/api/ingest/progress`, false, {
             showSuccessToast: false,
             showErrorToast: false,
         })
 
         // Resume polling for any active ingest tasks
         if (progress.ingest) {
-            for (const [taskId, taskProgress] of Object.entries(progress.ingest)) {
-                const taskData = taskProgress as any
-                if (taskData.status === "ingesting" || taskData.status === "pending") {
+            for (const [taskId, taskProgress] of Object.entries(
+                progress.ingest
+            )) {
+                const taskData = taskProgress as IngestProgress
+                if (
+                    taskData.status === "ingesting" ||
+                    taskData.status === "pending"
+                ) {
                     // Find the file ID for this task based on source name and file type
-                    const fileId = findFileIdBySourceAndType(taskData.source_name, taskData.file_type)
+                    const fileId = findFileIdBySourceAndType(
+                        taskData.source_name,
+                        taskData.file_type
+                    )
                     if (fileId) {
-                        console.log(`Resuming ingest progress polling for task ${taskId} (${taskData.source_name} ${taskData.file_type})`)
+                        console.log(
+                            `Resuming ingest progress polling for task ${taskId} (${taskData.source_name} ${taskData.file_type})`
+                        )
                         startIngestProgressPolling(taskId, fileId)
                     }
                 }
@@ -1982,10 +2022,13 @@ async function resumeActiveIngestPolling() {
 }
 
 // Helper function to find file ID by source name and file type
-function findFileIdBySourceAndType(sourceName: string, fileType: string): string | null {
+function findFileIdBySourceAndType(
+    sourceName: string,
+    fileType: string
+): string | null {
     const sourceFileRows = transformSourcesToRows(sources.value)
     const matchingRow = sourceFileRows.find(
-        row => row.sourceName === sourceName && row.fileType === fileType
+        (row) => row.sourceName === sourceName && row.fileType === fileType
     )
     return matchingRow ? matchingRow.fileId : null
 }
