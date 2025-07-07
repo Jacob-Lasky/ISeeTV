@@ -24,7 +24,13 @@ from download.downloader import (
     background_single_download_task,
 )
 from common.state import get_progress
-from common.utils import create_task_id, get_progress_response
+from common.utils import (
+    create_task_id,
+    get_progress_response,
+    get_all_progress_response,
+    format_download_progress_response,
+    format_ingest_progress_response,
+)
 from common.constants import DATA_PATH
 from ingest.epg_loader import load_epg_file_async
 from ingest.m3u_loader import load_m3u_file_async
@@ -224,8 +230,8 @@ async def get_ingest_progress_by_id(task_id: str) -> IngestProgress:
 async def get_ingest_progress() -> Dict[str, Dict]:
     """Get all ingest progress"""
     log_function("Getting ingest progress")
-    ingest_progress = get_progress("ingest")
-    return {"ingest": ingest_progress}
+    progress_data = get_all_progress_response("ingest")
+    return format_ingest_progress_response(progress_data)
 
 
 @app.get(
@@ -249,10 +255,8 @@ async def get_download_progress_by_id(task_id: str) -> DownloadProgress:
 async def get_all_download_progress() -> Dict[str, DownloadProgress]:
     """Get all download progress tasks"""
     log_function(level="debug")
-    return {
-        task_id: DownloadProgress(**progress)
-        for task_id, progress in get_progress("download").items()
-    }
+    progress_data = get_all_progress_response("download")
+    return format_download_progress_response(progress_data)
 
 
 @app.delete(

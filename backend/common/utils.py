@@ -1,5 +1,5 @@
 import datetime as dt
-from typing import Literal
+from typing import Literal, Dict
 import logging
 import inspect
 from fastapi import HTTPException, status
@@ -35,6 +35,7 @@ def log_function(
 
 
 def get_progress_response(task_id: str, task_type: Literal["download", "ingest"]):
+    """Get progress data for a specific task by ID and type"""
     progress = get_progress(task_type)
     if task_id not in progress:
         raise HTTPException(
@@ -42,3 +43,22 @@ def get_progress_response(task_id: str, task_type: Literal["download", "ingest"]
             detail=f"{task_type.title()} task {task_id} not found",
         )
     return progress[task_id]
+
+
+def get_all_progress_response(task_type: Literal["download", "ingest"]):
+    """Get all progress data for a specific task type"""
+    return get_progress(task_type)
+
+
+def format_download_progress_response(progress_data: Dict[str, Dict]) -> Dict[str, "DownloadProgress"]:
+    """Format raw progress data into DownloadProgress models"""
+    from models.models import DownloadProgress
+    return {
+        task_id: DownloadProgress(**progress)
+        for task_id, progress in progress_data.items()
+    }
+
+
+def format_ingest_progress_response(progress_data: Dict[str, Dict]) -> Dict[str, Dict]:
+    """Format raw progress data for ingest endpoints (legacy format)"""
+    return {"ingest": progress_data}
