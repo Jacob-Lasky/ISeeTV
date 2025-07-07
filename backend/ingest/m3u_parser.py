@@ -4,7 +4,6 @@ from common.utils import log_function
 from collections import defaultdict
 import logging
 import re
-import shlex
 from fastapi import HTTPException, status
 
 """
@@ -197,7 +196,7 @@ def parse_m3u(m3u_file: str, source: str = "m3u") -> List[M3uChannel]:
         )
 
     # Log validation results
-    validation_results.log_results(context=f"parse_m3u")
+    validation_results.log_results(context="parse_m3u")
 
     log_function(f"Successfully parsed {len(channels)} channels from M3U file")
     return channels

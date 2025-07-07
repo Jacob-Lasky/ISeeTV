@@ -120,20 +120,6 @@ def fail_ingest_task(task_id: str, error_message: str) -> None:
     )
 
 
-def update_ingest_item_progress(
-    task_id: str,
-    current_item: str,
-    completed_items: int,
-    current_phase: Optional[str] = None,
-) -> None:
-    """Update current item being processed"""
-    kwargs = {"current_item": current_item, "completed_items": completed_items}
-    if current_phase:
-        kwargs["current_phase"] = current_phase
-
-    update_ingest_progress(task_id, **kwargs)
-
-
 def get_ingest_task(task_id: str) -> Optional[Dict]:
     """Get a specific ingest task"""
     ingest_progress = get_progress("ingest")

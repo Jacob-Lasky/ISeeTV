@@ -172,12 +172,16 @@ async def orchestrate_file_download_from_source(
                     )
 
                     # Use progress tracking for background tasks
-                    success, size, status = await download_file_with_progress(
+                    success, size, download_status = await download_file_with_progress(
                         url, filepath, task_id, source_name, fallback_size
                     )
                     # Update source metadata with actual downloaded size and status
                     source.update_file_metadata(
-                        download_type, url, size, status=status, local_path=filepath
+                        download_type,
+                        url,
+                        size,
+                        status=download_status,
+                        local_path=filepath,
                     )
 
                     # Save updated sources back to file

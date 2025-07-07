@@ -1,8 +1,8 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import ValidationError
-from typing import Dict, List, Literal, Any
-from sqlalchemy import inspect, text
+from typing import Dict, List, Literal, Any, Sequence, Optional
+from sqlalchemy import inspect, text, Row
 import uvicorn
 import json
 from fastapi import HTTPException, status
@@ -26,22 +26,18 @@ from download.downloader import (
 from common.state import get_progress
 from common.utils import create_task_id, get_progress_response
 from common.constants import DATA_PATH
-from ingest.epg_parser import parse_epg_for_programs, parse_epg_for_channels
-from ingest.m3u_parser import parse_m3u
 from ingest.epg_loader import load_epg_file_async
 from ingest.m3u_loader import load_m3u_file_async
 from ingest.ingest_tasks import (
     create_ingest_task,
-    update_ingest_item_progress,
     update_ingest_step_progress,
     start_ingest_task,
     complete_ingest_task,
     fail_ingest_task,
-    get_ingest_task,
 )
 from utils.filter_utils import precompute_filter_values, get_all_filter_values
 from common.db import init_db, engine, SessionLocal
-from common.utils import create_task_id, log_function
+from common.utils import log_function
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -532,7 +528,7 @@ async def load_file_to_db(
             )
 
         # Create task ID and initialize task
-        task_id = create_task_id(source_name, file_type, "load")
+        task_id = create_task_id(source_name, file_type, "ingest")
 
         # Extract total records for progress tracking
         total_records = 0
@@ -656,7 +652,7 @@ async def background_load_task(
     tags=["Database"],
     status_code=status.HTTP_200_OK,
 )
-async def get_db_table_head(table: str) -> List[Dict[str, Any]]:
+async def get_db_table_head(table: str) -> Sequence[Row[Any]]:
     """Return the first 10 rows of a table"""
     with SessionLocal() as session:
         result = session.execute(text(f"SELECT * FROM {table} LIMIT 10"))
@@ -671,7 +667,7 @@ async def get_db_table_head(table: str) -> List[Dict[str, Any]]:
 )
 async def get_table_data(
     table_name: str,
-    source: str = None,
+    source: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Return paginated table data with optional source filtering"""
     # Validate table name to prevent SQL injection

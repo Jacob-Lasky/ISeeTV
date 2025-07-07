@@ -18,7 +18,6 @@ def init_db():
     log_function("Initializing database...")
 
     # Import table models to ensure they're registered with Base
-    from models.db_models import EpgChannelTable, M3uChannelTable, ProgramTable
 
     Base.metadata.create_all(bind=engine)
     logger.info(f"Database initialized successfully at {DATABASE_URL}")

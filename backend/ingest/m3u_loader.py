@@ -5,10 +5,9 @@ Async M3U loader for ISeeTV ETL pipeline.
 
 import asyncio
 import logging
-from typing import AsyncGenerator, List, Optional
+from typing import AsyncGenerator, Optional
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.sqlite import insert
-from sqlalchemy import select
 
 from models.models import M3uChannel
 from models.db_models import M3uChannelTable

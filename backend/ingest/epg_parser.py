@@ -1,4 +1,3 @@
-import os
 from typing import List
 from models.models import EpgChannel, Program
 from lxml import etree
@@ -214,7 +213,6 @@ def parse_epg_for_channels(epg_file: str, source: str) -> List[EpgChannel]:
                 channel_elem, "display-name", context=channel_id
             )
             # Optional fields - use findtext for non-required elements
-            channel_url = channel_elem.findtext("url", "").strip()
             icon_elem = channel_elem.find("icon")
             channel_logo = (
                 icon_elem.get("src", "").strip() if icon_elem is not None else ""
@@ -285,6 +283,9 @@ def parse_epg_for_programs(epg_file: str, source: str) -> List[Program]:
 
             # Generate program_id from channel and start time if not provided
             program_id = f"{channel_id}_{start_time}"
+
+            start_time = dt.datetime.fromisoformat(start_time)
+            end_time = dt.datetime.fromisoformat(end_time)
 
             programs.append(
                 Program(
