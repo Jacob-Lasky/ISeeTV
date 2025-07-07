@@ -130,7 +130,7 @@ async def load_m3u_channels_async(
 
             # Commit batch
             session.commit()
-            logger.debug(f"Committed batch {i//batch_size + 1} of M3U channels")
+            logger.debug(f"Committed batch {i // batch_size + 1} of M3U channels")
 
     except Exception as e:
         logger.error(f"Error in async M3U channel loading: {e}")

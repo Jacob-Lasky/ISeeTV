@@ -54,5 +54,4 @@ If you're thinking about contributing to this repo in any way, I want you to! I 
     - to fix most type errors, you'll need to manually edit the files
   - check for linting issues: `poetry run ruff check .` (or, if you want to containerize poetry: `docker run --rm -v $(pwd):/app -w /app python:3.11-slim poetry run ruff check .`)
     - to fix most linting issues: `poetry run ruff check . --fix` (or, if you want to containerize poetry: `docker run --rm -v $(pwd):/app -w /app python:3.11-slim poetry run ruff check . --fix`)
-  - check for formatting issues: `poetry run black --check .` (or, if you want to containerize poetry: `docker run --rm -v $(pwd):/app -w /app python:3.11-slim poetry run black --check .`)
-    - to fix most formatting issues: `poetry run black .` (or, if you want to containerize poetry: `docker run --rm -v $(pwd):/app -w /app python:3.11-slim poetry run black .`)
+    - to format: `poetry run ruff format .` (or, if you want to containerize poetry: `docker run --rm -v $(pwd):/app -w /app python:3.11-slim poetry run ruff format .`)

@@ -65,7 +65,10 @@ def update_ingest_step_progress(
 
 
 def update_ingest_item_progress(
-    task_id: str, current_item: str, completed_items: int, current_phase: str = None
+    task_id: str,
+    current_item: str,
+    completed_items: int,
+    current_phase: Optional[str] = None,
 ) -> None:
     """Update progress for a specific item in an ingest task"""
     ingest_progress = get_progress("ingest")

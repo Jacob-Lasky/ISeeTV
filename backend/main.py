@@ -173,7 +173,7 @@ async def set_settings(
     status_code=status.HTTP_200_OK,
 )
 async def get_sources(
-    sources_file: str = os.path.join(DATA_PATH, "sources.json")
+    sources_file: str = os.path.join(DATA_PATH, "sources.json"),
 ) -> List[Source]:
     """Return sources from the provided file"""
     log_function(level="debug")

@@ -176,7 +176,7 @@ async def load_epg_channels_async(
 
             # Commit batch
             session.commit()
-            logger.debug(f"Committed batch {i//batch_size + 1} of EPG channels")
+            logger.debug(f"Committed batch {i // batch_size + 1} of EPG channels")
 
     except Exception as e:
         logger.error(f"Error in async EPG channel loading: {e}")
@@ -232,7 +232,7 @@ async def load_programs_async(
 
             # Commit batch
             session.commit()
-            logger.debug(f"Committed batch {i//batch_size + 1} of programs")
+            logger.debug(f"Committed batch {i // batch_size + 1} of programs")
 
     except Exception as e:
         logger.error(f"Error in async program loading: {e}")
