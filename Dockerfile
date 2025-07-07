@@ -31,7 +31,7 @@ COPY backend/pyproject.toml backend/poetry.lock* ./
 RUN poetry config virtualenvs.create false
 
 # Install dependencies
-RUN poetry install --no-root --no-interaction
+RUN poetry install --no-root --no-interaction --without dev
 
 # Stage 3: Final image
 FROM python:3.11-slim
