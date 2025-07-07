@@ -20,9 +20,9 @@ from models.models import (
     DownloadAllTasksResponse,
 )
 from download.downloader import (
-    create_download_task,
     background_single_download_task,
 )
+from common.task_manager import DownloadTaskManager
 from common.state import get_progress
 from common.utils import (
     create_task_id,
@@ -34,13 +34,7 @@ from common.utils import (
 from common.constants import DATA_PATH
 from ingest.epg_loader import load_epg_file_async
 from ingest.m3u_loader import load_m3u_file_async
-from ingest.ingest_tasks import (
-    create_ingest_task,
-    update_ingest_step_progress,
-    start_ingest_task,
-    complete_ingest_task,
-    fail_ingest_task,
-)
+from common.task_manager import TaskManager, IngestTaskManager
 from utils.filter_utils import precompute_filter_values, get_all_filter_values
 from common.db import init_db, engine, SessionLocal
 from common.utils import log_function
@@ -323,7 +317,7 @@ async def download_all_files(
             task_ids.append(task_id)
 
             # Create download task (1 item per task)
-            create_download_task(task_id, 1)
+            DownloadTaskManager.create_download_task(task_id, 1)
 
             # Start background download task for this source
             asyncio.create_task(
@@ -361,7 +355,7 @@ async def queue_file_for_download(
         task_id = create_task_id(source_name, file_type, "download")
 
         # Create download task (1 item per task)
-        create_download_task(task_id, 1)
+        DownloadTaskManager.create_download_task(task_id, 1)
 
         # Start background download task for this source
         asyncio.create_task(
@@ -545,7 +539,7 @@ async def load_file_to_db(
                 programs = file_metadata.total_records.programs or 0
                 total_records = channels + programs
 
-        create_ingest_task(task_id, file_type, source_name, total_records)
+        IngestTaskManager.create_ingest_task(task_id, file_type, source_name, total_records)
 
         # Start background task
         asyncio.create_task(
@@ -575,14 +569,14 @@ async def background_load_task(
     session = SessionLocal()
     try:
         # Start the task (Step 1: Download already completed)
-        start_ingest_task(task_id)
+        TaskManager.start_task(task_id, "ingest", "ingesting")
 
         # Step 1: Download (already completed, set to 100%)
-        update_ingest_step_progress(task_id, 1, "downloading", 100)
+        IngestTaskManager.update_step_progress(task_id, 1, "downloading", 100)
         logger.info(f"Step 1/3: Download completed for task {task_id}")
 
         # Step 2: Parsing
-        update_ingest_step_progress(task_id, 2, "parsing", 0)
+        IngestTaskManager.update_step_progress(task_id, 2, "parsing", 0)
         logger.info(f"Step 2/3: Starting parsing for task {task_id}")
 
         logger.info(
@@ -590,8 +584,8 @@ async def background_load_task(
         )
 
         # Step 2: Parsing completed, Step 3: Loading
-        update_ingest_step_progress(task_id, 2, "parsing", 100)
-        update_ingest_step_progress(task_id, 3, "loading", 0)
+        IngestTaskManager.update_step_progress(task_id, 2, "parsing", 100)
+        IngestTaskManager.update_step_progress(task_id, 3, "loading", 0)
         logger.info(f"Step 3/3: Starting database loading for task {task_id}")
 
         # Count total items for accurate progress tracking
@@ -614,7 +608,7 @@ async def background_load_task(
                     logger.warning(f"Load error in task {task_id}: {result.message}")
 
         # Step 3: Loading completed
-        update_ingest_step_progress(task_id, 3, "loading", 100)
+        IngestTaskManager.update_step_progress(task_id, 3, "loading", 100)
         logger.info(f"Step 3/3: Database loading completed for task {task_id}")
 
         # Precompute filter values for the affected tables
@@ -634,9 +628,10 @@ async def background_load_task(
         await asyncio.sleep(2)
 
         # Complete the task
-        complete_ingest_task(
+        TaskManager.complete_task(
             task_id,
-            f"Successfully loaded {total_processed} records from {file_type.upper()} file and precomputed filter values",
+            "ingest",
+            f"Successfully loaded {total_processed} records from {source_name} {file_type} file",
         )
         logger.info(
             f"Completed background load task {task_id}: {total_processed} records processed, filter values precomputed"
@@ -644,7 +639,7 @@ async def background_load_task(
 
     except Exception as e:
         logger.error(f"Background load task {task_id} failed: {e}")
-        fail_ingest_task(task_id, str(e))
+        TaskManager.fail_task(task_id, "ingest", str(e))
         session.rollback()
     finally:
         session.close()

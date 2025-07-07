@@ -7,6 +7,7 @@ import datetime as dt
 from typing import List, Optional, Tuple, Literal
 from models.models import Source
 from common.state import get_progress, is_task_cancelled, remove_cancelled_task
+from common.task_manager import TaskManager, DownloadTaskManager
 from common.utils import log_function
 from fastapi import HTTPException, status
 
@@ -14,30 +15,6 @@ logger = logging.getLogger(__name__)
 
 
 #  download utility functions
-def create_download_task(task_id: str, total_items: int) -> None:
-    """Create a new download task in progress tracking"""
-    log_function(f"Creating download task {task_id}")
-    download_progress = get_progress("download")
-    download_progress[task_id] = {
-        "task_id": task_id,
-        "status": "pending",
-        "current_item": None,
-        "total_items": total_items,
-        "completed_items": 0,
-        "bytes_downloaded": 0,
-        "total_bytes": 0,
-        "error_message": None,
-        "started_at": dt.datetime.now(dt.timezone.utc).isoformat(),
-        "completed_at": None,
-    }
-
-
-def update_download_progress(task_id: str, **kwargs) -> None:
-    """Update download progress"""
-    download_progress = get_progress("download")
-    if task_id in download_progress:
-        download_progress[task_id].update(kwargs)
-
 
 async def download_file_with_progress(
     url: str,
@@ -49,7 +26,7 @@ async def download_file_with_progress(
     """Download a single file with real-time progress tracking by bytes"""
     log_function(f"Downloading {item_name} from {url}: {task_id}")
     try:
-        update_download_progress(task_id, current_item=item_name, status="downloading")
+        DownloadTaskManager.update_download_progress(task_id, current_item=item_name, status="downloading")
 
         # validate that the file exists
         if not await validate_url(url):
@@ -76,7 +53,7 @@ async def download_file_with_progress(
                 downloaded_size = 0
 
                 # Initialize total_bytes for this download
-                update_download_progress(task_id, total_bytes=total_size)
+                DownloadTaskManager.update_download_progress(task_id, total_bytes=total_size)
 
                 with open(filepath, "wb") as f:
                     async for chunk in response.aiter_bytes(chunk_size=8192):
@@ -91,7 +68,7 @@ async def download_file_with_progress(
                                 os.remove(filepath)
                             # Clean up cancellation state
                             remove_cancelled_task(task_id)
-                            update_download_progress(
+                            DownloadTaskManager.update_download_progress(
                                 task_id,
                                 status="cancelled",
                                 error_message="Download cancelled by user",
@@ -106,7 +83,7 @@ async def download_file_with_progress(
                             downloaded_size += len(chunk)
 
                             # Update bytes downloaded (frontend can calculate progress)
-                            update_download_progress(
+                            DownloadTaskManager.update_download_progress(
                                 task_id, bytes_downloaded=downloaded_size
                             )
 
@@ -116,7 +93,7 @@ async def download_file_with_progress(
         # Return success status, actual downloaded size, and completion status
         return True, downloaded_size, "success"
     except Exception as e:
-        update_download_progress(task_id, error_message=str(e))
+        DownloadTaskManager.update_download_progress(task_id, error_message=str(e))
         return False, 0, "failed"
 
 
@@ -208,7 +185,7 @@ async def background_download_task(
     """Background coroutine for downloading multiple files"""
     log_function(f"Background download task {task_id}")
     try:
-        update_download_progress(task_id, status="downloading")
+        DownloadTaskManager.update_download_progress(task_id, status="downloading")
 
         for source in sources:
             # Get URL from file metadata
@@ -238,13 +215,13 @@ async def background_download_task(
 
             if success:
                 download_progress = get_progress("download")
-                update_download_progress(
+                DownloadTaskManager.update_download_progress(
                     task_id,
                     completed_items=download_progress[task_id]["completed_items"] + 1,
                 )
             else:
                 # Mark task as failed if not successful (could be failed or cancelled)
-                update_download_progress(task_id, status="failed")
+                DownloadTaskManager.update_download_progress(task_id, status="failed")
                 return
 
         # Update sources file with refresh times
@@ -252,7 +229,7 @@ async def background_download_task(
             json.dump([source.dict() for source in sources], f, indent=2)
 
         # Mark as completed
-        update_download_progress(
+        DownloadTaskManager.update_download_progress(
             task_id,
             status="completed",
             completed_at=dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -260,7 +237,7 @@ async def background_download_task(
         )
 
     except Exception as e:
-        update_download_progress(
+        DownloadTaskManager.update_download_progress(
             task_id,
             status="failed",
             error_message=str(e),
@@ -298,7 +275,7 @@ async def background_single_download_task(
     """Background coroutine for downloading a single source with progress tracking"""
     log_function(f"Background single download task {task_id}")
     try:
-        update_download_progress(
+        DownloadTaskManager.update_download_progress(
             task_id,
             status="downloading",
             current_item=source_name,
@@ -311,7 +288,7 @@ async def background_single_download_task(
         )
 
         # Mark as completed
-        update_download_progress(
+        DownloadTaskManager.update_download_progress(
             task_id,
             status="completed",
             completed_at=dt.datetime.now(dt.timezone.utc).isoformat(),
@@ -320,7 +297,7 @@ async def background_single_download_task(
         )
 
     except Exception as e:
-        update_download_progress(
+        DownloadTaskManager.update_download_progress(
             task_id,
             status="failed",
             error_message=str(e),

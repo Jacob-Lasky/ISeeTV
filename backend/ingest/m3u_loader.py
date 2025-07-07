@@ -12,7 +12,7 @@ from sqlalchemy.dialects.sqlite import insert
 from models.models import M3uChannel
 from models.db_models import M3uChannelTable
 from ingest.m3u_parser import parse_m3u
-from ingest.ingest_tasks import update_ingest_item_progress
+from common.task_manager import IngestTaskManager
 
 logger = logging.getLogger(__name__)
 
@@ -100,8 +100,8 @@ async def load_m3u_channels_async(
 
         # Update task progress if task_id provided
         if task_id:
-            update_ingest_item_progress(
-                task_id, "Loading M3U channels...", 0, "channels"
+            IngestTaskManager.update_item_progress(
+                task_id, "Loading M3U channels...", 0
             )
 
         # Process in batches to avoid blocking
@@ -116,11 +116,10 @@ async def load_m3u_channels_async(
 
                 # Update progress periodically
                 if task_id and completed_count % 50 == 0:
-                    update_ingest_item_progress(
+                    IngestTaskManager.update_item_progress(
                         task_id,
-                        f"Processing channel: {channel.name}",
+                        f"Loaded {completed_count} M3U channels",
                         completed_count,
-                        "channels",
                     )
 
                 # Yield control periodically to avoid blocking
