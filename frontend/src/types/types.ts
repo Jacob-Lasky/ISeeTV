@@ -153,6 +153,99 @@ export interface ApiResponses {
 }
 
 /**
+ * Stream channel with joined M3U and EPG data
+ */
+export interface StreamChannel {
+    // M3U Channel Data (primary)
+    m3u_id: number
+    source: string
+    tvg_id: string  // This is the canonical channel_id
+    name: string
+    stream_url: string
+    logo_url?: string | null
+    group?: string | null
+    
+    // EPG Channel Data (joined)
+    epg_id?: number | null
+    display_name?: string | null
+    icon_url?: string | null
+    
+    // Metadata
+    created_at: string
+    updated_at: string
+    
+    // Program counts (aggregated)
+    program_count: number
+    next_program_title?: string | null
+    next_program_start?: string | null
+}
+
+/**
+ * Stream program with channel context
+ */
+export interface StreamProgram {
+    // Program Data
+    program_id: number
+    source: string
+    program_uid: string
+    channel_id: string
+    start_time: string
+    end_time: string
+    title?: string | null
+    description?: string | null
+    
+    // Channel Context (joined)
+    channel_name?: string | null
+    channel_display_name?: string | null
+    channel_group?: string | null
+    stream_url?: string | null
+    logo_url?: string | null
+    icon_url?: string | null
+    
+    // Metadata
+    created_at: string
+    updated_at: string
+}
+
+/**
+ * Filter value for dropdown options
+ */
+export interface FilterValue {
+    value: string
+    count: number
+}
+
+/**
+ * Streams API response with pagination
+ */
+export interface StreamsResponse {
+    success: boolean
+    data: StreamChannel[]
+    total: number
+    page: number
+    page_size: number
+    total_pages: number
+    has_next: boolean
+    has_prev: boolean
+    filters: Record<string, FilterValue[]>
+}
+
+/**
+ * Stream programs API response with pagination
+ */
+export interface StreamProgramsResponse {
+    success: boolean
+    data: StreamProgram[]
+    total: number
+    page: number
+    page_size: number
+    total_pages: number
+    has_next: boolean
+    has_prev: boolean
+    filters: Record<string, FilterValue[]>
+}
+
+/**
  * API request types for POST endpoints
  */
 export interface ApiRequests {

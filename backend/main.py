@@ -20,6 +20,12 @@ from models.models import (
     DownloadAllTasksResponse,
     TableResponse,
 )
+from models.stream_models import (
+    StreamsResponse,
+    StreamProgramsResponse,
+    StreamChannel,
+    StreamProgram,
+)
 from download.downloader import (
     background_single_download_task,
 )
@@ -37,6 +43,12 @@ from ingest.epg_loader import load_epg_file_async
 from ingest.m3u_loader import load_m3u_file_async
 from common.task_manager import TaskManager, IngestTaskManager
 from utils.filter_utils import precompute_filter_values, get_all_filter_values
+from utils.stream_utils import (
+    get_streams_query,
+    get_stream_programs_query,
+    precompute_streams_filter_values,
+    get_streams_filter_values,
+)
 from common.db import init_db, engine, SessionLocal
 from common.utils import log_function
 from scheduler.scheduler_integration import (
@@ -68,7 +80,7 @@ app = FastAPI(
     redoc_url="/api/redoc",
     openapi_tags=[
         {"name": "Health", "description": "Health checks"},
-        {"name": "Settings", "description": "Global app configuration"},
+        {"name": "Streams", "description": "Browse and filter merged channel streams"},
         {"name": "Database", "description": "Manage the database"},
         {"name": "Sources", "description": "Manage IPTV sources (M3U, EPG, metadata)"},
         {"name": "Download", "description": "Download the M3U and EPG files"},
@@ -76,6 +88,7 @@ app = FastAPI(
             "name": "Ingest",
             "description": "Parse the downloaded files and load into the database",
         },
+        {"name": "Settings", "description": "Global app configuration"},
         {"name": "Scheduler", "description": "Refresh scheduling operations"},
         {"name": "Redirect", "description": "Redirect operations"},
     ],
@@ -630,6 +643,12 @@ async def background_load_task(
             logger.info(
                 f"Precomputed filter values for epg_channels and programs after task {task_id}"
             )
+        
+        # Precompute streams filter values (combines M3U and EPG data)
+        precompute_streams_filter_values(session)
+        logger.info(
+            f"Precomputed streams filter values after task {task_id}"
+        )
 
         # Add a small delay to ensure frontend can display progress bars
         await asyncio.sleep(2)
@@ -788,6 +807,258 @@ async def get_table_filter_values(table_name: str) -> Dict[str, Any]:
         logger.error(f"Error getting filter values for table {table_name}: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
+
+
+# Streams API Endpoints
+
+
+@app.get(
+    "/api/streams",
+    response_model=StreamsResponse,
+    tags=["Streams"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_streams(
+    source: Optional[str] = None,
+    group: Optional[str] = None,
+    page: int = 1,
+    page_size: int = 100,
+    sort_field: str = "name",
+    sort_order: str = "asc",
+    global_filter: Optional[str] = None,
+    column_filters: Optional[str] = None,
+) -> StreamsResponse:
+    """Get joined streams view with M3U channels, EPG data, and program counts.
+    
+    This endpoint provides a comprehensive view of all available streams by joining:
+    - M3U channels (primary data with stream URLs)
+    - EPG channels (display names and icons)
+    - Programs (aggregated counts and next program info)
+    
+    Args:
+        source: Filter by source name
+        group: Filter by channel group
+        page: Page number (1-based)
+        page_size: Number of records per page (max 500)
+        sort_field: Field to sort by (name, tvg_id, display_name, group, source, program_count)
+        sort_order: Sort order (asc/desc)
+        global_filter: Global search across name, tvg_id, display_name, group
+        column_filters: JSON string of column-specific filters
+        
+    Returns:
+        StreamsResponse with paginated stream data and filter options
+    """
+    log_function(f"Getting streams: page={page}, size={page_size}, source={source}, group={group}")
+    
+    try:
+        # Validate page_size
+        if page_size > 500:
+            page_size = 500
+        if page_size < 1:
+            page_size = 100
+            
+        # Parse column filters if provided
+        parsed_column_filters = {}
+        if column_filters:
+            try:
+                import json
+                parsed_column_filters = json.loads(column_filters)
+            except json.JSONDecodeError:
+                logger.warning(f"Invalid column_filters JSON: {column_filters}")
+        
+        with SessionLocal() as session:
+            # Get streams data
+            streams, total_count = get_streams_query(
+                session=session,
+                source=source,
+                group=group,
+                page=page,
+                page_size=page_size,
+                sort_field=sort_field,
+                sort_order=sort_order,
+                global_filter=global_filter,
+                column_filters=parsed_column_filters,
+            )
+            
+            # Get filter values
+            filter_values = get_streams_filter_values(session)
+            
+            # Calculate pagination metadata
+            total_pages = (total_count + page_size - 1) // page_size
+            has_next = page < total_pages
+            has_prev = page > 1
+            
+            return StreamsResponse(
+                success=True,
+                data=streams,
+                total=total_count,
+                page=page,
+                page_size=page_size,
+                total_pages=total_pages,
+                has_next=has_next,
+                has_prev=has_prev,
+                filters=filter_values,
+            )
+            
+    except Exception as e:
+        logger.error(f"Error getting streams: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get streams: {str(e)}",
+        )
+
+
+@app.get(
+    "/api/streams/{source}/{channel_id}/programs",
+    response_model=StreamProgramsResponse,
+    tags=["Streams"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_stream_programs(
+    source: str,
+    channel_id: str,
+    page: int = 1,
+    page_size: int = 100,
+    sort_field: str = "start_time",
+    sort_order: str = "asc",
+    global_filter: Optional[str] = None,
+    column_filters: Optional[str] = None,
+) -> StreamProgramsResponse:
+    """Get programs for a specific stream channel with context.
+    
+    Args:
+        source: Source name
+        channel_id: Channel ID (tvg_id)
+        page: Page number (1-based)
+        page_size: Number of records per page (max 500)
+        sort_field: Field to sort by (start_time, end_time, title)
+        sort_order: Sort order (asc/desc)
+        global_filter: Global search across title, description, channel names
+        column_filters: JSON string of column-specific filters
+        
+    Returns:
+        StreamProgramsResponse with paginated program data
+    """
+    log_function(f"Getting programs for stream: source={source}, channel_id={channel_id}")
+    
+    try:
+        # Validate page_size
+        if page_size > 500:
+            page_size = 500
+        if page_size < 1:
+            page_size = 100
+            
+        # Parse column filters if provided
+        parsed_column_filters = {}
+        if column_filters:
+            try:
+                import json
+                parsed_column_filters = json.loads(column_filters)
+            except json.JSONDecodeError:
+                logger.warning(f"Invalid column_filters JSON: {column_filters}")
+        
+        with SessionLocal() as session:
+            # Get program data
+            programs, total_count = get_stream_programs_query(
+                session=session,
+                channel_id=channel_id,
+                source=source,
+                page=page,
+                page_size=page_size,
+                sort_field=sort_field,
+                sort_order=sort_order,
+                global_filter=global_filter,
+                column_filters=parsed_column_filters,
+            )
+            
+            # Calculate pagination metadata
+            total_pages = (total_count + page_size - 1) // page_size
+            has_next = page < total_pages
+            has_prev = page > 1
+            
+            return StreamProgramsResponse(
+                success=True,
+                data=programs,
+                total=total_count,
+                page=page,
+                page_size=page_size,
+                total_pages=total_pages,
+                has_next=has_next,
+                has_prev=has_prev,
+                filters={},  # Programs don't need complex filtering for now
+            )
+            
+    except Exception as e:
+        logger.error(f"Error getting stream programs: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get stream programs: {str(e)}",
+        )
+
+
+@app.get(
+    "/api/streams/filters",
+    response_model=Dict[str, Any],
+    tags=["Streams"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_streams_filters() -> Dict[str, Any]:
+    """Get precomputed filter values for streams view.
+    
+    Returns:
+        Dictionary with filter values for source and group columns
+    """
+    log_function("Getting streams filter values")
+    
+    try:
+        with SessionLocal() as session:
+            filter_values = get_streams_filter_values(session)
+            
+            return {
+                "success": True,
+                "data": filter_values,
+                "table_name": "streams",
+            }
+            
+    except Exception as e:
+        logger.error(f"Error getting streams filter values: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get streams filter values: {str(e)}",
+        )
+
+
+@app.post(
+    "/api/streams/precompute-filters",
+    response_model=Dict[str, str],
+    tags=["Streams"],
+    status_code=status.HTTP_200_OK,
+)
+async def precompute_streams_filters() -> Dict[str, str]:
+    """Precompute filter values for streams view.
+    
+    This is typically called after data ingestion to update filter options.
+    
+    Returns:
+        Success message
+    """
+    log_function("Precomputing streams filter values")
+    
+    try:
+        with SessionLocal() as session:
+            precompute_streams_filter_values(session)
+            
+            return {
+                "message": "Successfully precomputed streams filter values",
+                "table_name": "streams",
+            }
+            
+    except Exception as e:
+        logger.error(f"Error precomputing streams filter values: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to precompute streams filter values: {str(e)}",
         )
 
 
