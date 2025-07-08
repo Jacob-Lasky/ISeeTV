@@ -71,6 +71,7 @@ export interface Source {
     name: string
     number_of_connections?: number | null
     refresh_every_hours?: number | null
+    refresh_time?: string | null
     subscription_expires?: string | null
     source_timezone?: string | null
     enabled: boolean
@@ -99,6 +100,7 @@ export interface SourceProvider {
     name: string
     number_of_connections?: number | null
     refresh_every_hours?: number | null
+    refresh_time?: string | null
     subscription_expires?: string | null
     source_timezone?: string | null
     enabled: boolean
@@ -116,6 +118,7 @@ export interface SourceFileRow {
     sourceTimezone?: string | null
     sourceConnections?: number | null
     sourceRefreshHours?: number | null
+    sourceRefreshTime?: string | null
     sourceSubscriptionExpires?: string | null
 
     fileId: string

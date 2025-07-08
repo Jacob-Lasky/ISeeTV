@@ -37,6 +37,12 @@ from common.task_manager import TaskManager, IngestTaskManager
 from utils.filter_utils import precompute_filter_values, get_all_filter_values
 from common.db import init_db, engine, SessionLocal
 from common.utils import log_function
+from scheduler.scheduler_integration import (
+    get_scheduler_manager,
+    initialize_scheduler,
+    start_scheduler,
+    stop_scheduler,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -55,6 +61,7 @@ app = FastAPI(
         {"name": "Download", "description": "Download operations"},
         {"name": "Ingest", "description": "Ingest operations"},
         {"name": "Database", "description": "Database operations"},
+        {"name": "Scheduler", "description": "Refresh scheduling operations"},
         {"name": "Redirect", "description": "Redirect operations"},
     ],
 )
@@ -69,6 +76,10 @@ app.add_middleware(
 
 
 init_db()
+
+# Initialize scheduler
+sources_file = os.path.join(DATA_PATH, "sources.json")
+initialize_scheduler(sources_file)
 
 
 @app.get(
@@ -769,6 +780,189 @@ async def get_table_filter_values(table_name: str) -> Dict[str, Any]:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
+
+
+# Scheduler API Endpoints
+
+@app.get(
+    "/api/scheduler/status",
+    response_model=Dict[str, Any],
+    tags=["Scheduler"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_scheduler_status() -> Dict[str, Any]:
+    """Get current scheduler status and job information"""
+    log_function("Getting scheduler status")
+    scheduler_manager = get_scheduler_manager()
+    return scheduler_manager.get_scheduler_status()
+
+
+@app.post(
+    "/api/scheduler/start",
+    response_model=Dict[str, str],
+    tags=["Scheduler"],
+    status_code=status.HTTP_200_OK,
+)
+async def start_scheduler_endpoint() -> Dict[str, str]:
+    """Start the refresh scheduler"""
+    log_function("Starting scheduler via API")
+    try:
+        start_scheduler()
+        return {"message": "Scheduler started successfully", "status": "running"}
+    except Exception as e:
+        logger.error(f"Error starting scheduler: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to start scheduler: {str(e)}",
+        )
+
+
+@app.post(
+    "/api/scheduler/stop",
+    response_model=Dict[str, str],
+    tags=["Scheduler"],
+    status_code=status.HTTP_200_OK,
+)
+async def stop_scheduler_endpoint() -> Dict[str, str]:
+    """Stop the refresh scheduler"""
+    log_function("Stopping scheduler via API")
+    try:
+        stop_scheduler()
+        return {"message": "Scheduler stopped successfully", "status": "stopped"}
+    except Exception as e:
+        logger.error(f"Error stopping scheduler: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to stop scheduler: {str(e)}",
+        )
+
+
+@app.post(
+    "/api/scheduler/restart",
+    response_model=Dict[str, str],
+    tags=["Scheduler"],
+    status_code=status.HTTP_200_OK,
+)
+async def restart_scheduler_endpoint() -> Dict[str, str]:
+    """Restart the refresh scheduler"""
+    log_function("Restarting scheduler via API")
+    try:
+        scheduler_manager = get_scheduler_manager()
+        scheduler_manager.restart()
+        return {"message": "Scheduler restarted successfully", "status": "running"}
+    except Exception as e:
+        logger.error(f"Error restarting scheduler: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to restart scheduler: {str(e)}",
+        )
+
+
+@app.post(
+    "/api/scheduler/update/{source_name}",
+    response_model=Dict[str, str],
+    tags=["Scheduler"],
+    status_code=status.HTTP_200_OK,
+)
+async def update_source_schedule(
+    source_name: str,
+    sources_file: str = os.path.join(DATA_PATH, "sources.json"),
+) -> Dict[str, str]:
+    """Update schedule for a specific source"""
+    log_function(f"Updating schedule for source: {source_name}")
+    try:
+        # Load sources configuration
+        with open(sources_file, "r") as f:
+            sources = [Source(**source) for source in json.load(f)]
+        
+        # Find the source
+        source = next(
+            (source for source in sources if source.name == source_name), None
+        )
+        if not source:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Source '{source_name}' not found",
+            )
+        
+        # Update the schedule
+        scheduler_manager = get_scheduler_manager()
+        scheduler_manager.update_source_schedule(source)
+        
+        return {
+            "message": f"Schedule updated for source {source_name}",
+            "source_name": source_name,
+        }
+        
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error updating schedule for {source_name}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to update schedule: {str(e)}",
+        )
+
+
+@app.get(
+    "/api/scheduler/validate",
+    response_model=Dict[str, Any],
+    tags=["Scheduler"],
+    status_code=status.HTTP_200_OK,
+)
+async def validate_scheduler_config(
+    sources_file: str = os.path.join(DATA_PATH, "sources.json"),
+) -> Dict[str, Any]:
+    """Validate scheduler configuration for all sources"""
+    log_function("Validating scheduler configuration")
+    try:
+        # Load sources configuration
+        with open(sources_file, "r") as f:
+            sources = [Source(**source) for source in json.load(f)]
+        
+        # Validate and get results
+        scheduler_manager = get_scheduler_manager()
+        results = scheduler_manager.validate_and_schedule_sources(sources)
+        
+        return {
+            "success": True,
+            "validation_results": results,
+            "total_sources": len(sources),
+            "enabled_sources": len([s for s in sources if s.enabled]),
+        }
+        
+    except Exception as e:
+        logger.error(f"Error validating scheduler configuration: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to validate configuration: {str(e)}",
+        )
+
+
+# Application event handlers
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize and start the scheduler on application startup"""
+    log_function("Application startup - initializing scheduler")
+    try:
+        # Start the scheduler
+        start_scheduler()
+        logger.info("Scheduler started successfully on application startup")
+    except Exception as e:
+        logger.error(f"Failed to start scheduler on startup: {e}")
+        # Don't fail the entire application if scheduler fails to start
+
+
+@app.on_event("shutdown")
+async def shutdown_event():
+    """Stop the scheduler on application shutdown"""
+    log_function("Application shutdown - stopping scheduler")
+    try:
+        stop_scheduler()
+        logger.info("Scheduler stopped successfully on application shutdown")
+    except Exception as e:
+        logger.error(f"Error stopping scheduler on shutdown: {e}")
 
 
 if __name__ == "__main__":

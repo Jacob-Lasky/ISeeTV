@@ -591,6 +591,10 @@
                             fluid
                         />
                     </div>
+                    <div class="form-row">
+                        <label>Refresh Time (HH:MM):</label>
+                        <InputText v-model="sourceForm.refreshTime" fluid />
+                    </div>
                     <!-- M3U section -->
                     <div class="form-row">
                         <label>M3U URL:</label>
@@ -746,6 +750,7 @@ function transformSourcesToRows(sourcesData: Source[]): SourceFileRow[] {
                 sourceTimezone: source.source_timezone,
                 sourceConnections: source.number_of_connections,
                 sourceRefreshHours: source.refresh_every_hours,
+                sourceRefreshTime: source.refresh_time,
                 sourceSubscriptionExpires: source.subscription_expires,
 
                 // File fields (unique per row)
@@ -1774,6 +1779,7 @@ const SOURCE_FIELD_MAP = {
     enabled: "enabled",
     connections: "number_of_connections",
     refreshHours: "refresh_every_hours",
+    refreshTime: "refresh_time",
     timezone: "source_timezone",
     subscriptionExpires: "subscription_expires",
 } as const
