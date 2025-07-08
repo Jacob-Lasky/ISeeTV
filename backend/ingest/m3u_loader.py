@@ -94,7 +94,7 @@ async def load_m3u_channels_async(
 
     try:
         # Parse channels (this is synchronous but usually fast)
-        channels = parse_m3u(file_path, source_name)
+        channels = parse_m3u(file_path, source_name, task_id)
         logger.info(f"Parsed {len(channels)} M3U channels")
 
         # Update task progress if task_id provided
@@ -105,6 +105,8 @@ async def load_m3u_channels_async(
             IngestTaskManager.update_item_progress(
                 task_id, "Loading M3U channels...", 0
             )
+
+            IngestTaskManager.update_step_progress(task_id, 3, "Loading", 0)
 
         # Process in batches to avoid blocking
         completed_count = 0

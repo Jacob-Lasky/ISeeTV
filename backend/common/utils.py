@@ -4,7 +4,6 @@ import logging
 import inspect
 from fastapi import HTTPException, status
 from common.state import get_progress
-import datetime as dt
 
 logger = logging.getLogger(__name__)
 
@@ -25,8 +24,7 @@ def log_function(
     level: Literal["debug", "info", "warning", "error"] = "info",
 ):
     func_name = inspect.currentframe().f_back.f_code.co_name  # type: ignore
-    timestamp = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S:%f")
-    log_message = f"{timestamp} \t [{func_name}]: {message}"
+    log_message = f"\t [{func_name}]: {message}"
     if level == "debug":
         logger.debug(log_message)
     elif level == "info":

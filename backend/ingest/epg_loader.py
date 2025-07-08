@@ -140,7 +140,7 @@ async def load_epg_channels_async(
 
     try:
         # Parse channels (this is synchronous but fast)
-        channels = parse_epg_for_channels(file_path, source_name)
+        channels = parse_epg_for_channels(file_path, source_name, task_id)
         logger.info(f"Parsed {len(channels)} EPG channels")
 
         # Update task progress if task_id provided
@@ -150,6 +150,10 @@ async def load_epg_channels_async(
 
             IngestTaskManager.update_item_progress(
                 task_id, "Loading EPG channels...", 0, "channels"
+            )
+
+            IngestTaskManager.update_step_progress(
+                task_id, 3, "Loading EPG channels", 0
             )
 
         # Process in batches to avoid blocking
@@ -199,7 +203,7 @@ async def load_programs_async(
 
     try:
         # Parse programs (this is synchronous but can be large)
-        programs = parse_epg_for_programs(file_path, source_name)
+        programs = parse_epg_for_programs(file_path, source_name, task_id)
         logger.info(f"Parsed {len(programs)} programs")
 
         # Update task progress if task_id provided
@@ -210,6 +214,8 @@ async def load_programs_async(
             IngestTaskManager.update_item_progress(
                 task_id, "Loading programs...", 0, "programs"
             )
+
+            IngestTaskManager.update_step_progress(task_id, 5, "Loading programs", 0)
 
         # Process in batches to avoid blocking
         completed_count = 0
@@ -223,7 +229,7 @@ async def load_programs_async(
 
                 # Update progress periodically
                 if task_id and completed_count % 100 == 0:
-                    update_ingest_item_progress(
+                    IngestTaskManager.update_item_progress(
                         task_id,
                         f"Processing program: {program.title or 'Untitled'}",
                         completed_count,

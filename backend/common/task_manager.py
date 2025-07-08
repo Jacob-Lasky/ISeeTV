@@ -12,8 +12,7 @@ TASK_TYPES = Literal["download", "ingest"]
 
 
 class TaskManager:
-    """Task management utilities for both download and ingest tasks.
-    """
+    """Task management utilities for both download and ingest tasks."""
 
     @staticmethod
     def create_task(
@@ -238,7 +237,11 @@ class IngestTaskManager:
 
     @staticmethod
     def create_ingest_task(
-        task_id: str, file_type: str, source_name: str, total_items: int = 0
+        task_id: str,
+        file_type: str,
+        source_name: str,
+        total_items: int = 0,
+        total_steps: int = 3,
     ) -> None:
         """Create a new ingest task with multi-step progress tracking."""
         ingest_fields = {
@@ -247,7 +250,7 @@ class IngestTaskManager:
             "current_phase": None,  # For EPG: "channels" or "programs"
             # Multi-step progress tracking
             "current_step": 1,
-            "total_steps": 3,  # Download, Parse, Load
+            "total_steps": total_steps,  # Download, Parse, Load (+Parse, +Load for EPG)
             "step_name": "downloading",
             "step_progress": 0,  # Progress within current step (0-100)
             "overall_progress": 0,  # Overall progress across all steps (0-100)
@@ -261,12 +264,16 @@ class IngestTaskManager:
 
     @staticmethod
     def update_step_progress(
-        task_id: str, step: int, step_name: str, step_progress: int
+        task_id: str,
+        step: int,
+        step_name: str,
+        step_progress: int,
+        total_steps: int = 3,
     ) -> None:
         """Update progress for current step in multi-step ingest process."""
         # Calculate overall progress (each step is 1/3 of total)
-        base_progress = ((step - 1) / 3) * 100
-        step_contribution = (step_progress / 100) * (100 / 3)
+        base_progress = ((step - 1) / total_steps) * 100
+        step_contribution = (step_progress / 100) * (100 / total_steps)
         overall_progress = min(100, base_progress + step_contribution)
 
         TaskManager.update_task_progress(
@@ -298,8 +305,14 @@ class IngestTaskManager:
         task = TaskManager.get_task(task_id, "ingest")
         if task and task.get("total_items", 0) > 0:
             step_progress = min(100, (completed_items / task["total_items"]) * 100)
-            current_step = task.get("current_step", 3)  # Default to loading step
+            current_step = task.get(
+                "current_step", task.get("total_steps", 3)
+            )  # Default to loading step
             step_name = task.get("step_name", "loading")
             IngestTaskManager.update_step_progress(
-                task_id, current_step, step_name, step_progress
+                task_id,
+                current_step,
+                step_name,
+                step_progress,
+                task.get("total_steps", 3),
             )

@@ -532,14 +532,16 @@ async def load_file_to_db(
         if file_metadata.total_records:
             if file_type == "m3u":
                 total_records = file_metadata.total_records.channels or 0
+                total_steps = 3  # download, parse, load
             elif file_type == "epg":
                 # For EPG, use channels + programs
                 channels = file_metadata.total_records.channels or 0
                 programs = file_metadata.total_records.programs or 0
                 total_records = channels + programs
+                total_steps = 5  # download, parse channels, load channels, parse programs, load programs
 
         IngestTaskManager.create_ingest_task(
-            task_id, file_type, source_name, total_records
+            task_id, file_type, source_name, total_records, total_steps
         )
 
         # Start background task
@@ -572,45 +574,23 @@ async def background_load_task(
         # Start the task (Step 1: Download already completed)
         TaskManager.start_task(task_id, "ingest", "ingesting")
 
-        # Step 1: Download (already completed, set to 100%)
-        IngestTaskManager.update_step_progress(task_id, 1, "downloading", 100)
-        logger.info(f"Step 1/3: Download completed for task {task_id}")
-
-        # Step 2: Parsing
-        IngestTaskManager.update_step_progress(task_id, 2, "parsing", 0)
-        logger.info(f"Step 2/3: Starting parsing for task {task_id}")
-
         logger.info(
             f"Started background load task {task_id} for {file_type} file: {file_path}"
         )
-
-        # Step 2: Parsing completed, Step 3: Loading
-        IngestTaskManager.update_step_progress(task_id, 2, "parsing", 100)
-        IngestTaskManager.update_step_progress(task_id, 3, "loading", 0)
-        logger.info(f"Step 3/3: Starting database loading for task {task_id}")
-
-        # Count total items for accurate progress tracking
-        total_processed = 0
 
         # Load data using async generators with task tracking
         if file_type == "m3u":
             async for result in load_m3u_file_async(
                 session, file_path, source_name, task_id
             ):
-                total_processed += 1
                 if result.status == "error":
                     logger.warning(f"Load error in task {task_id}: {result.message}")
         elif file_type == "epg":
             async for result in load_epg_file_async(
                 session, file_path, source_name, task_id
             ):
-                total_processed += 1
                 if result.status == "error":
                     logger.warning(f"Load error in task {task_id}: {result.message}")
-
-        # Step 3: Loading completed
-        IngestTaskManager.update_step_progress(task_id, 3, "loading", 100)
-        logger.info(f"Step 3/3: Database loading completed for task {task_id}")
 
         # Precompute filter values for the affected tables
         if file_type == "m3u":
@@ -632,10 +612,10 @@ async def background_load_task(
         TaskManager.complete_task(
             task_id,
             "ingest",
-            f"Successfully loaded {total_processed} records from {source_name} {file_type} file",
+            f"Successfully loaded records from {source_name} {file_type} file",
         )
         logger.info(
-            f"Completed background load task {task_id}: {total_processed} records processed, filter values precomputed"
+            f"Completed background load task {task_id}: filter values precomputed"
         )
 
     except Exception as e:

@@ -1,4 +1,4 @@
-from typing import List
+from typing import List, Optional
 from models.models import EpgChannel, Program
 from lxml import etree
 from lxml.etree import _Element
@@ -6,6 +6,7 @@ import datetime as dt
 import logging
 from collections import defaultdict
 from common.utils import log_function
+from common.task_manager import IngestTaskManager
 
 # EPG are usually XML-based with a structure similar to:
 """
@@ -182,9 +183,14 @@ def validate_programme_element(programme_elem: _Element) -> str:
     return programme_id
 
 
-def parse_epg_for_channels(epg_file: str, source: str) -> List[EpgChannel]:
+def parse_epg_for_channels(
+    epg_file: str, source: str, task_id: Optional[str] = None
+) -> List[EpgChannel]:
     """Parse an EPG file  and return a list of Channel objects."""
     log_function(f"Parsing EPG file for channels: {epg_file}")
+
+    if task_id:
+        IngestTaskManager.update_step_progress(task_id, 2, "Parsing EPG channels", 0)
 
     # Parse the entire tree at once
     tree = etree.parse(epg_file)
@@ -237,9 +243,14 @@ def parse_epg_for_channels(epg_file: str, source: str) -> List[EpgChannel]:
     return channels
 
 
-def parse_epg_for_programs(epg_file: str, source: str) -> List[Program]:
+def parse_epg_for_programs(
+    epg_file: str, source: str, task_id: Optional[str] = None
+) -> List[Program]:
     """Parse an EPG file and return a list of Program objects."""
     log_function(f"Parsing EPG file for programs: {epg_file}")
+
+    if task_id:
+        IngestTaskManager.update_step_progress(task_id, 4, "Parsing EPG programs", 0)
 
     # Parse the entire tree at once
     tree = etree.parse(epg_file)

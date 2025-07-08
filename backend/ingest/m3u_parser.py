@@ -5,6 +5,7 @@ from collections import defaultdict
 import logging
 import re
 from fastapi import HTTPException, status
+from common.task_manager import TaskManager, IngestTaskManager
 
 """
 M3U are usually text-based with a structure similar to:
@@ -134,9 +135,14 @@ def validate_m3u_channel(
     )
 
 
-def parse_m3u(m3u_file: str, source: str = "m3u") -> List[M3uChannel]:
+def parse_m3u(
+    m3u_file: str, source: str = "m3u", task_id: Optional[str] = None
+) -> List[M3uChannel]:
     """Parse an M3U file and return a list of M3uChannel objects"""
     log_function(f"Parsing M3U file: {m3u_file}")
+
+    if task_id:
+        IngestTaskManager.update_step_progress(task_id, 2, "Parsing", 0)
 
     channels = []
     current_extinf_attrs = None
