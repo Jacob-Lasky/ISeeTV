@@ -54,7 +54,7 @@ def get_all_progress_response(task_type: Literal["download", "ingest"]):
 
 
 def format_download_progress_response(
-    progress_data: Dict[str, Dict]
+    progress_data: Dict[str, Dict],
 ) -> Dict[str, "DownloadProgress"]:
     """Format raw progress data into DownloadProgress models"""
     from models.models import DownloadProgress

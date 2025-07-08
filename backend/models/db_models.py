@@ -1,6 +1,5 @@
-"""
-SQLAlchemy database models for ISeeTV ETL pipeline.
- table definitions for EpgChannel, M3uChannel, and Program.
+"""SQLAlchemy database models for ISeeTV ETL pipeline.
+table definitions for EpgChannel, M3uChannel, and Program.
 """
 
 from sqlalchemy import Column, String, DateTime, Integer, Index

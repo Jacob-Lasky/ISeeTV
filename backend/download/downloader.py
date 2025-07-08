@@ -16,6 +16,7 @@ logger = logging.getLogger(__name__)
 
 #  download utility functions
 
+
 async def download_file_with_progress(
     url: str,
     filepath: str,
@@ -26,7 +27,9 @@ async def download_file_with_progress(
     """Download a single file with real-time progress tracking by bytes"""
     log_function(f"Downloading {item_name} from {url}: {task_id}")
     try:
-        DownloadTaskManager.update_download_progress(task_id, current_item=item_name, status="downloading")
+        DownloadTaskManager.update_download_progress(
+            task_id, current_item=item_name, status="downloading"
+        )
 
         # validate that the file exists
         if not await validate_url(url):
@@ -53,7 +56,9 @@ async def download_file_with_progress(
                 downloaded_size = 0
 
                 # Initialize total_bytes for this download
-                DownloadTaskManager.update_download_progress(task_id, total_bytes=total_size)
+                DownloadTaskManager.update_download_progress(
+                    task_id, total_bytes=total_size
+                )
 
                 with open(filepath, "wb") as f:
                     async for chunk in response.aiter_bytes(chunk_size=8192):
@@ -104,7 +109,7 @@ async def orchestrate_file_download_from_source(
     download_dir: str,
     task_id: Optional[str] = None,
 ) -> None:
-    """download function for any file type with optional progress tracking"""
+    """Download function for any file type with optional progress tracking"""
     log_function(f"Orchestrating download for {source_name} {download_type}: {task_id}")
     if download_type == "m3u":
         extension = "m3u"

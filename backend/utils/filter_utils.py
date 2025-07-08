@@ -1,5 +1,4 @@
-"""
-Utility functions for precomputing and managing filter values.
+"""Utility functions for precomputing and managing filter values.
 """
 
 from typing import Dict, List, Any
@@ -13,12 +12,12 @@ logger = logging.getLogger(__name__)
 
 
 def precompute_filter_values(session: Session, table_name: str) -> None:
-    """
-    Precompute unique values for filterable columns in a table.
+    """Precompute unique values for filterable columns in a table.
 
     Args:
         session: SQLAlchemy session
         table_name: Name of the table to process
+
     """
     log_function(f"Precomputing filter values for table: {table_name}")
     # Define filterable columns for each table
@@ -90,8 +89,7 @@ def precompute_filter_values(session: Session, table_name: str) -> None:
 def get_filter_values(
     session: Session, table_name: str, column_name: str
 ) -> List[Dict[str, Any]]:
-    """
-    Get precomputed filter values for a specific table and column.
+    """Get precomputed filter values for a specific table and column.
 
     Args:
         session: SQLAlchemy session
@@ -100,6 +98,7 @@ def get_filter_values(
 
     Returns:
         List of dictionaries with 'value' and 'count' keys
+
     """
     try:
         filter_values = (
@@ -121,8 +120,7 @@ def get_filter_values(
 def get_all_filter_values(
     session: Session, table_name: str
 ) -> Dict[str, List[Dict[str, Any]]]:
-    """
-    Get all precomputed filter values for a table.
+    """Get all precomputed filter values for a table.
 
     Args:
         session: SQLAlchemy session
@@ -130,6 +128,7 @@ def get_all_filter_values(
 
     Returns:
         Dictionary mapping column names to lists of filter values
+
     """
     try:
         filter_values = (

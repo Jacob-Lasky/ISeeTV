@@ -1,5 +1,4 @@
-"""
-Async EPG loader for ISeeTV ETL pipeline.
+"""Async EPG loader for ISeeTV ETL pipeline.
 , modular functions for loading EPG channels and programs into database.
 """
 
@@ -33,7 +32,7 @@ class LoadResult:
 
 
 def _upsert_epg_channel(session: Session, channel: EpgChannel) -> LoadResult:
-    """function to upsert a single EPG channel"""
+    """Function to upsert a single EPG channel"""
     try:
         stmt = insert(EpgChannelTable).values(
             source=channel.source,
@@ -78,7 +77,7 @@ def _upsert_epg_channel(session: Session, channel: EpgChannel) -> LoadResult:
 
 
 def _upsert_program(session: Session, program: Program) -> LoadResult:
-    """function to upsert a single program"""
+    """Function to upsert a single program"""
     try:
         stmt = insert(ProgramTable).values(
             source=program.source,

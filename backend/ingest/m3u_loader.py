@@ -1,5 +1,4 @@
-"""
-Async M3U loader for ISeeTV ETL pipeline.
+"""Async M3U loader for ISeeTV ETL pipeline.
 , modular functions for loading M3U channels into database.
 """
 
@@ -33,7 +32,7 @@ class LoadResult:
 
 
 def _upsert_m3u_channel(session: Session, channel: M3uChannel) -> LoadResult:
-    """function to upsert a single M3U channel"""
+    """Function to upsert a single M3U channel"""
     try:
         stmt = insert(M3uChannelTable).values(
             source=channel.source,

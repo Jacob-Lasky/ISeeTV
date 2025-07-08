@@ -140,14 +140,14 @@ validation_results = ValidationResults()
 
 
 def validate_root_element(root_elem: _Element) -> None:
-    """function to validate root <tv> element attributes"""
+    """Function to validate root <tv> element attributes"""
     for attr in root_elem.attrib.keys():
         if attr not in EXPECTED_ROOT_ATTRS:
             validation_results.unexpected_root_attrs.add(attr)
 
 
 def validate_channel_element(channel_elem: _Element) -> str:
-    """function to validate channel element structure and return channel_id"""
+    """Function to validate channel element structure and return channel_id"""
     channel_id = channel_elem.attrib.get("id", "Unknown")
 
     # Validate channel attributes
@@ -164,7 +164,7 @@ def validate_channel_element(channel_elem: _Element) -> str:
 
 
 def validate_programme_element(programme_elem: _Element) -> str:
-    """function to validate programme element structure and return programme_id"""
+    """Function to validate programme element structure and return programme_id"""
     programme_id = programme_elem.attrib.get("program-id") or programme_elem.attrib.get(
         "channel", "Unknown"
     )
@@ -183,7 +183,7 @@ def validate_programme_element(programme_elem: _Element) -> str:
 
 
 def parse_epg_for_channels(epg_file: str, source: str) -> List[EpgChannel]:
-    """parse an EPG file  and return a list of Channel objects."""
+    """Parse an EPG file  and return a list of Channel objects."""
     log_function(f"Parsing EPG file for channels: {epg_file}")
 
     # Parse the entire tree at once

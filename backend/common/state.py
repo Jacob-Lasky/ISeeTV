@@ -1,5 +1,4 @@
-"""
-This module provides a centralized location for global state that needs to be
+"""This module provides a centralized location for global state that needs to be
 accessed across multiple modules.
 """
 

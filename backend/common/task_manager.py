@@ -1,5 +1,4 @@
-"""
-Generalized task management system for ISeeTV following atomic design principles.
+"""Generalized task management system for ISeeTV following atomic design principles.
 Provides shared utilities for managing download and ingest tasks with DRY compliance.
 """
 
@@ -13,8 +12,7 @@ TASK_TYPES = Literal["download", "ingest"]
 
 
 class TaskManager:
-    """
-    Task management utilities for both download and ingest tasks.
+    """Task management utilities for both download and ingest tasks.
     """
 
     @staticmethod
@@ -24,14 +22,14 @@ class TaskManager:
         base_fields: Dict[str, Any],
         **additional_fields,
     ) -> None:
-        """
-        Create a new task with base fields and task-type-specific fields.
+        """Create a new task with base fields and task-type-specific fields.
 
         Args:
             task_id: Unique identifier for the task
             task_type: Type of task (download or ingest)
             base_fields: Common fields for all tasks
             **additional_fields: Task-type-specific fields
+
         """
         log_function(f"Creating {task_type} task {task_id}")
 
@@ -56,13 +54,13 @@ class TaskManager:
 
     @staticmethod
     def update_task_progress(task_id: str, task_type: TASK_TYPES, **kwargs) -> None:
-        """
-        Update task progress with automatic timestamp tracking.
+        """Update task progress with automatic timestamp tracking.
 
         Args:
             task_id: Task identifier
             task_type: Type of task
             **kwargs: Fields to update
+
         """
         progress = get_progress(task_type)
         if task_id in progress:
@@ -74,13 +72,13 @@ class TaskManager:
     def start_task(
         task_id: str, task_type: TASK_TYPES, status_name: Optional[str] = None
     ) -> None:
-        """
-        Mark task as started with appropriate status.
+        """Mark task as started with appropriate status.
 
         Args:
             task_id: Task identifier
             task_type: Type of task
             status_name: Custom status name (defaults to task_type + "ing")
+
         """
         status = status_name or f"{task_type}ing"
         log_function(f"Starting {task_type} task {task_id}")
@@ -96,13 +94,13 @@ class TaskManager:
     def complete_task(
         task_id: str, task_type: TASK_TYPES, message: Optional[str] = None
     ) -> None:
-        """
-        Mark task as completed successfully.
+        """Mark task as completed successfully.
 
         Args:
             task_id: Task identifier
             task_type: Type of task
             message: Optional completion message
+
         """
         log_function(f"Completing {task_type} task {task_id}")
 
@@ -118,13 +116,13 @@ class TaskManager:
 
     @staticmethod
     def fail_task(task_id: str, task_type: TASK_TYPES, error_message: str) -> None:
-        """
-        Mark task as failed with error message.
+        """Mark task as failed with error message.
 
         Args:
             task_id: Task identifier
             task_type: Type of task
             error_message: Error description
+
         """
         log_function(f"Failing {task_type} task {task_id}")
 
@@ -141,8 +139,7 @@ class TaskManager:
         task_id: str,
         task_type: TASK_TYPES,
     ) -> Optional[Dict[str, Any]]:
-        """
-        Get a specific task by ID and type.
+        """Get a specific task by ID and type.
 
         Args:
             task_id: Task identifier
@@ -150,6 +147,7 @@ class TaskManager:
 
         Returns:
             Task data dictionary or None if not found
+
         """
         progress = get_progress(task_type)
         return progress.get(task_id)
@@ -158,13 +156,13 @@ class TaskManager:
     def update_total_items(
         task_id: str, task_type: TASK_TYPES, total_items: int
     ) -> None:
-        """
-        Update the total_items count for a task after parsing determines actual count.
+        """Update the total_items count for a task after parsing determines actual count.
 
         Args:
             task_id: Task identifier
             task_type: Type of task
             total_items: Actual total number of items to process
+
         """
         log_function(
             f"Updating {task_type} task {task_id} total_items to {total_items}"
@@ -180,8 +178,7 @@ class TaskManager:
         completed_items: int,
         **additional_fields,
     ) -> None:
-        """
-        Update progress for a specific item in a task.
+        """Update progress for a specific item in a task.
 
         Args:
             task_id: Task identifier
@@ -189,6 +186,7 @@ class TaskManager:
             current_item: Description of current item being processed
             completed_items: Number of items completed
             **additional_fields: Additional fields to update
+
         """
         TaskManager.update_task_progress(
             task_id,
@@ -200,8 +198,7 @@ class TaskManager:
 
 
 class DownloadTaskManager:
-    """
-    Specialized task manager for download tasks with byte-level progress tracking.
+    """Specialized task manager for download tasks with byte-level progress tracking.
     Extends the base TaskManager with download-specific functionality.
     """
 
@@ -235,8 +232,7 @@ class DownloadTaskManager:
 
 
 class IngestTaskManager:
-    """
-    Specialized task manager for ingest tasks with multi-step progress tracking.
+    """Specialized task manager for ingest tasks with multi-step progress tracking.
     Extends the base TaskManager with ingest-specific functionality.
     """
 
