@@ -1,5 +1,5 @@
 import datetime as dt
-from typing import Literal, Dict
+from typing import Literal, Dict, List, Any, Optional
 import logging
 import inspect
 from fastapi import HTTPException, status
@@ -66,3 +66,19 @@ def format_download_progress_response(
 def format_ingest_progress_response(progress_data: Dict[str, Dict]) -> Dict[str, Dict]:
     """Format raw progress data for ingest endpoints (legacy format)"""
     return {"ingest": progress_data}
+
+
+def format_table_response(
+    records: List[Dict[str, Any]],
+    table_name: str,
+    source_filter: Optional[str] = None,
+) -> Dict[str, Any]:
+    return {
+        "success": True,
+        "data": {
+            "records": records,
+            "total": len(records),
+            "table_name": table_name,
+            "source_filter": source_filter,
+        },
+    }

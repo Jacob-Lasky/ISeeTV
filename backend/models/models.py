@@ -1,5 +1,5 @@
 from pydantic import BaseModel
-from typing import Optional, Literal, Dict
+from typing import Optional, Literal, Dict, List, Any
 import datetime as dt
 import logging
 
@@ -169,3 +169,15 @@ class Program(BaseModel):
     end_time: dt.datetime
     title: Optional[str]
     description: Optional[str]
+
+
+class TableData(BaseModel):
+    records: List[Dict[str, Any]]
+    total: int
+    table_name: str
+    source_filter: Optional[str] = None
+
+
+class TableResponse(BaseModel):
+    success: bool
+    data: TableData

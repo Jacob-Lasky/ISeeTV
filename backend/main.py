@@ -18,6 +18,7 @@ from models.models import (
     GlobalSettings,
     DownloadTaskResponse,
     DownloadAllTasksResponse,
+    TableResponse,
 )
 from download.downloader import (
     background_single_download_task,
@@ -29,6 +30,7 @@ from common.utils import (
     get_all_progress_response,
     format_download_progress_response,
     format_ingest_progress_response,
+    format_table_response,
 )
 from common.constants import DATA_PATH
 from ingest.epg_loader import load_epg_file_async
@@ -67,10 +69,13 @@ app = FastAPI(
     openapi_tags=[
         {"name": "Health", "description": "Health checks"},
         {"name": "Settings", "description": "Global app configuration"},
+        {"name": "Database", "description": "Manage the database"},
         {"name": "Sources", "description": "Manage IPTV sources (M3U, EPG, metadata)"},
-        {"name": "Download", "description": "Download operations"},
-        {"name": "Ingest", "description": "Ingest operations"},
-        {"name": "Database", "description": "Database operations"},
+        {"name": "Download", "description": "Download the M3U and EPG files"},
+        {
+            "name": "Ingest",
+            "description": "Parse the downloaded files and load into the database",
+        },
         {"name": "Scheduler", "description": "Refresh scheduling operations"},
         {"name": "Redirect", "description": "Redirect operations"},
     ],
@@ -649,20 +654,28 @@ async def background_load_task(
 
 @app.get(
     "/api/db/{table}/head",
-    response_model=List[Dict[str, Any]],
+    response_model=TableResponse,
     tags=["Database"],
     status_code=status.HTTP_200_OK,
 )
-async def get_db_table_head(table: str) -> Sequence[Row[Any]]:
+async def get_db_table_head(table: str) -> Dict[str, Any]:
     """Return the first 10 rows of a table"""
-    with SessionLocal() as session:
-        result = session.execute(text(f"SELECT * FROM {table} LIMIT 10"))
-        return result.fetchall()
+    try:
+        with SessionLocal() as session:
+            result = session.execute(text(f"SELECT * FROM {table} LIMIT 10"))
+            records = [dict(row._mapping) for row in result.fetchall()]
+            return format_table_response(records, table)
+    except Exception as e:
+        logger.error(f"Error fetching head of table {table}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch head of table: {str(e)}",
+        )
 
 
 @app.get(
     "/api/tables/{table_name}",
-    response_model=Dict[str, Any],
+    response_model=TableResponse,
     tags=["Database"],
     status_code=status.HTTP_200_OK,
 )
@@ -683,34 +696,20 @@ async def get_table_data(
         with SessionLocal() as session:
             # Build base query
             base_query = f"SELECT * FROM {table_name}"
-            count_query = f"SELECT COUNT(*) FROM {table_name}"
 
             # Add source filtering if provided
             params = {}
             if source:
                 base_query += " WHERE source = :source"
-                count_query += " WHERE source = :source"
                 params["source"] = source
 
             # Add ordering and pagination
             base_query += " ORDER BY id ASC"
 
-            # Execute queries
-            total_result = session.execute(text(count_query), params)
-            total_count = total_result.scalar()
-
             data_result = session.execute(text(base_query), params)
             records = [dict(row._mapping) for row in data_result]
 
-            return {
-                "success": True,
-                "data": {
-                    "records": records,
-                    "total": total_count,
-                    "table_name": table_name,
-                    "source_filter": source,
-                },
-            }
+            return format_table_response(records, table_name, source)
 
     except Exception as e:
         logger.error(f"Error fetching table data for {table_name}: {e}")
