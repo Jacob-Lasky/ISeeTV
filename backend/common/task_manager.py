@@ -9,22 +9,24 @@ from common.state import get_progress
 from common.utils import log_function
 
 
+TASK_TYPES = Literal["download", "ingest"]
+
+
 class TaskManager:
     """
-    Atomic task management utilities for both download and ingest tasks.
-    Follows single responsibility principle with pure functions where possible.
+    Task management utilities for both download and ingest tasks.
     """
 
     @staticmethod
     def create_task(
         task_id: str,
-        task_type: Literal["download", "ingest"],
+        task_type: TASK_TYPES,
         base_fields: Dict[str, Any],
-        **additional_fields
+        **additional_fields,
     ) -> None:
         """
         Create a new task with base fields and task-type-specific fields.
-        
+
         Args:
             task_id: Unique identifier for the task
             task_type: Type of task (download or ingest)
@@ -32,7 +34,7 @@ class TaskManager:
             **additional_fields: Task-type-specific fields
         """
         log_function(f"Creating {task_type} task {task_id}")
-        
+
         # Base task structure shared by all task types
         task_data = {
             "task_id": task_id,
@@ -45,22 +47,18 @@ class TaskManager:
             "completed_at": None,
             "updated_at": dt.datetime.now(dt.timezone.utc),
             **base_fields,
-            **additional_fields
+            **additional_fields,
         }
-        
+
         # Store in appropriate progress tracker
         progress = get_progress(task_type)
         progress[task_id] = task_data
 
     @staticmethod
-    def update_task_progress(
-        task_id: str,
-        task_type: Literal["download", "ingest"],
-        **kwargs
-    ) -> None:
+    def update_task_progress(task_id: str, task_type: TASK_TYPES, **kwargs) -> None:
         """
         Update task progress with automatic timestamp tracking.
-        
+
         Args:
             task_id: Task identifier
             task_type: Type of task
@@ -74,13 +72,11 @@ class TaskManager:
 
     @staticmethod
     def start_task(
-        task_id: str,
-        task_type: Literal["download", "ingest"],
-        status_name: Optional[str] = None
+        task_id: str, task_type: TASK_TYPES, status_name: Optional[str] = None
     ) -> None:
         """
         Mark task as started with appropriate status.
-        
+
         Args:
             task_id: Task identifier
             task_type: Type of task
@@ -88,76 +84,70 @@ class TaskManager:
         """
         status = status_name or f"{task_type}ing"
         log_function(f"Starting {task_type} task {task_id}")
-        
+
         TaskManager.update_task_progress(
             task_id,
             task_type,
             status=status,
-            started_at=dt.datetime.now(dt.timezone.utc)
+            started_at=dt.datetime.now(dt.timezone.utc),
         )
 
     @staticmethod
     def complete_task(
-        task_id: str,
-        task_type: Literal["download", "ingest"],
-        message: Optional[str] = None
+        task_id: str, task_type: TASK_TYPES, message: Optional[str] = None
     ) -> None:
         """
         Mark task as completed successfully.
-        
+
         Args:
             task_id: Task identifier
             task_type: Type of task
             message: Optional completion message
         """
         log_function(f"Completing {task_type} task {task_id}")
-        
+
         update_data = {
             "status": "completed",
-            "completed_at": dt.datetime.now(dt.timezone.utc)
+            "completed_at": dt.datetime.now(dt.timezone.utc),
         }
-        
+
         if message:
             update_data["current_item"] = message
-            
+
         TaskManager.update_task_progress(task_id, task_type, **update_data)
 
     @staticmethod
-    def fail_task(
-        task_id: str,
-        task_type: Literal["download", "ingest"],
-        error_message: str
-    ) -> None:
+    def fail_task(task_id: str, task_type: TASK_TYPES, error_message: str) -> None:
         """
         Mark task as failed with error message.
-        
+
         Args:
             task_id: Task identifier
             task_type: Type of task
             error_message: Error description
         """
         log_function(f"Failing {task_type} task {task_id}")
-        
+
         TaskManager.update_task_progress(
             task_id,
             task_type,
             status="failed",
             error_message=error_message,
-            completed_at=dt.datetime.now(dt.timezone.utc)
+            completed_at=dt.datetime.now(dt.timezone.utc),
         )
 
     @staticmethod
     def get_task(
         task_id: str,
-        task_type: Literal["download", "ingest"]
+        task_type: TASK_TYPES,
     ) -> Optional[Dict[str, Any]]:
         """
         Get a specific task by ID and type.
-        
+
         Args:
             task_id: Task identifier
             task_type: Type of task
-            
+
         Returns:
             Task data dictionary or None if not found
         """
@@ -165,30 +155,48 @@ class TaskManager:
         return progress.get(task_id)
 
     @staticmethod
-    def update_item_progress(
-        task_id: str,
-        task_type: Literal["download", "ingest"],
-        current_item: str,
-        completed_items: int,
-        **additional_fields
+    def update_total_items(
+        task_id: str, task_type: TASK_TYPES, total_items: int
     ) -> None:
         """
-        Update progress for a specific item in a task.
-        
+        Update the total_items count for a task after parsing determines actual count.
+
         Args:
             task_id: Task identifier
             task_type: Type of task
-            current_item: Name/description of current item being processed
-            completed_items: Number of items completed so far
-            **additional_fields: Task-type-specific fields to update
+            total_items: Actual total number of items to process
         """
-        update_data = {
-            "current_item": current_item,
-            "completed_items": completed_items,
-            **additional_fields
-        }
-        
-        TaskManager.update_task_progress(task_id, task_type, **update_data)
+        log_function(
+            f"Updating {task_type} task {task_id} total_items to {total_items}"
+        )
+
+        TaskManager.update_task_progress(task_id, task_type, total_items=total_items)
+
+    @staticmethod
+    def update_item_progress(
+        task_id: str,
+        task_type: TASK_TYPES,
+        current_item: str,
+        completed_items: int,
+        **additional_fields,
+    ) -> None:
+        """
+        Update progress for a specific item in a task.
+
+        Args:
+            task_id: Task identifier
+            task_type: Type of task
+            current_item: Description of current item being processed
+            completed_items: Number of items completed
+            **additional_fields: Additional fields to update
+        """
+        TaskManager.update_task_progress(
+            task_id,
+            task_type,
+            current_item=current_item,
+            completed_items=completed_items,
+            **additional_fields,
+        )
 
 
 class DownloadTaskManager:
@@ -205,19 +213,14 @@ class DownloadTaskManager:
             "total_bytes": 0,
             "file_type": None,
         }
-        
+
         # Use ISO format for download tasks (legacy compatibility)
         base_fields = {
             "total_items": total_items,
             "started_at": dt.datetime.now(dt.timezone.utc).isoformat(),
         }
-        
-        TaskManager.create_task(
-            task_id,
-            "download",
-            base_fields,
-            **download_fields
-        )
+
+        TaskManager.create_task(task_id, "download", base_fields, **download_fields)
 
     @staticmethod
     def update_download_progress(task_id: str, **kwargs) -> None:
@@ -227,7 +230,7 @@ class DownloadTaskManager:
             kwargs["completed_at"] = kwargs["completed_at"].isoformat()
         if "started_at" in kwargs and isinstance(kwargs["started_at"], dt.datetime):
             kwargs["started_at"] = kwargs["started_at"].isoformat()
-            
+
         TaskManager.update_task_progress(task_id, "download", **kwargs)
 
 
@@ -239,10 +242,7 @@ class IngestTaskManager:
 
     @staticmethod
     def create_ingest_task(
-        task_id: str,
-        file_type: str,
-        source_name: str,
-        total_items: int = 0
+        task_id: str, file_type: str, source_name: str, total_items: int = 0
     ) -> None:
         """Create a new ingest task with multi-step progress tracking."""
         ingest_fields = {
@@ -256,38 +256,30 @@ class IngestTaskManager:
             "step_progress": 0,  # Progress within current step (0-100)
             "overall_progress": 0,  # Overall progress across all steps (0-100)
         }
-        
+
         base_fields = {
             "total_items": total_items,
         }
-        
-        TaskManager.create_task(
-            task_id,
-            "ingest",
-            base_fields,
-            **ingest_fields
-        )
+
+        TaskManager.create_task(task_id, "ingest", base_fields, **ingest_fields)
 
     @staticmethod
     def update_step_progress(
-        task_id: str,
-        step: int,
-        step_name: str,
-        step_progress: int
+        task_id: str, step: int, step_name: str, step_progress: int
     ) -> None:
         """Update progress for current step in multi-step ingest process."""
         # Calculate overall progress (each step is 1/3 of total)
         base_progress = ((step - 1) / 3) * 100
         step_contribution = (step_progress / 100) * (100 / 3)
         overall_progress = min(100, base_progress + step_contribution)
-        
+
         TaskManager.update_task_progress(
             task_id,
             "ingest",
             current_step=step,
             step_name=step_name,
             step_progress=step_progress,
-            overall_progress=overall_progress
+            overall_progress=overall_progress,
         )
 
     @staticmethod
@@ -301,15 +293,11 @@ class IngestTaskManager:
         additional_fields = {}
         if current_phase:
             additional_fields["current_phase"] = current_phase
-        
+
         TaskManager.update_item_progress(
-            task_id,
-            "ingest",
-            current_item,
-            completed_items,
-            **additional_fields
+            task_id, "ingest", current_item, completed_items, **additional_fields
         )
-        
+
         # Update step progress if we have total items
         task = TaskManager.get_task(task_id, "ingest")
         if task and task.get("total_items", 0) > 0:

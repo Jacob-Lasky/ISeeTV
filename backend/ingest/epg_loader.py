@@ -12,7 +12,7 @@ from sqlalchemy.dialects.sqlite import insert
 from models.models import EpgChannel, Program
 from models.db_models import EpgChannelTable, ProgramTable
 from ingest.epg_parser import parse_epg_for_channels, parse_epg_for_programs
-from common.task_manager import IngestTaskManager
+from common.task_manager import IngestTaskManager, TaskManager
 
 logger = logging.getLogger(__name__)
 
@@ -146,6 +146,9 @@ async def load_epg_channels_async(
 
         # Update task progress if task_id provided
         if task_id:
+            # Update total_items with actual parsed count
+            TaskManager.update_total_items(task_id, "ingest", len(channels))
+
             IngestTaskManager.update_item_progress(
                 task_id, "Loading EPG channels...", 0, "channels"
             )
@@ -202,6 +205,9 @@ async def load_programs_async(
 
         # Update task progress if task_id provided
         if task_id:
+            # Update total_items with actual parsed count
+            TaskManager.update_total_items(task_id, "ingest", len(programs))
+
             IngestTaskManager.update_item_progress(
                 task_id, "Loading programs...", 0, "programs"
             )

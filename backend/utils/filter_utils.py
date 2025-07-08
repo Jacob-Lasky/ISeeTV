@@ -43,13 +43,14 @@ def precompute_filter_values(session: Session, table_name: str) -> None:
     for column_name in filterable_columns[table_name]:
         try:
             # Query unique values and their counts
+            # Escape column names with backticks to handle reserved keywords like 'group'
             query = text(
                 f"""
-                SELECT {column_name} as value, COUNT(*) as count
+                SELECT `{column_name}` as value, COUNT(*) as count
                 FROM {table_name}
-                WHERE {column_name} IS NOT NULL AND {column_name} != ''
-                GROUP BY {column_name}
-                ORDER BY {column_name}
+                WHERE `{column_name}` IS NOT NULL AND `{column_name}` != ''
+                GROUP BY `{column_name}`
+                ORDER BY `{column_name}`
             """
             )
 

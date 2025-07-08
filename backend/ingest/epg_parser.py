@@ -227,9 +227,9 @@ def parse_epg_for_channels(epg_file: str, source: str) -> List[EpgChannel]:
                 )
             )
         except ValueError as e:
-            logger.warning(f"[parse_channels] Skipping invalid channel: {e}")
+            log_function(f"Skipping invalid channel: {e}", level="warning")
         except Exception as e:
-            logger.error(f"[parse_channels] Unexpected error parsing channel: {e}")
+            log_function(f"Unexpected error parsing channel: {e}", level="error")
 
     # Log validation results
     validation_results.log_results("Channel Parsing")
@@ -284,8 +284,9 @@ def parse_epg_for_programs(epg_file: str, source: str) -> List[Program]:
             # Generate program_id from channel and start time if not provided
             program_id = f"{channel_id}_{start_time}"
 
-            start_time = dt.datetime.fromisoformat(start_time)
-            end_time = dt.datetime.fromisoformat(end_time)
+            # parse timestamps in formats: 1751953500
+            start_time = dt.datetime.fromtimestamp(int(start_time))
+            end_time = dt.datetime.fromtimestamp(int(end_time))
 
             programs.append(
                 Program(
@@ -299,9 +300,9 @@ def parse_epg_for_programs(epg_file: str, source: str) -> List[Program]:
                 )
             )
         except ValueError as e:
-            logger.warning(f"[parse_programs] Skipping invalid programme: {e}")
+            log_function(f"Skipping invalid programme: {e}", level="warning")
         except Exception as e:
-            logger.error(f"[parse_programs] Unexpected error parsing programme: {e}")
+            log_function(f"Unexpected error parsing programme: {e}", level="error")
 
     # Log validation results
     validation_results.log_results("Programme Parsing")

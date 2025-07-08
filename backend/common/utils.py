@@ -4,6 +4,7 @@ import logging
 import inspect
 from fastapi import HTTPException, status
 from common.state import get_progress
+import datetime as dt
 
 logger = logging.getLogger(__name__)
 
@@ -24,14 +25,16 @@ def log_function(
     level: Literal["debug", "info", "warning", "error"] = "info",
 ):
     func_name = inspect.currentframe().f_back.f_code.co_name  # type: ignore
+    timestamp = dt.datetime.now().strftime("%Y-%m-%d %H:%M:%S:%f")
+    log_message = f"{timestamp} \t [{func_name}]: {message}"
     if level == "debug":
-        logger.debug(f"\t [{func_name}] {message}")
+        logger.debug(log_message)
     elif level == "info":
-        logger.info(f"\t [{func_name}] {message}")
+        logger.info(log_message)
     elif level == "warning":
-        logger.warning(f"\t [{func_name}] {message}")
+        logger.warning(log_message)
     elif level == "error":
-        logger.error(f"\t [{func_name}] {message}")
+        logger.error(log_message)
 
 
 def get_progress_response(task_id: str, task_type: Literal["download", "ingest"]):
@@ -50,9 +53,12 @@ def get_all_progress_response(task_type: Literal["download", "ingest"]):
     return get_progress(task_type)
 
 
-def format_download_progress_response(progress_data: Dict[str, Dict]) -> Dict[str, "DownloadProgress"]:
+def format_download_progress_response(
+    progress_data: Dict[str, Dict]
+) -> Dict[str, "DownloadProgress"]:
     """Format raw progress data into DownloadProgress models"""
     from models.models import DownloadProgress
+
     return {
         task_id: DownloadProgress(**progress)
         for task_id, progress in progress_data.items()

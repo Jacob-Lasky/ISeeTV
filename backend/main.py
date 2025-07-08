@@ -23,7 +23,6 @@ from download.downloader import (
     background_single_download_task,
 )
 from common.task_manager import DownloadTaskManager
-from common.state import get_progress
 from common.utils import (
     create_task_id,
     get_progress_response,
@@ -218,7 +217,7 @@ async def get_ingest_progress_by_id(task_id: str) -> IngestProgress:
 @app.get(
     "/api/ingest/progress",
     response_model=Dict[str, Dict],
-    tags=["Database"],
+    tags=["Ingest"],
     status_code=status.HTTP_200_OK,
 )
 async def get_ingest_progress() -> Dict[str, Dict]:
@@ -539,7 +538,9 @@ async def load_file_to_db(
                 programs = file_metadata.total_records.programs or 0
                 total_records = channels + programs
 
-        IngestTaskManager.create_ingest_task(task_id, file_type, source_name, total_records)
+        IngestTaskManager.create_ingest_task(
+            task_id, file_type, source_name, total_records
+        )
 
         # Start background task
         asyncio.create_task(
