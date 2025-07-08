@@ -222,7 +222,7 @@ async def get_ingest_progress_by_id(task_id: str) -> IngestProgress:
 )
 async def get_ingest_progress() -> Dict[str, Dict]:
     """Get all ingest progress"""
-    log_function("Getting ingest progress")
+    log_function("Getting ingest progress", level="debug")
     progress_data = get_all_progress_response("ingest")
     return format_ingest_progress_response(progress_data)
 
