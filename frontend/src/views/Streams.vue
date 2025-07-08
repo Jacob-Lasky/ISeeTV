@@ -1,6 +1,6 @@
 <template>
     <div>
-        <h1>Channels</h1>
+        <h1>Streams</h1>
     </div>
 </template>
 

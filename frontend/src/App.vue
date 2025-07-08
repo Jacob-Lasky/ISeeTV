@@ -110,10 +110,10 @@ const menuItems = [
         },
     },
     {
-        label: "Channels",
+        label: "Streams",
         icon: "pi pi-list",
         command: () => {
-            router.push("/channels")
+            router.push("/streams")
             drawerVisible.value = false
         },
     },
