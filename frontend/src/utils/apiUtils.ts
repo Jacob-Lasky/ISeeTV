@@ -130,3 +130,11 @@ export function apiPost<T = ApiMessage>(
         apiOptions
     )
 }
+
+export function apiDelete<T = ApiMessage>(
+    url: string,
+    showLoadingToast?: boolean,
+    apiOptions?: ApiOptions
+): Promise<T> {
+    return apiFetch<T>(url, { method: "DELETE" }, showLoadingToast, apiOptions)
+}

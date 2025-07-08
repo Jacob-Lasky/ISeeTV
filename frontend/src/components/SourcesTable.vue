@@ -536,7 +536,7 @@
             :closeOnEscape="true"
             class="source-dialog"
         >
-            <form @submit.prevent="saveSource">
+            <form @submit.prevent="saveSourceAndUpdateScheduler">
                 <div class="form-grid">
                     <div class="form-row">
                         <label>Name:</label>
@@ -620,7 +620,7 @@
                         label="Save"
                         icon="pi pi-check"
                         severity="success"
-                        @click="saveSource"
+                        @click="saveSourceAndUpdateScheduler"
                     />
                 </div>
             </template>
@@ -681,7 +681,7 @@ import DatePicker from "primevue/datepicker"
 import Skeleton from "primevue/skeleton"
 import ProgressBar from "primevue/progressbar"
 import { useToast } from "primevue/usetoast"
-import { apiGet, apiPost } from "@/utils/apiUtils"
+import { apiGet, apiPost, apiDelete } from "@/utils/apiUtils"
 import type {
     FileMetadata,
     Source,
@@ -1741,6 +1741,35 @@ function deleteSource(sourceId: string) {
     showDeleteDialog.value = true
 }
 
+function updateScheduler(source: Source) {
+    apiPost(`/api/scheduler/update/${source.name}`, null, true, {
+        successMessage: "Scheduler updated successfully",
+        errorPrefix: "Failed to update scheduler",
+    })
+}
+
+async function saveSourceAndUpdateScheduler() {
+    try {
+        await saveSource()
+
+        const source = isEditMode.value
+            ? sources.value.find(
+                  (s) =>
+                      `source-${sources.value.indexOf(s)}-${s.name}` ===
+                      editingSourceId.value
+              )
+            : sources.value[sources.value.length - 1] // Get newly added source
+
+        if (source) {
+            await updateScheduler(source)
+        }
+    } catch (err) {
+        error.value = `Failed to save and update scheduler: ${
+            err instanceof Error ? err.message : String(err)
+        }`
+    }
+}
+
 // Modal and form state
 const showSourceModal = ref(false)
 const showDeleteDialog = ref(false)
@@ -1767,6 +1796,7 @@ const DEFAULT_SOURCE_FORM = {
     enabled: true,
     connections: 1,
     refreshHours: 24,
+    refreshTime: "00:00",
     timezone: "UTC",
     subscriptionExpires: null as string | null,
     m3uUrl: "",
@@ -1928,11 +1958,17 @@ const confirmDelete = async () => {
         if (sourceIndex === -1) return
 
         const updated = [...sources.value]
+        const sourceName = updated[sourceIndex].name
         updated.splice(sourceIndex, 1)
 
         await apiPost("/api/sources", updated, true, {
             successMessage: "Source deleted successfully",
             errorPrefix: "Failed to delete source",
+        })
+
+        await apiDelete(`/api/scheduler/delete/${sourceName}`, null, true, {
+            successMessage: "Scheduler deleted successfully",
+            errorPrefix: "Failed to delete scheduler",
         })
 
         sources.value = updated

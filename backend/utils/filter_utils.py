@@ -1,5 +1,4 @@
-"""Utility functions for precomputing and managing filter values.
-"""
+"""Utility functions for precomputing and managing filter values."""
 
 from typing import Dict, List, Any
 from sqlalchemy.orm import Session

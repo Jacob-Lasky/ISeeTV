@@ -47,6 +47,16 @@ from scheduler.scheduler_integration import (
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
+
+class SuppressIngestProgressFilter(logging.Filter):
+    def filter(self, record):
+        return "/api/ingest/progress" not in record.getMessage()
+
+
+# Apply filter to Uvicorn's access logger
+uvicorn_access_logger = logging.getLogger("uvicorn.access")
+uvicorn_access_logger.addFilter(SuppressIngestProgressFilter())
+
 app = FastAPI(
     title="ISeeTV API",
     description="An IPTV Pipeline Platform",
@@ -784,6 +794,7 @@ async def get_table_filter_values(table_name: str) -> Dict[str, Any]:
 
 # Scheduler API Endpoints
 
+
 @app.get(
     "/api/scheduler/status",
     response_model=Dict[str, Any],
@@ -871,29 +882,28 @@ async def update_source_schedule(
     """Update schedule for a specific source"""
     log_function(f"Updating schedule for source: {source_name}")
     try:
+        scheduler_manager = get_scheduler_manager()
         # Load sources configuration
         with open(sources_file, "r") as f:
             sources = [Source(**source) for source in json.load(f)]
-        
+
         # Find the source
         source = next(
             (source for source in sources if source.name == source_name), None
         )
-        if not source:
-            raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Source '{source_name}' not found",
-            )
-        
-        # Update the schedule
-        scheduler_manager = get_scheduler_manager()
-        scheduler_manager.update_source_schedule(source)
-        
+        if source:
+            log_function("updating sources")
+            scheduler_manager.update_source_schedule(source)
+        else:
+            log_function(f"deleting source: {source_name}")
+            # source not found, remove existing jobs
+            delete_source_schedule(source_name)
+
         return {
             "message": f"Schedule updated for source {source_name}",
             "source_name": source_name,
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -901,6 +911,33 @@ async def update_source_schedule(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to update schedule: {str(e)}",
+        )
+
+
+@app.delete(
+    "/api/scheduler/delete/{source_name}",
+    response_model=Dict[str, str],
+    tags=["Scheduler"],
+    status_code=status.HTTP_200_OK,
+)
+async def delete_source_schedule(source_name: str) -> Dict[str, str]:
+    """Delete/remove schedule for a specific source"""
+    log_function(f"Deleting schedule for source: {source_name}")
+    try:
+        scheduler_manager = get_scheduler_manager()
+        if scheduler_manager.scheduler:
+            scheduler_manager.scheduler.remove_source_jobs(source_name)
+
+        return {
+            "message": f"Schedule deleted for source {source_name}",
+            "source_name": source_name,
+        }
+
+    except Exception as e:
+        logger.error(f"Error deleting schedule for {source_name}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to delete schedule: {str(e)}",
         )
 
 
@@ -919,18 +956,18 @@ async def validate_scheduler_config(
         # Load sources configuration
         with open(sources_file, "r") as f:
             sources = [Source(**source) for source in json.load(f)]
-        
+
         # Validate and get results
         scheduler_manager = get_scheduler_manager()
         results = scheduler_manager.validate_and_schedule_sources(sources)
-        
+
         return {
             "success": True,
             "validation_results": results,
             "total_sources": len(sources),
             "enabled_sources": len([s for s in sources if s.enabled]),
         }
-        
+
     except Exception as e:
         logger.error(f"Error validating scheduler configuration: {e}")
         raise HTTPException(
@@ -940,6 +977,7 @@ async def validate_scheduler_config(
 
 
 # Application event handlers
+
 
 @app.on_event("startup")
 async def startup_event():

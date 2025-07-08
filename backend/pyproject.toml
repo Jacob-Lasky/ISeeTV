@@ -23,7 +23,13 @@ dependencies = [
 package-mode = false
 
 [tool.ruff]
-select = ["D"]
+lint.select = ["D"]
+
+# Disable conflicting docstring rules
+lint.ignore = [
+  "D203",  # conflict with formatter: prefers no blank line before class docstring
+  "D213",  # ignore 'multi-line-summary-second-line'
+]
 
 [tool.poetry.group.dev.dependencies]
 pytest = "^8.4.1"
