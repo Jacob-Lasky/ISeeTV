@@ -2,38 +2,6 @@
     <div class="streams-table">
         <!-- Header with Search and Filters -->
         <div class="table-header">
-            <div class="header-left">
-                <div class="filter-group">
-                    <label for="source-filter">Source:</label>
-                    <Select
-                        id="source-filter"
-                        v-model="selectedSource"
-                        :options="sourceOptions"
-                        optionLabel="label"
-                        optionValue="value"
-                        placeholder="All Sources"
-                        showClear
-                        class="filter-select"
-                        @change="onSourceFilterChange"
-                    />
-                </div>
-
-                <div class="filter-group">
-                    <label for="group-filter">Group:</label>
-                    <Select
-                        id="group-filter"
-                        v-model="selectedGroup"
-                        :options="groupOptions"
-                        optionLabel="label"
-                        optionValue="value"
-                        placeholder="All Groups"
-                        showClear
-                        class="filter-select"
-                        @change="onGroupFilterChange"
-                    />
-                </div>
-            </div>
-
             <div class="header-right">
                 <div class="search-group">
                     <label for="global-search">Search:</label>
@@ -170,6 +138,7 @@
         <!-- Data Table -->
         <DataTable
             v-else
+            v-model:filters="filters"
             :value="streams"
             :lazy="true"
             :paginator="true"
@@ -180,22 +149,41 @@
             :sortField="sortField"
             :sortOrder="sortOrder === 'asc' ? 1 : -1"
             responsiveLayout="scroll"
-            showGridlines
             dataKey="m3u_id"
             scrollable
             scrollHeight="calc(100vh - 320px)"
+            striped-rows
             paginatorTemplate="RowsPerPageDropdown FirstPageLink PrevPageLink CurrentPageReport NextPageLink LastPageLink"
             currentPageReportTemplate="{first} to {last} of {totalRecords}"
+            filterDisplay="row"
+            :globalFilterFields="globalFilterFields"
+            class="streams-datatable"
             @page="onPageChange"
             @sort="onSort"
-            class="streams-datatable"
+            @filter="onFilter"
         >
+            <template #header>
+                <div class="flex justify-end">
+                    <IconField>
+                        <InputIcon>
+                            <i class="pi pi-search" />
+                        </InputIcon>
+                        <InputText
+                            v-model="filters['global'].value"
+                            placeholder="Search all columns..."
+                            class="w-80"
+                        />
+                    </IconField>
+                </div>
+            </template>
+
             <!-- Channel Name Column -->
             <Column
                 field="name"
                 header="Channel Name"
                 :sortable="true"
                 style="min-width: 200px"
+                :filterField="'name'"
             >
                 <template #body="{ data }">
                     <div class="channel-name-cell">
@@ -220,6 +208,15 @@
                         </div>
                     </div>
                 </template>
+                <template #filter="{ filterModel, filterCallback }">
+                    <InputText
+                        v-model="filterModel.value"
+                        type="text"
+                        placeholder="Search channel name..."
+                        class="w-full"
+                        @input="filterCallback()"
+                    />
+                </template>
             </Column>
 
             <!-- TVG ID Column -->
@@ -228,9 +225,19 @@
                 header="TVG ID"
                 :sortable="true"
                 style="min-width: 150px"
+                :filterField="'tvg_id'"
             >
                 <template #body="{ data }">
                     <code class="tvg-id">{{ data.tvg_id }}</code>
+                </template>
+                <template #filter="{ filterModel, filterCallback }">
+                    <InputText
+                        v-model="filterModel.value"
+                        type="text"
+                        placeholder="Search TVG ID..."
+                        class="w-full"
+                        @input="filterCallback()"
+                    />
                 </template>
             </Column>
 
@@ -240,9 +247,20 @@
                 header="Source"
                 :sortable="true"
                 style="min-width: 120px"
+                :filterField="'source'"
             >
                 <template #body="{ data }">
                     <Tag :value="data.source" severity="info" />
+                </template>
+                <template #filter="{ filterModel, filterCallback }">
+                    <Select
+                        v-model="filterModel.value"
+                        :options="sourceFilterOptions"
+                        placeholder="All Sources"
+                        class="w-full"
+                        :show-clear="true"
+                        @change="filterCallback()"
+                    />
                 </template>
             </Column>
 
@@ -252,6 +270,7 @@
                 header="Group"
                 :sortable="true"
                 style="min-width: 150px"
+                :filterField="'group'"
             >
                 <template #body="{ data }">
                     <Tag
@@ -260,6 +279,16 @@
                         severity="secondary"
                     />
                     <span v-else class="no-group">—</span>
+                </template>
+                <template #filter="{ filterModel, filterCallback }">
+                    <Select
+                        v-model="filterModel.value"
+                        :options="groupFilterOptions"
+                        placeholder="All Groups"
+                        class="w-full"
+                        :show-clear="true"
+                        @change="filterCallback()"
+                    />
                 </template>
             </Column>
 
@@ -354,6 +383,7 @@
 import { ref, computed, onMounted, watch } from "vue"
 import { useRouter } from "vue-router"
 import { useToast } from "primevue/usetoast"
+import { FilterMatchMode } from "@primevue/core/api"
 import DataTable from "primevue/datatable"
 import Column from "primevue/column"
 import Button from "primevue/button"
@@ -363,6 +393,8 @@ import Tag from "primevue/tag"
 import Badge from "primevue/badge"
 import ProgressSpinner from "primevue/progressspinner"
 import Skeleton from "primevue/skeleton"
+import IconField from "primevue/iconfield"
+import InputIcon from "primevue/inputicon"
 import type { StreamChannel, StreamsResponse, FilterValue } from "@/types/types"
 
 // Composables
@@ -381,9 +413,23 @@ const globalFilter = ref("")
 const selectedSource = ref<string | null>(null)
 const selectedGroup = ref<string | null>(null)
 
-// Filter options
+// Filter options (for header dropdowns)
 const sourceOptions = ref<{ label: string; value: string }[]>([])
 const groupOptions = ref<{ label: string; value: string }[]>([])
+
+// Column filter options (for DataTable column filters)
+const sourceFilterOptions = ref<string[]>([])
+const groupFilterOptions = ref<string[]>([])
+
+// PrimeVue DataTable filters
+const filters = ref({
+    global: { value: null, matchMode: FilterMatchMode.CONTAINS },
+    name: { value: null, matchMode: FilterMatchMode.CONTAINS },
+    tvg_id: { value: null, matchMode: FilterMatchMode.CONTAINS },
+    source: { value: null, matchMode: FilterMatchMode.CONTAINS },
+    group: { value: null, matchMode: FilterMatchMode.CONTAINS },
+})
+const globalFilterFields = ref<string[]>(["name", "tvg_id", "source", "group"])
 
 // Skeleton data for loading state (15 empty rows)
 const skeletonData = ref(new Array(15).fill({}))
@@ -443,8 +489,26 @@ const loadStreams = async (resetPage = false): Promise<void> => {
             currentPage.value = data.page
 
             // Update filter options if available
-            if (data.filters) {
+            if (data.filters && Object.keys(data.filters).length > 0) {
+                console.log('API response filters:', data.filters)
                 updateFilterOptions(data.filters)
+            } else {
+                console.log('No filters in API response, attempting to precompute...')
+                try {
+                    await precomputeFilterValues()
+                    // Reload streams data after precomputing filters
+                    const retryResponse = await fetch(buildApiUrl())
+                    if (retryResponse.ok) {
+                        const retryData: StreamsResponse = await retryResponse.json()
+                        if (retryData.success && retryData.filters) {
+                            console.log('Retry API response filters:', retryData.filters)
+                            updateFilterOptions(retryData.filters)
+                        }
+                    }
+                } catch (error) {
+                    console.error('Failed to precompute filter values:', error)
+                    // Continue without filters - the table will still work
+                }
             }
         } else {
             throw new Error("API returned success: false")
@@ -465,19 +529,68 @@ const loadStreams = async (resetPage = false): Promise<void> => {
 }
 
 const updateFilterOptions = (filters: Record<string, FilterValue[]>): void => {
+    console.log('Updating filter options with:', filters)
+    
     if (filters.source) {
+        // Update header dropdown options
         sourceOptions.value = filters.source.map((f) => ({
             label: `${f.value} (${f.count})`,
             value: f.value,
         }))
+
+        // Update column filter options
+        sourceFilterOptions.value = filters.source.map((f) => f.value)
+        console.log('Updated sourceFilterOptions:', sourceFilterOptions.value)
     }
 
     if (filters.group) {
+        // Update header dropdown options
         groupOptions.value = filters.group.map((f) => ({
             label: `${f.value} (${f.count})`,
             value: f.value,
         }))
+
+        // Update column filter options
+        groupFilterOptions.value = filters.group.map((f) => f.value)
+        console.log('Updated groupFilterOptions:', groupFilterOptions.value)
+    } else {
+        console.log('No group filters found in API response')
     }
+}
+
+const precomputeFilterValues = async (): Promise<void> => {
+    try {
+        console.log('Precomputing streams filter values...')
+        const response = await fetch('/api/streams/precompute-filters', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+        })
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        }
+        
+        const result = await response.json()
+        console.log('Filter values precomputed successfully:', result)
+    } catch (error) {
+        console.error('Error precomputing filter values:', error)
+        throw error
+    }
+}
+
+// Initialize PrimeVue DataTable filters (now done at initialization)
+const initializeFilters = (): void => {
+    // Filters are now initialized immediately in the ref declaration
+    // This function is kept for potential future use
+}
+
+// Handle DataTable filter events
+const onFilter = (event: any): void => {
+    // The DataTable handles client-side filtering automatically
+    // We can add custom logic here if needed
+    console.log("Filter event:", event)
 }
 
 const formatDateTime = (dateString: string): string => {

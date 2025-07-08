@@ -7,6 +7,7 @@ import { useThemeStore } from "./stores/themeStore"
 import PrimeVue from "primevue/config"
 import Aura from "@primeuix/themes/aura"
 import { ConfirmationService, ToastService } from "primevue"
+import Tooltip from "primevue/tooltip"
 
 import "primeicons/primeicons.css"
 import "./assets/theme.css"
@@ -33,6 +34,9 @@ app.use(PrimeVue, {
 })
 app.use(ConfirmationService)
 app.use(ToastService)
+
+// Register tooltip directive
+app.directive('tooltip', Tooltip)
 
 app.mount("#app")
 
