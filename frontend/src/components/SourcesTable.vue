@@ -685,6 +685,7 @@ import type {
     DownloadTaskResponse,
     DownloadAllTasksResponse,
     DownloadProgress,
+    IngestProgress,
 } from "@/types/types"
 import { timezoneOptions } from "@/utils/timezones"
 import { getFileTypeIcon } from "@/utils/fileUtils"

@@ -30,6 +30,7 @@ module.exports = [
                 parser: require("@typescript-eslint/parser"),
                 ecmaVersion: 2021,
                 sourceType: "module",
+                project: "./tsconfig.eslint.json",
                 extraFileExtensions: [".vue"],
             },
         },
@@ -43,6 +44,9 @@ module.exports = [
             ...tsRecommended.rules,
             ...prettierRecommended.rules,
             "prettier/prettier": "error",
+            "@typescript-eslint/no-unsafe-member-access": "error",
+            "@typescript-eslint/no-unsafe-assignment": "warn",
+            "@typescript-eslint/no-unsafe-call": "warn",
         },
     },
 
