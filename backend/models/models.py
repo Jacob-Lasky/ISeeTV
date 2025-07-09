@@ -135,6 +135,7 @@ class EpgChannel(BaseModel):
     channel_id: str
     display_name: str
     icon_url: Optional[str]
+    filter_reason: Optional[str] = None  # Reason for filtering (blacklist/whitelist)
 
 
 class M3uChannel(BaseModel):
@@ -146,6 +147,7 @@ class M3uChannel(BaseModel):
     stream_url: str
     logo_url: Optional[str]
     group: Optional[str]
+    filter_reason: Optional[str] = None  # Reason for filtering (blacklist/whitelist)
 
 
 class Channel(BaseModel):
@@ -170,6 +172,7 @@ class Program(BaseModel):
     end_time: dt.datetime
     title: Optional[str]
     description: Optional[str]
+    filter_reason: Optional[str] = None  # Reason for filtering (blacklist/whitelist)
 
 
 class TableData(BaseModel):

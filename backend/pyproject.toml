@@ -24,7 +24,7 @@ dependencies = [
 package-mode = false
 
 [tool.ruff]
-lint.select = ["D"]
+lint.select = ["D", "DOC", "E", "F", "FAST", "FLY", "I", "N", "UP"]
 
 # Disable conflicting docstring rules
 lint.ignore = [

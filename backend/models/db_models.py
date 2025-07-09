@@ -17,6 +17,7 @@ class EpgChannelTable(Base):
     channel_id = Column(String, nullable=False)
     display_name = Column(String, nullable=False)
     icon_url = Column(String, nullable=True)
+    filter_reason = Column(String, nullable=True)  # Reason for filtering (blacklist/whitelist)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -39,6 +40,7 @@ class M3uChannelTable(Base):
     stream_url = Column(String, nullable=False)
     logo_url = Column(String, nullable=True)
     group = Column(String, nullable=True)
+    filter_reason = Column(String, nullable=True)  # Reason for filtering (blacklist/whitelist)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -63,6 +65,7 @@ class ProgramTable(Base):
     end_time = Column(DateTime, nullable=False)
     title = Column(String, nullable=True)
     description = Column(String, nullable=True)
+    filter_reason = Column(String, nullable=True)  # Reason for filtering (blacklist/whitelist)
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 

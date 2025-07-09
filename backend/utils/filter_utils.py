@@ -30,7 +30,7 @@ def precompute_filter_values(session: Session, table_name: str) -> None:
         logger.warning(f"No filterable columns defined for table: {table_name}")
         return
 
-    logger.info(f"Precomputing filter values for table: {table_name}")
+    log_function(f"Precomputing filter values for table: {table_name}")
 
     # Clear existing filter values for this table
     session.query(FilterValueTable).filter(
@@ -68,7 +68,7 @@ def precompute_filter_values(session: Session, table_name: str) -> None:
 
             if filter_values:
                 session.add_all(filter_values)
-                logger.info(
+                log_function(
                     f"Added {len(filter_values)} unique values for {table_name}.{column_name}"
                 )
             else:
@@ -82,7 +82,7 @@ def precompute_filter_values(session: Session, table_name: str) -> None:
 
     # Commit the changes
     session.commit()
-    logger.info(f"Successfully precomputed filter values for table: {table_name}")
+    log_function(f"Successfully precomputed filter values for table: {table_name}")
 
 
 def get_filter_values(

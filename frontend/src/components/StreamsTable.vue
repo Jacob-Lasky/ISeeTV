@@ -275,6 +275,38 @@
                 </template>
             </Column>
 
+            <!-- Filter Reason Column -->
+            <Column
+                field="filter_reason"
+                header="Filter Status"
+                :sortable="true"
+                style="min-width: 200px"
+                :filterField="'filter_reason'"
+            >
+                <template #body="{ data }">
+                    <div v-if="data.filter_reason" class="filter-reason">
+                        <Tag
+                            :value="data.filter_reason.includes('Blacklisted') ? 'Filtered' : 'Not Whitelisted'"
+                            :severity="data.filter_reason.includes('Blacklisted') ? 'danger' : 'warn'"
+                        />
+                        <div class="filter-detail" v-tooltip="data.filter_reason">
+                            {{ data.filter_reason.length > 50 ? data.filter_reason.substring(0, 50) + '...' : data.filter_reason }}
+                        </div>
+                    </div>
+                    <Tag v-else value="Active" severity="success" />
+                </template>
+                <template #filter="{ filterModel, filterCallback }">
+                    <Select
+                        v-model="filterModel.value"
+                        :options="filterStatusOptions"
+                        placeholder="All Status"
+                        class="w-full"
+                        :show-clear="true"
+                        @change="filterCallback()"
+                    />
+                </template>
+            </Column>
+
             <!-- Program Count Column -->
             <Column
                 field="program_count"
@@ -403,6 +435,11 @@ const groupOptions = ref<{ label: string; value: string }[]>([])
 // Column filter options (for DataTable column filters)
 const sourceFilterOptions = ref<string[]>([])
 const groupFilterOptions = ref<string[]>([])
+const filterStatusOptions = ref<{ label: string; value: string }[]>([
+    { label: 'Active', value: 'null' },
+    { label: 'Filtered', value: 'filtered' },
+    { label: 'Not Whitelisted', value: 'not_whitelisted' }
+])
 
 // PrimeVue DataTable filters
 const filters = ref({
@@ -411,8 +448,9 @@ const filters = ref({
     tvg_id: { value: null, matchMode: FilterMatchMode.CONTAINS },
     source: { value: null, matchMode: FilterMatchMode.CONTAINS },
     group: { value: null, matchMode: FilterMatchMode.CONTAINS },
+    filter_reason: { value: 'null', matchMode: FilterMatchMode.EQUALS }, // Default to show only active (non-filtered) records
 })
-const globalFilterFields = ref<string[]>(["name", "tvg_id", "source", "group"])
+const globalFilterFields = ref<string[]>(["name", "tvg_id", "source", "group", "filter_reason"])
 
 // Skeleton data for loading state (15 empty rows)
 const skeletonData = ref(new Array(15).fill({}))
@@ -755,6 +793,20 @@ watch(() => {}, cleanup)
 .no-group {
     color: var(--text-color-secondary);
     font-style: italic;
+}
+
+.filter-reason {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.filter-detail {
+    font-size: 0.75rem;
+    color: var(--text-color-secondary);
+    line-height: 1.2;
+    max-width: 180px;
+    word-wrap: break-word;
 }
 
 .program-count {

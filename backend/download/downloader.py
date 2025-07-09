@@ -64,7 +64,7 @@ async def download_file_with_progress(
                     async for chunk in response.aiter_bytes(chunk_size=8192):
                         # Check for cancellation before processing each chunk
                         if is_task_cancelled(task_id):
-                            logger.info(
+                            log_function(
                                 f"Download task {task_id} cancelled, stopping download"
                             )
                             # Clean up the partial file

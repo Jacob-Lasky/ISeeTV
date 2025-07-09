@@ -728,7 +728,7 @@ def validate_rules_config(rules_data: List[Dict[str, Any]]) -> Tuple[bool, List[
     return len(errors) == 0, errors
 
 
-def get_rules_status() -> Dict[str, Any]:
+def get_ingestion_rules_status() -> Dict[str, Any]:
     """Get current status of ingestion rules system (atomic operation)"""
     log_function("Getting rules status")
     rules_engine.load_rules()

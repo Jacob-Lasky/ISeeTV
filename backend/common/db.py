@@ -20,5 +20,5 @@ def init_db():
     # Import table models to ensure they're registered with Base
 
     Base.metadata.create_all(bind=engine)
-    logger.info(f"Database initialized successfully at {DATABASE_URL}")
-    logger.info("Created tables: epg_channels, m3u_channels, programs")
+    log_function(f"Database initialized successfully at {DATABASE_URL}")
+    log_function("Created tables: epg_channels, m3u_channels, programs")

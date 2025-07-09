@@ -59,7 +59,7 @@ class SchedulerManager:
         self.scheduler.start()
         self.scheduler.schedule_all_sources()
         self._is_running = True
-        logger.info("Scheduler started and sources scheduled")
+        log_function("Scheduler started and sources scheduled")
 
     def stop(self) -> None:
         """Stop the scheduler."""
@@ -69,7 +69,7 @@ class SchedulerManager:
         log_function("Stopping scheduler")
         self.scheduler.shutdown(wait=True)
         self._is_running = False
-        logger.info("Scheduler stopped")
+        log_function("Scheduler stopped")
 
     def restart(self) -> None:
         """Restart the scheduler."""
@@ -193,7 +193,7 @@ async def download_callback_wrapper(source_name: str, file_type: str) -> None:
             task_id, source_name, file_type, sources_file, download_dir
         )
 
-        logger.info(f"Scheduler download completed: {source_name} {file_type}")
+        log_function(f"Scheduler download completed: {source_name} {file_type}")
 
     except Exception as e:
         logger.error(f"Scheduler download failed for {source_name} {file_type}: {e}")
@@ -271,7 +271,7 @@ async def ingest_callback_wrapper(source_name: str, file_type: str) -> None:
 
         await background_load_task(task_id, file_type, file_path, source_name)
 
-        logger.info(f"Scheduler ingest completed: {source_name} {file_type}")
+        log_function(f"Scheduler ingest completed: {source_name} {file_type}")
 
     except Exception as e:
         logger.error(f"Scheduler ingest failed for {source_name} {file_type}: {e}")

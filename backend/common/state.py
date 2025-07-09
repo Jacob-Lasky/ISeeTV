@@ -46,11 +46,11 @@ def cancel_task(task_id: str, task_type: Literal["download", "ingest"]) -> bool:
         # Update the task status to 'failed' with cancellation message
         if task_id in get_progress(task_type):
             get_progress(task_type)[task_id]["status"] = "failed"
-            get_progress(task_type)[task_id]["error_message"] = (
-                f"{task_type.title()} task cancelled by user"
-            )
+            get_progress(task_type)[task_id][
+                "error_message"
+            ] = f"{task_type.title()} task cancelled by user"
 
-        logger.info(f"{task_type.title()} task {task_id} marked for cancellation")
+        log_function(f"{task_type.title()} task {task_id} marked for cancellation")
         return True
 
     return False

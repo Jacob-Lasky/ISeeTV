@@ -7,6 +7,8 @@ import uvicorn
 import json
 from fastapi import HTTPException, status
 from fastapi.responses import RedirectResponse, StreamingResponse
+import httpx
+from fastapi.responses import StreamingResponse
 import asyncio
 import logging
 import os
@@ -55,6 +57,19 @@ from scheduler.scheduler_integration import (
     start_scheduler,
     stop_scheduler,
 )
+from rules.ingestion_rules import (
+    get_ingestion_rules_status,
+    IngestionRule,
+    SourceRuleAssignment,
+    INGESTION_RULES_LOGS,
+)
+from common.rules_storage import (
+    load_rules,
+    load_assignments,
+    save_rules,
+    save_assignments,
+)
+from common.state import cancel_task
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -306,8 +321,6 @@ async def cancel_download(task_id: str) -> Message:
     """Cancel a download task by task ID"""
     log_function(f"Canceling download task {task_id}")
     try:
-        from common.state import cancel_task
-
         success = cancel_task(task_id, "download")
         if success:
             return Message(message=f"Download task {task_id} cancelled successfully")
@@ -466,10 +479,6 @@ async def download_file_stream(
         file_url = file_info["url"]
         filename = f"{source_name}_{file_type}.{file_type}"
 
-        # Use httpx for better async streaming support
-        import httpx
-        from fastapi.responses import StreamingResponse
-
         # Create the streaming generator function
         async def stream_file():
             async with httpx.AsyncClient(timeout=30.0) as client:
@@ -618,7 +627,7 @@ async def background_load_task(
         # Start the task (Step 1: Download already completed)
         TaskManager.start_task(task_id, "ingest", "ingesting")
 
-        logger.info(
+        log_function(
             f"Started background load task {task_id} for {file_type} file: {file_path}"
         )
 
@@ -639,19 +648,19 @@ async def background_load_task(
         # Precompute filter values for the affected tables
         if file_type == "m3u":
             precompute_filter_values(session, "m3u_channels")
-            logger.info(
+            log_function(
                 f"Precomputed filter values for m3u_channels after task {task_id}"
             )
         elif file_type == "epg":
             precompute_filter_values(session, "epg_channels")
             precompute_filter_values(session, "programs")
-            logger.info(
+            log_function(
                 f"Precomputed filter values for epg_channels and programs after task {task_id}"
             )
 
         # Precompute streams filter values (combines M3U and EPG data)
         precompute_streams_filter_values(session)
-        logger.info(f"Precomputed streams filter values after task {task_id}")
+        log_function(f"Precomputed streams filter values after task {task_id}")
 
         # Add a small delay to ensure frontend can display progress bars
         await asyncio.sleep(2)
@@ -662,7 +671,7 @@ async def background_load_task(
             "ingest",
             f"Successfully loaded records from {source_name} {file_type} file",
         )
-        logger.info(
+        log_function(
             f"Completed background load task {task_id}: filter values precomputed"
         )
 
@@ -900,8 +909,6 @@ async def get_streams(
         parsed_column_filters = {}
         if column_filters:
             try:
-                import json
-
                 parsed_column_filters = json.loads(column_filters)
             except json.JSONDecodeError:
                 logger.warning(f"Invalid column_filters JSON: {column_filters}")
@@ -994,8 +1001,6 @@ async def get_stream_programs(
         parsed_column_filters = {}
         if column_filters:
             try:
-                import json
-
                 parsed_column_filters = json.loads(column_filters)
             except json.JSONDecodeError:
                 logger.warning(f"Invalid column_filters JSON: {column_filters}")
@@ -1298,9 +1303,7 @@ async def get_rules_status() -> Dict[str, Any]:
     """Get current status of ingestion rules system"""
     log_function("Getting ingestion rules status")
     try:
-        from rules.ingestion_rules import get_rules_status
-
-        status_info = get_rules_status()
+        status_info = get_ingestion_rules_status()
         return {"success": True, "data": status_info}
     except Exception as e:
         logger.error(f"Error getting rules status: {e}")
@@ -1320,8 +1323,6 @@ async def get_rules() -> Dict[str, Any]:
     """Get all ingestion rules and source assignments"""
     log_function("Getting ingestion rules and source assignments")
     try:
-        from common.rules_storage import load_rules, load_assignments
-
         rules = load_rules()
         assignments = load_assignments()
 
@@ -1347,7 +1348,6 @@ async def save_rules_only(rules_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Save only ingestion rules to rules.json file"""
     log_function("Saving ingestion rules only")
     try:
-        from common.rules_storage import save_rules
 
         result = save_rules(rules_data)
 
@@ -1377,8 +1377,6 @@ async def save_assignments_only(
     """Save only source rule assignments to assignments.json file"""
     log_function("Saving source rule assignments only")
     try:
-        from common.rules_storage import save_assignments
-
         result = save_assignments(assignments_data)
 
         if not result["success"]:
@@ -1405,8 +1403,6 @@ async def validate_rules(config_data: Dict[str, Any]) -> Dict[str, Any]:
     """Validate ingestion rules configuration without saving"""
     log_function("Validating ingestion rules configuration")
     try:
-        from rules.ingestion_rules import IngestionRule, SourceRuleAssignment
-
         rules_data = config_data.get("rules", [])
         assignments_data = config_data.get("source_assignments", [])
 
@@ -1464,8 +1460,6 @@ async def get_rules_logs() -> Dict[str, Any]:
     """Get list of ingestion rules log files"""
     log_function("Getting ingestion rules log files")
     try:
-        from rules.ingestion_rules import INGESTION_RULES_LOGS
-
         if not os.path.exists(INGESTION_RULES_LOGS):
             return {"success": True, "data": []}
 
@@ -1506,8 +1500,6 @@ async def get_rules_log_content(filename: str) -> Dict[str, Any]:
     """Get content of a specific ingestion rules log file"""
     log_function(f"Getting content of rules log file: {filename}")
     try:
-        from rules.ingestion_rules import INGESTION_RULES_LOGS
-
         # Validate filename to prevent directory traversal
         if not filename.endswith(".json") or "/" in filename or "\\" in filename:
             raise HTTPException(
@@ -1547,7 +1539,7 @@ async def startup_event():
     try:
         # Start the scheduler
         start_scheduler()
-        logger.info("Scheduler started successfully on application startup")
+        log_function("Scheduler started successfully on application startup")
     except Exception as e:
         logger.error(f"Failed to start scheduler on startup: {e}")
         # Don't fail the entire application if scheduler fails to start
@@ -1559,7 +1551,7 @@ async def shutdown_event():
     log_function("Application shutdown - stopping scheduler")
     try:
         stop_scheduler()
-        logger.info("Scheduler stopped successfully on application shutdown")
+        log_function("Scheduler stopped successfully on application shutdown")
     except Exception as e:
         logger.error(f"Error stopping scheduler on shutdown: {e}")
 

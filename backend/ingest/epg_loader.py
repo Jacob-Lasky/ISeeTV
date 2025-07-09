@@ -5,6 +5,7 @@
 import asyncio
 import logging
 from typing import AsyncGenerator, Optional, List
+from common.utils import log_function
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.sqlite import insert
 
@@ -269,22 +270,14 @@ async def load_epg_channels_async(
     batch_size: int = 1000,
 ) -> AsyncGenerator[LoadResult, None]:
     """Async generator that loads EPG channels using bulk operations for improved performance"""
-    logger.info(
+    log_function(
         f"Starting async EPG channel load from {file_path} for source {source_name}"
     )
 
     try:
         # Parse channels (this is synchronous but usually fast)
         channels = parse_epg_for_channels(file_path, source_name, task_id)
-        logger.info(f"Parsed {len(channels)} EPG channels")
-
-        # Apply ingestion rules prefilter
-        filtered_channels, rejected_channels = apply_ingestion_rules(
-            channels, "epg_channels", source_name
-        )
-        logger.info(
-            f"Ingestion rules: {len(filtered_channels)} passed, {len(rejected_channels)} rejected"
-        )
+        log_function(f"Parsed {len(channels)} EPG channels")
 
         # Use filtered channels for database loading
         channels = filtered_channels
@@ -345,25 +338,14 @@ async def load_programs_async(
     batch_size: int = 2000,
 ) -> AsyncGenerator[LoadResult, None]:
     """Async generator that loads programs using bulk operations for improved performance"""
-    logger.info(
+    log_function(
         f"Starting async program load from {file_path} for source {source_name}"
     )
 
     try:
         # Parse programs (this is synchronous but can be large)
         programs = parse_epg_for_programs(file_path, source_name, task_id)
-        logger.info(f"Parsed {len(programs)} programs")
-
-        # Apply ingestion rules prefilter
-        filtered_programs, rejected_programs = apply_ingestion_rules(
-            programs, "programs", source_name
-        )
-        logger.info(
-            f"Ingestion rules: {len(filtered_programs)} passed, {len(rejected_programs)} rejected"
-        )
-
-        # Use filtered programs for database loading
-        programs = filtered_programs
+        log_function(f"Parsed {len(programs)} programs")
 
         # Update task progress if task_id provided
         if task_id:
@@ -415,7 +397,7 @@ async def load_epg_file_async(
     session: Session, file_path: str, source_name: str, task_id: Optional[str] = None
 ) -> AsyncGenerator[LoadResult, None]:
     """Main async function to load complete EPG file (channels + programs)"""
-    logger.info(f"Starting complete EPG file load: {file_path} for {source_name}")
+    log_function(f"Starting complete EPG file load: {file_path} for {source_name}")
 
     # Load channels first
     async for result in load_epg_channels_async(
@@ -427,4 +409,4 @@ async def load_epg_file_async(
     async for result in load_programs_async(session, file_path, source_name, task_id):
         yield result
 
-    logger.info(f"Completed EPG file load for {source_name}")
+    log_function(f"Completed EPG file load for {source_name}")

@@ -100,7 +100,7 @@ class RefreshScheduler:
             if source.enabled:
                 self.schedule_source_refresh(source)
             else:
-                logger.info(f"Skipping disabled source: {source.name}")
+                log_function(f"Skipping disabled source: {source.name}")
 
     def schedule_source_refresh(self, source: Source) -> None:
         """
@@ -116,7 +116,7 @@ class RefreshScheduler:
 
         # Skip if refresh is not configured
         if not source.refresh_every_hours or not source.refresh_time:
-            logger.info(f"Source {source.name} has no refresh configuration, skipping")
+            log_function(f"Source {source.name} has no refresh configuration, skipping")
             return
 
         # Calculate next refresh times for each file type
@@ -133,7 +133,7 @@ class RefreshScheduler:
         # Register jobs for this source
         if job_ids:
             self._job_registry[source.name] = job_ids
-            logger.info(
+            log_function(
                 f"Scheduled {len(job_ids)} refresh jobs for source {source.name}"
             )
 
@@ -173,7 +173,7 @@ class RefreshScheduler:
                 replace_existing=True,
             )
 
-            logger.info(
+            log_function(
                 f"Scheduled {file_type} refresh for {source.name} at {next_refresh}"
             )
             return job_id
@@ -218,7 +218,7 @@ class RefreshScheduler:
             if next_refresh <= now:
                 next_refresh += timedelta(hours=source.refresh_every_hours)
 
-            logger.info(f"Next refresh for {source.name}: {next_refresh} ({tz})")
+            log_function(f"Next refresh for {source.name}: {next_refresh} ({tz})")
             return next_refresh
 
         except (ValueError, Exception) as e:
@@ -278,7 +278,7 @@ class RefreshScheduler:
 
         try:
             # Step 1: Download the file
-            logger.info(f"Starting download for {source_name} {file_type}")
+            log_function(f"Starting download for {source_name} {file_type}")
             await self.download_callback(source_name, file_type)
 
             # Step 2: Wait a moment for download to complete
@@ -286,10 +286,10 @@ class RefreshScheduler:
             await asyncio.sleep(5)
 
             # Step 3: Ingest the file to database
-            logger.info(f"Starting ingest for {source_name} {file_type}")
+            log_function(f"Starting ingest for {source_name} {file_type}")
             await self.ingest_callback(source_name, file_type)
 
-            logger.info(f"Completed refresh job for {source_name} {file_type}")
+            log_function(f"Completed refresh job for {source_name} {file_type}")
 
         except Exception as e:
             logger.error(f"Error in refresh job for {source_name} {file_type}: {e}")
@@ -306,7 +306,7 @@ class RefreshScheduler:
             for job_id in self._job_registry[source_name]:
                 try:
                     self.scheduler.remove_job(job_id)
-                    logger.info(f"Removed job {job_id}")
+                    log_function(f"Removed job {job_id}")
                 except Exception as e:
                     logger.warning(f"Error removing job {job_id}: {e}")
 
@@ -335,9 +335,9 @@ class RefreshScheduler:
                 {
                     "id": job.id,
                     "name": job.name,
-                    "next_run_time": job.next_run_time.isoformat()
-                    if job.next_run_time
-                    else None,
+                    "next_run_time": (
+                        job.next_run_time.isoformat() if job.next_run_time else None
+                    ),
                     "trigger": str(job.trigger),
                 }
             )
@@ -345,7 +345,7 @@ class RefreshScheduler:
 
     def _on_job_executed(self, event: JobExecutionEvent) -> None:
         """Handle successful job execution."""
-        logger.info(f"Job {event.job_id} executed successfully")
+        log_function(f"Job {event.job_id} executed successfully")
 
     def _on_job_error(self, event: JobExecutionEvent) -> None:
         """Handle job execution errors."""

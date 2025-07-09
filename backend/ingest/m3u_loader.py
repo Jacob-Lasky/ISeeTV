@@ -158,7 +158,7 @@ async def load_m3u_channels_async(
     batch_size: int = 1000,
 ) -> AsyncGenerator[LoadResult, None]:
     """Async generator that loads M3U channels using bulk operations for improved performance"""
-    logger.info(
+    log_function(
         f"Starting async M3U channel load from {file_path} for source {source_name}"
     )
 
@@ -216,7 +216,7 @@ async def load_m3u_file_async(
     session: Session, file_path: str, source_name: str, task_id: Optional[str] = None
 ) -> AsyncGenerator[LoadResult, None]:
     """Main async function to load complete M3U file"""
-    logger.info(f"Starting complete M3U file load: {file_path} for {source_name}")
+    log_function(f"Starting complete M3U file load: {file_path} for {source_name}")
 
     # Load all M3U channels
     async for result in load_m3u_channels_async(
@@ -224,13 +224,13 @@ async def load_m3u_file_async(
     ):
         yield result
 
-    logger.info(f"Completed M3U file load for {source_name}")
+    log_function(f"Completed M3U file load for {source_name}")
 
     # Apply post-load rules for traceability
-    logger.info(f"Applying post-load rules to M3U channels for {source_name}")
+    log_function(f"Applying post-load rules to M3U channels for {source_name}")
     try:
         rule_results = apply_post_load_rules("m3u_channels", source_name)
-        logger.info(f"Post-load rules applied: {rule_results}")
+        log_function(f"Post-load rules applied: {rule_results['processed']} processed, {rule_results['filtered']} filtered, {rule_results['passed']} passed")
 
         # Yield a result for rule application
         yield LoadResult(
