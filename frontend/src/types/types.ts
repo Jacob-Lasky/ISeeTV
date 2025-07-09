@@ -75,6 +75,7 @@ export interface Source {
     subscription_expires?: string | null
     source_timezone?: string | null
     enabled: boolean
+    rule_mode?: "whitelist" | "blacklist"  // Default to blacklist (start with all channels)
     file_metadata?: Record<string, FileMetadata>
 }
 

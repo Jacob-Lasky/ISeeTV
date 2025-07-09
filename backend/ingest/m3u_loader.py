@@ -5,6 +5,7 @@
 import asyncio
 import logging
 from typing import AsyncGenerator, Optional
+from backend.common.utils import log_function
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.sqlite import insert
 
@@ -12,6 +13,7 @@ from models.models import M3uChannel
 from models.db_models import M3uChannelTable
 from ingest.m3u_parser import parse_m3u
 from common.task_manager import IngestTaskManager, TaskManager
+from rules.ingestion_rules import apply_ingestion_rules
 
 logger = logging.getLogger(__name__)
 
@@ -95,7 +97,18 @@ async def load_m3u_channels_async(
     try:
         # Parse channels (this is synchronous but usually fast)
         channels = parse_m3u(file_path, source_name, task_id)
-        logger.info(f"Parsed {len(channels)} M3U channels")
+        log_function(f"Parsed {len(channels)} M3U channels")
+
+        # Apply ingestion rules prefilter
+        filtered_channels, rejected_channels = apply_ingestion_rules(
+            channels, "m3u_channels", source_name
+        )
+        log_function(
+            f"Ingestion rules: {len(filtered_channels)} passed, {len(rejected_channels)} rejected"
+        )
+
+        # Use filtered channels for database loading
+        channels = filtered_channels
 
         # Update task progress if task_id provided
         if task_id:

@@ -22,7 +22,6 @@
                 :value="skeletonData"
                 scrollable
                 scrollHeight="calc(100vh - 320px)"
-                showGridlines
                 class="streams-datatable skeleton-table"
             >
                 <!-- Skeleton Channel Name Column -->
@@ -490,23 +489,29 @@ const loadStreams = async (resetPage = false): Promise<void> => {
 
             // Update filter options if available
             if (data.filters && Object.keys(data.filters).length > 0) {
-                console.log('API response filters:', data.filters)
+                console.log("API response filters:", data.filters)
                 updateFilterOptions(data.filters)
             } else {
-                console.log('No filters in API response, attempting to precompute...')
+                console.log(
+                    "No filters in API response, attempting to precompute..."
+                )
                 try {
                     await precomputeFilterValues()
                     // Reload streams data after precomputing filters
                     const retryResponse = await fetch(buildApiUrl())
                     if (retryResponse.ok) {
-                        const retryData: StreamsResponse = await retryResponse.json()
+                        const retryData: StreamsResponse =
+                            await retryResponse.json()
                         if (retryData.success && retryData.filters) {
-                            console.log('Retry API response filters:', retryData.filters)
+                            console.log(
+                                "Retry API response filters:",
+                                retryData.filters
+                            )
                             updateFilterOptions(retryData.filters)
                         }
                     }
                 } catch (error) {
-                    console.error('Failed to precompute filter values:', error)
+                    console.error("Failed to precompute filter values:", error)
                     // Continue without filters - the table will still work
                 }
             }
@@ -529,8 +534,8 @@ const loadStreams = async (resetPage = false): Promise<void> => {
 }
 
 const updateFilterOptions = (filters: Record<string, FilterValue[]>): void => {
-    console.log('Updating filter options with:', filters)
-    
+    console.log("Updating filter options with:", filters)
+
     if (filters.source) {
         // Update header dropdown options
         sourceOptions.value = filters.source.map((f) => ({
@@ -540,7 +545,7 @@ const updateFilterOptions = (filters: Record<string, FilterValue[]>): void => {
 
         // Update column filter options
         sourceFilterOptions.value = filters.source.map((f) => f.value)
-        console.log('Updated sourceFilterOptions:', sourceFilterOptions.value)
+        console.log("Updated sourceFilterOptions:", sourceFilterOptions.value)
     }
 
     if (filters.group) {
@@ -552,30 +557,30 @@ const updateFilterOptions = (filters: Record<string, FilterValue[]>): void => {
 
         // Update column filter options
         groupFilterOptions.value = filters.group.map((f) => f.value)
-        console.log('Updated groupFilterOptions:', groupFilterOptions.value)
+        console.log("Updated groupFilterOptions:", groupFilterOptions.value)
     } else {
-        console.log('No group filters found in API response')
+        console.log("No group filters found in API response")
     }
 }
 
 const precomputeFilterValues = async (): Promise<void> => {
     try {
-        console.log('Precomputing streams filter values...')
-        const response = await fetch('/api/streams/precompute-filters', {
-            method: 'POST',
+        console.log("Precomputing streams filter values...")
+        const response = await fetch("/api/streams/precompute-filters", {
+            method: "POST",
             headers: {
-                'Content-Type': 'application/json',
+                "Content-Type": "application/json",
             },
         })
-        
+
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`)
         }
-        
+
         const result = await response.json()
-        console.log('Filter values precomputed successfully:', result)
+        console.log("Filter values precomputed successfully:", result)
     } catch (error) {
-        console.error('Error precomputing filter values:', error)
+        console.error("Error precomputing filter values:", error)
         throw error
     }
 }

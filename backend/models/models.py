@@ -86,6 +86,7 @@ class Source(BaseModel):
     subscription_expires: Optional[str]
     source_timezone: Optional[str]
     enabled: bool
+    rule_mode: Literal["whitelist", "blacklist"] = "blacklist"  # Default to blacklist (start with all channels)
     file_metadata: Dict[str, FileMetadata] = {}
 
     def get_file_metadata(

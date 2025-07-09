@@ -23,8 +23,6 @@ from models.models import (
 from models.stream_models import (
     StreamsResponse,
     StreamProgramsResponse,
-    StreamChannel,
-    StreamProgram,
 )
 from download.downloader import (
     background_single_download_task,
@@ -67,9 +65,15 @@ class SuppressIngestProgressFilter(logging.Filter):
         return "/api/ingest/progress" not in record.getMessage()
 
 
+class SuppressDownloadProgressFilter(logging.Filter):
+    def filter(self, record):
+        return "/api/download/progress" not in record.getMessage()
+
+
 # Apply filter to Uvicorn's access logger
 uvicorn_access_logger = logging.getLogger("uvicorn.access")
 uvicorn_access_logger.addFilter(SuppressIngestProgressFilter())
+uvicorn_access_logger.addFilter(SuppressDownloadProgressFilter())
 
 app = FastAPI(
     title="ISeeTV API",
@@ -81,6 +85,7 @@ app = FastAPI(
     openapi_tags=[
         {"name": "Health", "description": "Health checks"},
         {"name": "Streams", "description": "Browse and filter merged channel streams"},
+        {"name": "Rules", "description": "Ingestion rules management and filtering"},
         {"name": "Database", "description": "Manage the database"},
         {"name": "Sources", "description": "Manage IPTV sources (M3U, EPG, metadata)"},
         {"name": "Download", "description": "Download the M3U and EPG files"},
@@ -274,7 +279,7 @@ async def get_ingest_progress() -> Dict[str, Dict]:
 )
 async def get_download_progress_by_id(task_id: str) -> DownloadProgress:
     """Get download progress for a specific task"""
-    log_function(f"Getting download progress for: {task_id}")
+    log_function(f"Getting download progress for: {task_id}", level="debug")
     return DownloadProgress(**get_progress_response(task_id, "download"))
 
 
@@ -643,12 +648,10 @@ async def background_load_task(
             logger.info(
                 f"Precomputed filter values for epg_channels and programs after task {task_id}"
             )
-        
+
         # Precompute streams filter values (combines M3U and EPG data)
         precompute_streams_filter_values(session)
-        logger.info(
-            f"Precomputed streams filter values after task {task_id}"
-        )
+        logger.info(f"Precomputed streams filter values after task {task_id}")
 
         # Add a small delay to ensure frontend can display progress bars
         await asyncio.sleep(2)
@@ -810,6 +813,39 @@ async def get_table_filter_values(table_name: str) -> Dict[str, Any]:
         )
 
 
+@app.get(
+    "/api/tables/{table_name}/columns",
+    response_model=Dict[str, Any],
+    tags=["Database"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_table_columns(table_name: str) -> Dict[str, Any]:
+    """Get column names for a specific table"""
+    # Validate table name to prevent SQL injection
+    valid_tables = ["epg_channels", "m3u_channels", "programs"]
+    if table_name not in valid_tables:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid table name. Must be one of: {valid_tables}",
+        )
+
+    try:
+        inspector = inspect(engine)
+        columns = [col["name"] for col in inspector.get_columns(table_name)]
+
+        return {
+            "success": True,
+            "data": columns,
+            "table_name": table_name,
+        }
+
+    except Exception as e:
+        logger.error(f"Error getting columns for table {table_name}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
+
+
 # Streams API Endpoints
 
 
@@ -830,12 +866,12 @@ async def get_streams(
     column_filters: Optional[str] = None,
 ) -> StreamsResponse:
     """Get joined streams view with M3U channels, EPG data, and program counts.
-    
+
     This endpoint provides a comprehensive view of all available streams by joining:
     - M3U channels (primary data with stream URLs)
     - EPG channels (display names and icons)
     - Programs (aggregated counts and next program info)
-    
+
     Args:
         source: Filter by source name
         group: Filter by channel group
@@ -845,28 +881,31 @@ async def get_streams(
         sort_order: Sort order (asc/desc)
         global_filter: Global search across name, tvg_id, display_name, group
         column_filters: JSON string of column-specific filters
-        
+
     Returns:
         StreamsResponse with paginated stream data and filter options
     """
-    log_function(f"Getting streams: page={page}, size={page_size}, source={source}, group={group}")
-    
+    log_function(
+        f"Getting streams: page={page}, size={page_size}, source={source}, group={group}"
+    )
+
     try:
         # Validate page_size
         if page_size > 500:
             page_size = 500
         if page_size < 1:
             page_size = 100
-            
+
         # Parse column filters if provided
         parsed_column_filters = {}
         if column_filters:
             try:
                 import json
+
                 parsed_column_filters = json.loads(column_filters)
             except json.JSONDecodeError:
                 logger.warning(f"Invalid column_filters JSON: {column_filters}")
-        
+
         with SessionLocal() as session:
             # Get streams data
             streams, total_count = get_streams_query(
@@ -880,15 +919,15 @@ async def get_streams(
                 global_filter=global_filter,
                 column_filters=parsed_column_filters,
             )
-            
+
             # Get filter values
             filter_values = get_streams_filter_values(session)
-            
+
             # Calculate pagination metadata
             total_pages = (total_count + page_size - 1) // page_size
             has_next = page < total_pages
             has_prev = page > 1
-            
+
             return StreamsResponse(
                 success=True,
                 data=streams,
@@ -900,7 +939,7 @@ async def get_streams(
                 has_prev=has_prev,
                 filters=filter_values,
             )
-            
+
     except Exception as e:
         logger.error(f"Error getting streams: {e}")
         raise HTTPException(
@@ -926,7 +965,7 @@ async def get_stream_programs(
     column_filters: Optional[str] = None,
 ) -> StreamProgramsResponse:
     """Get programs for a specific stream channel with context.
-    
+
     Args:
         source: Source name
         channel_id: Channel ID (tvg_id)
@@ -936,28 +975,31 @@ async def get_stream_programs(
         sort_order: Sort order (asc/desc)
         global_filter: Global search across title, description, channel names
         column_filters: JSON string of column-specific filters
-        
+
     Returns:
         StreamProgramsResponse with paginated program data
     """
-    log_function(f"Getting programs for stream: source={source}, channel_id={channel_id}")
-    
+    log_function(
+        f"Getting programs for stream: source={source}, channel_id={channel_id}"
+    )
+
     try:
         # Validate page_size
         if page_size > 500:
             page_size = 500
         if page_size < 1:
             page_size = 100
-            
+
         # Parse column filters if provided
         parsed_column_filters = {}
         if column_filters:
             try:
                 import json
+
                 parsed_column_filters = json.loads(column_filters)
             except json.JSONDecodeError:
                 logger.warning(f"Invalid column_filters JSON: {column_filters}")
-        
+
         with SessionLocal() as session:
             # Get program data
             programs, total_count = get_stream_programs_query(
@@ -971,12 +1013,12 @@ async def get_stream_programs(
                 global_filter=global_filter,
                 column_filters=parsed_column_filters,
             )
-            
+
             # Calculate pagination metadata
             total_pages = (total_count + page_size - 1) // page_size
             has_next = page < total_pages
             has_prev = page > 1
-            
+
             return StreamProgramsResponse(
                 success=True,
                 data=programs,
@@ -988,7 +1030,7 @@ async def get_stream_programs(
                 has_prev=has_prev,
                 filters={},  # Programs don't need complex filtering for now
             )
-            
+
     except Exception as e:
         logger.error(f"Error getting stream programs: {e}")
         raise HTTPException(
@@ -1005,22 +1047,22 @@ async def get_stream_programs(
 )
 async def get_streams_filters() -> Dict[str, Any]:
     """Get precomputed filter values for streams view.
-    
+
     Returns:
         Dictionary with filter values for source and group columns
     """
     log_function("Getting streams filter values")
-    
+
     try:
         with SessionLocal() as session:
             filter_values = get_streams_filter_values(session)
-            
+
             return {
                 "success": True,
                 "data": filter_values,
                 "table_name": "streams",
             }
-            
+
     except Exception as e:
         logger.error(f"Error getting streams filter values: {e}")
         raise HTTPException(
@@ -1037,23 +1079,23 @@ async def get_streams_filters() -> Dict[str, Any]:
 )
 async def precompute_streams_filters() -> Dict[str, str]:
     """Precompute filter values for streams view.
-    
+
     This is typically called after data ingestion to update filter options.
-    
+
     Returns:
         Success message
     """
     log_function("Precomputing streams filter values")
-    
+
     try:
         with SessionLocal() as session:
             precompute_streams_filter_values(session)
-            
+
             return {
                 "message": "Successfully precomputed streams filter values",
                 "table_name": "streams",
             }
-            
+
     except Exception as e:
         logger.error(f"Error precomputing streams filter values: {e}")
         raise HTTPException(
@@ -1243,6 +1285,255 @@ async def validate_scheduler_config(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to validate configuration: {str(e)}",
+        )
+
+
+@app.get(
+    "/api/rules/status",
+    response_model=Dict[str, Any],
+    tags=["Rules"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_rules_status() -> Dict[str, Any]:
+    """Get current status of ingestion rules system"""
+    log_function("Getting ingestion rules status")
+    try:
+        from rules.ingestion_rules import get_rules_status
+
+        status_info = get_rules_status()
+        return {"success": True, "data": status_info}
+    except Exception as e:
+        logger.error(f"Error getting rules status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get rules status: {str(e)}",
+        )
+
+
+@app.get(
+    "/api/rules",
+    response_model=Dict[str, Any],
+    tags=["Rules"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_rules() -> Dict[str, Any]:
+    """Get all ingestion rules and source assignments"""
+    log_function("Getting ingestion rules and source assignments")
+    try:
+        from common.rules_storage import load_rules, load_assignments
+
+        rules = load_rules()
+        assignments = load_assignments()
+
+        return {
+            "rules": rules,
+            "source_assignments": assignments,
+        }
+    except Exception as e:
+        logger.error(f"Error getting rules: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get rules: {str(e)}",
+        )
+
+
+@app.post(
+    "/api/rules/save",
+    response_model=Dict[str, Any],
+    tags=["Rules"],
+    status_code=status.HTTP_200_OK,
+)
+async def save_rules_only(rules_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+    """Save only ingestion rules to rules.json file"""
+    log_function("Saving ingestion rules only")
+    try:
+        from common.rules_storage import save_rules
+
+        result = save_rules(rules_data)
+
+        if not result["success"]:
+            return result
+
+        log_function(f"Successfully saved rules")
+        return result
+
+    except Exception as e:
+        logger.error(f"Error saving rules: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save rules: {str(e)}",
+        )
+
+
+@app.post(
+    "/api/assignments/save",
+    response_model=Dict[str, Any],
+    tags=["Rules"],
+    status_code=status.HTTP_200_OK,
+)
+async def save_assignments_only(
+    assignments_data: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """Save only source rule assignments to assignments.json file"""
+    log_function("Saving source rule assignments only")
+    try:
+        from common.rules_storage import save_assignments
+
+        result = save_assignments(assignments_data)
+
+        if not result["success"]:
+            return result
+
+        log_function(f"Successfully saved assignments")
+        return result
+
+    except Exception as e:
+        logger.error(f"Error saving assignments: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save assignments: {str(e)}",
+        )
+
+
+@app.post(
+    "/api/rules/validate",
+    response_model=Dict[str, Any],
+    tags=["Rules"],
+    status_code=status.HTTP_200_OK,
+)
+async def validate_rules(config_data: Dict[str, Any]) -> Dict[str, Any]:
+    """Validate ingestion rules configuration without saving"""
+    log_function("Validating ingestion rules configuration")
+    try:
+        from rules.ingestion_rules import IngestionRule, SourceRuleAssignment
+
+        rules_data = config_data.get("rules", [])
+        assignments_data = config_data.get("source_assignments", [])
+
+        log_function(
+            f"Validating {len(rules_data)} rules and {len(assignments_data)} source assignments"
+        )
+
+        errors = []
+
+        # Validate rules
+        for i, rule_data in enumerate(rules_data):
+            try:
+                IngestionRule(**rule_data)
+            except (TypeError, ValueError) as e:
+                errors.append(f"Rule {i+1}: {str(e)}")
+
+        # Validate source assignments
+        for i, assignment_data in enumerate(assignments_data):
+            try:
+                SourceRuleAssignment(**assignment_data)
+            except (TypeError, ValueError) as e:
+                errors.append(f"Source assignment {i+1}: {str(e)}")
+
+        # Check that assigned rules exist
+        rule_names = {rule_data.get("name") for rule_data in rules_data}
+        for assignment_data in assignments_data:
+            for rule_name in assignment_data.get("assigned_rules", []):
+                if rule_name not in rule_names:
+                    errors.append(
+                        f"Source '{assignment_data.get('source_name')}' references non-existent rule '{rule_name}'"
+                    )
+
+        is_valid = len(errors) == 0
+        return {
+            "success": True,
+            "valid": is_valid,
+            "errors": errors,
+        }
+
+    except Exception as e:
+        logger.error(f"Error validating rules: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to validate rules: {str(e)}",
+        )
+
+
+@app.get(
+    "/api/rules/logs",
+    response_model=Dict[str, Any],
+    tags=["Rules"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_rules_logs() -> Dict[str, Any]:
+    """Get list of ingestion rules log files"""
+    log_function("Getting ingestion rules log files")
+    try:
+        from rules.ingestion_rules import INGESTION_RULES_LOGS
+
+        if not os.path.exists(INGESTION_RULES_LOGS):
+            return {"success": True, "data": []}
+
+        log_files = []
+        for filename in os.listdir(INGESTION_RULES_LOGS):
+            if filename.endswith(".json"):
+                filepath = os.path.join(INGESTION_RULES_LOGS, filename)
+                stat = os.stat(filepath)
+                log_files.append(
+                    {
+                        "filename": filename,
+                        "size": stat.st_size,
+                        "modified": stat.st_mtime,
+                        "path": filepath,
+                    }
+                )
+
+        # Sort by modification time (newest first)
+        log_files.sort(key=lambda x: x["modified"], reverse=True)
+
+        return {"success": True, "data": log_files}
+
+    except Exception as e:
+        logger.error(f"Error getting rules logs: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get rules logs: {str(e)}",
+        )
+
+
+@app.get(
+    "/api/rules/logs/{filename}",
+    response_model=Dict[str, Any],
+    tags=["Rules"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_rules_log_content(filename: str) -> Dict[str, Any]:
+    """Get content of a specific ingestion rules log file"""
+    log_function(f"Getting content of rules log file: {filename}")
+    try:
+        from rules.ingestion_rules import INGESTION_RULES_LOGS
+
+        # Validate filename to prevent directory traversal
+        if not filename.endswith(".json") or "/" in filename or "\\" in filename:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="Invalid filename"
+            )
+
+        filepath = os.path.join(INGESTION_RULES_LOGS, filename)
+
+        if not os.path.exists(filepath):
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Log file '{filename}' not found",
+            )
+
+        with open(filepath, "r", encoding="utf-8") as f:
+            log_data = json.load(f)
+
+        return {"success": True, "filename": filename, "data": log_data}
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting rules log content: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get log content: {str(e)}",
         )
 
 

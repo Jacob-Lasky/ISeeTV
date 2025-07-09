@@ -12,6 +12,7 @@ from models.models import EpgChannel, Program
 from models.db_models import EpgChannelTable, ProgramTable
 from ingest.epg_parser import parse_epg_for_channels, parse_epg_for_programs
 from common.task_manager import IngestTaskManager, TaskManager
+from rules.ingestion_rules import apply_ingestion_rules
 
 logger = logging.getLogger(__name__)
 
@@ -139,9 +140,18 @@ async def load_epg_channels_async(
     )
 
     try:
-        # Parse channels (this is synchronous but fast)
+        # Parse channels (this is synchronous but usually fast)
         channels = parse_epg_for_channels(file_path, source_name, task_id)
         logger.info(f"Parsed {len(channels)} EPG channels")
+        
+        # Apply ingestion rules prefilter
+        filtered_channels, rejected_channels = apply_ingestion_rules(
+            channels, "epg_channels", source_name
+        )
+        logger.info(f"Ingestion rules: {len(filtered_channels)} passed, {len(rejected_channels)} rejected")
+        
+        # Use filtered channels for database loading
+        channels = filtered_channels
 
         # Update task progress if task_id provided
         if task_id:
@@ -205,6 +215,15 @@ async def load_programs_async(
         # Parse programs (this is synchronous but can be large)
         programs = parse_epg_for_programs(file_path, source_name, task_id)
         logger.info(f"Parsed {len(programs)} programs")
+        
+        # Apply ingestion rules prefilter
+        filtered_programs, rejected_programs = apply_ingestion_rules(
+            programs, "programs", source_name
+        )
+        logger.info(f"Ingestion rules: {len(filtered_programs)} passed, {len(rejected_programs)} rejected")
+        
+        # Use filtered programs for database loading
+        programs = filtered_programs
 
         # Update task progress if task_id provided
         if task_id:

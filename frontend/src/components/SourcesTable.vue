@@ -605,6 +605,19 @@
                         <label>EPG URL:</label>
                         <InputText v-model="sourceForm.epgUrl" fluid />
                     </div>
+                    <div class="form-row">
+                        <label>Rule Mode:</label>
+                        <Select
+                            v-model="sourceForm.ruleMode"
+                            :options="[
+                                { label: 'Blacklist', value: 'blacklist' },
+                                { label: 'Whitelist', value: 'whitelist' },
+                            ]"
+                            optionLabel="label"
+                            optionValue="value"
+                            fluid
+                        />
+                    </div>
                 </div>
             </form>
             <template #footer>
@@ -1785,6 +1798,7 @@ interface SourceFormData {
     connections: number
     refreshHours: number
     subscriptionExpires: string
+    ruleMode: string // "whitelist" or "blacklist"
     m3uUrl: string
     epgUrl: string
     [key: string]: string | number | boolean // Index signature for dynamic access
@@ -1799,6 +1813,7 @@ const DEFAULT_SOURCE_FORM = {
     refreshTime: "00:00",
     timezone: "UTC",
     subscriptionExpires: null as string | null,
+    ruleMode: "blacklist", // Default to blacklist mode
     m3uUrl: "",
     epgUrl: "",
 } as const
@@ -1812,6 +1827,7 @@ const SOURCE_FIELD_MAP = {
     refreshTime: "refresh_time",
     timezone: "source_timezone",
     subscriptionExpires: "subscription_expires",
+    ruleMode: "rule_mode",
 } as const
 
 // File field mapping: form field -> file metadata property

@@ -7,3 +7,6 @@ data/sources.json
 data/sources/*
 data/iseetv.db
 data/iseetv.db-journal
+data/assignments.json
+data/rules.json
+data/ingestion_rules_logs/*
