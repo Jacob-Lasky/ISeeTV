@@ -1,21 +1,5 @@
 <template>
     <div class="streams-table">
-        <!-- Header with Search and Filters -->
-        <div class="table-header">
-            <div class="header-right">
-                <div class="search-group">
-                    <label for="global-search">Search:</label>
-                    <InputText
-                        id="global-search"
-                        v-model="globalFilter"
-                        placeholder="Search channels..."
-                        class="search-input"
-                        @input="onGlobalFilterChange"
-                    />
-                </div>
-            </div>
-        </div>
-
         <!-- Loading state with skeleton -->
         <div v-if="loading" class="loading-container">
             <DataTable
