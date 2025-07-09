@@ -641,11 +641,11 @@ const loadFilterStatistics = async () => {
             totalRecords.value = data.total || 0
 
             console.log(
-                `✅ Filter statistics loaded: ${passedRecords.value} passed, ${filteredRecords.value} caught by filter, ${totalRecords.value} total`
+                `Filter statistics loaded: ${passedRecords.value} passed, ${filteredRecords.value} caught by filter, ${totalRecords.value} total`
             )
         } else {
             console.warn(
-                `⚠️ No filter statistics received for ${tableName.value}/${sourceName.value}`
+                `No filter statistics received for ${tableName.value}/${sourceName.value}`
             )
             // Set default values
             passedRecords.value = 0
@@ -653,7 +653,7 @@ const loadFilterStatistics = async () => {
             totalRecords.value = 0
         }
     } catch (err) {
-        console.error(`❌ Error loading filter statistics:`, err)
+        console.error(`Error loading filter statistics:`, err)
         // Set default values on error
         passedRecords.value = 0
         filteredRecords.value = 0
