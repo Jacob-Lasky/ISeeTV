@@ -16,7 +16,9 @@
                             {{ tableConfig.displayName }}
                         </h2>
                         <p class="text-gray-600">
-                            Source: {{ sourceName }} • Passed: {{ passedRecords }} | Caught by filter: {{ filteredRecords }} | Total: {{ totalRecords }}
+                            Source: {{ sourceName }} • Passed:
+                            {{ passedRecords }} | Caught by filter:
+                            {{ filteredRecords }} | Total: {{ totalRecords }}
                         </p>
                     </div>
                 </div>
@@ -620,8 +622,10 @@ const loadFilterOptions = async () => {
 // Load filter statistics from new backend endpoint
 const loadFilterStatistics = async () => {
     try {
-        console.log(`Loading filter statistics for ${tableName.value}/${sourceName.value}...`)
-        
+        console.log(
+            `Loading filter statistics for ${tableName.value}/${sourceName.value}...`
+        )
+
         const response = await apiGet(
             `/api/tables/${tableName.value}/filtered_counts/${encodeURIComponent(sourceName.value)}`,
             false,
@@ -630,7 +634,7 @@ const loadFilterStatistics = async () => {
 
         if (response.success && response.data) {
             const data = response.data
-            
+
             // Map the new API response to our variables
             passedRecords.value = data.passed || 0
             filteredRecords.value = data.all_not_passed || 0
@@ -640,7 +644,9 @@ const loadFilterStatistics = async () => {
                 `✅ Filter statistics loaded: ${passedRecords.value} passed, ${filteredRecords.value} caught by filter, ${totalRecords.value} total`
             )
         } else {
-            console.warn(`⚠️ No filter statistics received for ${tableName.value}/${sourceName.value}`)
+            console.warn(
+                `⚠️ No filter statistics received for ${tableName.value}/${sourceName.value}`
+            )
             // Set default values
             passedRecords.value = 0
             filteredRecords.value = 0
