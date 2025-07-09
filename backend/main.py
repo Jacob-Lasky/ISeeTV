@@ -42,7 +42,11 @@ from common.constants import DATA_PATH
 from ingest.epg_loader import load_epg_file_async
 from ingest.m3u_loader import load_m3u_file_async
 from common.task_manager import TaskManager, IngestTaskManager
-from utils.filter_utils import precompute_filter_values, get_all_filter_values
+from utils.filter_utils import (
+    precompute_filter_values,
+    get_all_filter_values,
+    get_table_filter_statistics,
+)
 from utils.stream_utils import (
     get_streams_query,
     get_stream_programs_query,
@@ -775,6 +779,11 @@ async def get_db_summary() -> Dict[str, Any]:
             result = session.execute(text(f"SELECT * FROM {table_name} LIMIT 1"))
             rows = [dict(row._mapping) for row in result]
 
+            # Get filter statistics if filter_reason column exists
+            filter_stats = {}
+            if "filter_reason" in columns:
+                filter_stats = get_table_filter_statistics(session, table_name)
+
             summary.append(
                 {
                     "table": table_name,
@@ -782,6 +791,7 @@ async def get_db_summary() -> Dict[str, Any]:
                     "primary_key": inspector.get_pk_constraint(table_name),
                     "indexes": inspector.get_indexes(table_name),
                     "row_count": row_count,
+                    "filtered": filter_stats,
                     "sample_row": rows[0] if rows else "",
                 }
             )

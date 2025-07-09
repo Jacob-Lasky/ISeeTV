@@ -16,8 +16,8 @@
                             {{ tableConfig.displayName }}
                         </h2>
                         <p class="text-gray-600">
-                            Source: {{ sourceName }} •
-                            {{ tableData.length }} records
+                            Source: {{ sourceName }} • Passed filter:
+                            {{ passedRecords }} | Total: {{ totalRecords }}
                         </p>
                     </div>
                 </div>
@@ -121,6 +121,9 @@
                         >
                             {{ data[column.field] }}
                         </a>
+                        <span v-else-if="column.field === 'filter_reason'">
+                            {{ data[column.field] || "Passed" }}
+                        </span>
                         <span v-else>
                             {{ data[column.field] || "N/A" }}
                         </span>
@@ -145,6 +148,16 @@
                             v-model="filterModel.value"
                             :options="groupOptions"
                             placeholder="All Groups"
+                            class="w-full"
+                            :show-clear="true"
+                            @change="filterCallback()"
+                        />
+                        <!-- Filter reason column filter -->
+                        <Select
+                            v-else-if="column.field === 'filter_reason'"
+                            v-model="filterModel.value"
+                            :options="filterReasonOptions"
+                            placeholder="All Filter Reasons"
                             class="w-full"
                             :show-clear="true"
                             @change="filterCallback()"
@@ -237,10 +250,13 @@ const tableData = ref([])
 const filters = ref({})
 const globalFilterFields = ref([])
 const totalRecords = ref(0)
+const passedRecords = ref(0)
+const filteredRecords = ref(0)
 
 // Column filter options
 const sourceOptions = ref([])
 const groupOptions = ref([])
+const filterReasonOptions = ref([])
 
 // Skeleton data for loading state (20 empty rows)
 const skeletonData = ref(new Array(20).fill({}))
@@ -309,6 +325,11 @@ const getTableConfig = (tableName: string): TableConfig => {
                         style: "width: 180px; height: 44px",
                         type: "datetime",
                     },
+                    {
+                        field: "filter_reason",
+                        header: "Filter Reason",
+                        style: "width: 200px; height: 44px",
+                    },
                 ],
             }
         case "m3u_channels":
@@ -366,6 +387,11 @@ const getTableConfig = (tableName: string): TableConfig => {
                         header: "Updated",
                         style: "width: 180px; height: 44px",
                         type: "datetime",
+                    },
+                    {
+                        field: "filter_reason",
+                        header: "Filter Reason",
+                        style: "width: 200px; height: 44px",
                     },
                 ],
             }
@@ -429,6 +455,11 @@ const getTableConfig = (tableName: string): TableConfig => {
                         header: "Updated",
                         style: "width: 180px; height: 44px",
                         type: "datetime",
+                    },
+                    {
+                        field: "filter_reason",
+                        header: "Filter Reason",
+                        style: "width: 200px; height: 44px",
                     },
                 ],
             }
@@ -503,7 +534,6 @@ const loadTableData = async () => {
 
         if (response.success && response.data) {
             tableData.value = response.data.records || []
-            totalRecords.value = response.data.total || tableData.value.length
 
             // Load precomputed filter values from backend
             await loadFilterOptions()
@@ -559,6 +589,16 @@ const loadFilterOptions = async () => {
                 groupOptions.value = filterData.group.map((item) => item.value)
                 console.log(`Loaded ${groupOptions.value.length} group options`)
             }
+
+            // Set filter reason options
+            if (filterData.filter_reason) {
+                filterReasonOptions.value = filterData.filter_reason.map(
+                    (item) => item.value
+                )
+                console.log(
+                    `Loaded ${filterReasonOptions.value.length} filter reason options`
+                )
+            }
         } else {
             console.warn(
                 `No filter data received for table: ${tableName.value}`
@@ -572,6 +612,42 @@ const loadFilterOptions = async () => {
         // Fallback to empty arrays
         sourceOptions.value = []
         groupOptions.value = []
+        filterReasonOptions.value = []
+    }
+}
+
+// Load filter statistics from database summary
+const loadFilterStatistics = async () => {
+    try {
+        const response = await apiGet("/api/db/summary", false, {
+            showSuccessToast: false,
+        })
+
+        if (response.success && response.tables) {
+            const tableInfo = response.tables.find(
+                (t) => t.table === tableName.value
+            )
+
+            if (
+                tableInfo &&
+                tableInfo.filtered &&
+                tableInfo.filtered[sourceName.value]
+            ) {
+                const sourceStats = tableInfo.filtered[sourceName.value]
+                passedRecords.value = sourceStats["Passed"] || 0
+                totalRecords.value = Object.values(sourceStats).reduce(
+                    (sum, count) => sum + count,
+                    0
+                )
+                filteredRecords.value = totalRecords.value - passedRecords.value
+
+                console.log(
+                    `Filter statistics for ${tableName.value}/${sourceName.value}: ${passedRecords.value} passed, ${filteredRecords.value} filtered, ${totalRecords.value} total`
+                )
+            }
+        }
+    } catch (err) {
+        console.error("Error loading filter statistics:", err)
     }
 }
 
@@ -594,6 +670,7 @@ onMounted(() => {
     }
 
     initializeFilters()
+    loadFilterStatistics()
     loadTableData()
 })
 </script>

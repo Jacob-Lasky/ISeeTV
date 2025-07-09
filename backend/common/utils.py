@@ -72,12 +72,34 @@ def format_table_response(
     records: List[Dict[str, Any]],
     table_name: str,
     source_filter: Optional[str] = None,
+    filter_stats: Optional[Dict[str, int]] = None,
 ) -> Dict[str, Any]:
+    # Use provided filter statistics or calculate from records
+    if filter_stats and len(filter_stats) > 0:
+        total_records = sum(filter_stats.values())
+        passed_records = filter_stats.get("Passed", 0)
+        filtered_records = total_records - passed_records
+    else:
+        # Fallback to calculating from returned records
+        total_records = len(records)
+        passed_records = len([r for r in records if r.get("filter_reason") is None])
+        filtered_records = total_records - passed_records
+        # If no filter_stats provided, create basic stats from records
+        if not filter_stats:
+            filter_stats = {}
+            if passed_records > 0:
+                filter_stats["Passed"] = passed_records
+            if filtered_records > 0:
+                filter_stats["Filtered"] = filtered_records
+    
     return {
         "success": True,
         "data": {
             "records": records,
-            "total": len(records),
+            "total": total_records,
+            "passed": passed_records,
+            "filtered": filtered_records,
+            "filter_stats": filter_stats or {},
             "table_name": table_name,
             "source_filter": source_filter,
         },
