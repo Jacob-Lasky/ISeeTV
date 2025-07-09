@@ -4,7 +4,7 @@
 
 import asyncio
 import logging
-from typing import AsyncGenerator, Optional
+from typing import AsyncGenerator, Optional, List
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.sqlite import insert
 
@@ -77,6 +77,70 @@ def _upsert_epg_channel(session: Session, channel: EpgChannel) -> LoadResult:
         )
 
 
+async def _bulk_upsert_epg_channels(
+    session: Session, channels: List[EpgChannel]
+) -> List[LoadResult]:
+    """Bulk upsert EPG channels using efficient batch operations"""
+    if not channels:
+        return []
+
+    try:
+        # Prepare data for bulk insert
+        channel_data = [
+            {
+                "source": channel.source,
+                "channel_id": channel.channel_id,
+                "display_name": channel.display_name,
+                "icon_url": channel.icon_url,
+            }
+            for channel in channels
+        ]
+
+        # Use bulk insert with ON CONFLICT DO UPDATE
+        stmt = insert(EpgChannelTable)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["source", "channel_id"],
+            set_={
+                "display_name": stmt.excluded.display_name,
+                "icon_url": stmt.excluded.icon_url,
+                "updated_at": stmt.excluded.updated_at,
+            },
+        )
+
+        # Execute bulk operation
+        session.execute(stmt, channel_data)
+        session.commit()
+
+        # Create success results for all channels
+        results = [
+            LoadResult(
+                "EPG_CHANNEL",
+                f"{channel.source}:{channel.channel_id}",
+                "upserted",
+                f"Channel '{channel.display_name}' processed",
+            )
+            for channel in channels
+        ]
+
+        logger.debug(f"Bulk upserted {len(channels)} EPG channels")
+        return results
+
+    except Exception as e:
+        logger.error(f"Error in bulk upsert of EPG channels: {e}")
+        session.rollback()
+
+        # Return error results for all channels
+        return [
+            LoadResult(
+                "EPG_CHANNEL",
+                f"{channel.source}:{channel.channel_id}",
+                "error",
+                str(e),
+            )
+            for channel in channels
+        ]
+
+
 def _upsert_program(session: Session, program: Program) -> LoadResult:
     """Function to upsert a single program"""
     try:
@@ -127,14 +191,84 @@ def _upsert_program(session: Session, program: Program) -> LoadResult:
         )
 
 
+async def _bulk_upsert_programs(
+    session: Session, programs: List[Program]
+) -> List[LoadResult]:
+    """Bulk upsert programs using efficient batch operations"""
+    if not programs:
+        return []
+
+    try:
+        # Prepare data for bulk insert
+        program_data = [
+            {
+                "source": program.source,
+                "program_id": program.program_id,
+                "channel_id": program.channel_id,
+                "start_time": program.start_time,
+                "end_time": program.end_time,
+                "title": program.title,
+                "description": program.description,
+            }
+            for program in programs
+        ]
+
+        # Use bulk insert with ON CONFLICT DO UPDATE
+        stmt = insert(ProgramTable)
+        stmt = stmt.on_conflict_do_update(
+            index_elements=["source", "program_id"],
+            set_={
+                "channel_id": stmt.excluded.channel_id,
+                "start_time": stmt.excluded.start_time,
+                "end_time": stmt.excluded.end_time,
+                "title": stmt.excluded.title,
+                "description": stmt.excluded.description,
+                "updated_at": stmt.excluded.updated_at,
+            },
+        )
+
+        # Execute bulk operation
+        session.execute(stmt, program_data)
+        session.commit()
+
+        # Create success results for all programs
+        results = [
+            LoadResult(
+                "PROGRAM",
+                f"{program.source}:{program.program_id}",
+                "upserted",
+                f"Program '{program.title}' on {program.channel_id} processed",
+            )
+            for program in programs
+        ]
+
+        logger.debug(f"Bulk upserted {len(programs)} programs")
+        return results
+
+    except Exception as e:
+        logger.error(f"Error in bulk upsert of programs: {e}")
+        session.rollback()
+
+        # Return error results for all programs
+        return [
+            LoadResult(
+                "PROGRAM",
+                f"{program.source}:{program.program_id}",
+                "error",
+                str(e),
+            )
+            for program in programs
+        ]
+
+
 async def load_epg_channels_async(
     session: Session,
     file_path: str,
     source_name: str,
     task_id: Optional[str] = None,
-    batch_size: int = 100,
+    batch_size: int = 1000,
 ) -> AsyncGenerator[LoadResult, None]:
-    """Async generator that loads EPG channels and yields results as they're processed"""
+    """Async generator that loads EPG channels using bulk operations for improved performance"""
     logger.info(
         f"Starting async EPG channel load from {file_path} for source {source_name}"
     )
@@ -143,13 +277,15 @@ async def load_epg_channels_async(
         # Parse channels (this is synchronous but usually fast)
         channels = parse_epg_for_channels(file_path, source_name, task_id)
         logger.info(f"Parsed {len(channels)} EPG channels")
-        
+
         # Apply ingestion rules prefilter
         filtered_channels, rejected_channels = apply_ingestion_rules(
             channels, "epg_channels", source_name
         )
-        logger.info(f"Ingestion rules: {len(filtered_channels)} passed, {len(rejected_channels)} rejected")
-        
+        logger.info(
+            f"Ingestion rules: {len(filtered_channels)} passed, {len(rejected_channels)} rejected"
+        )
+
         # Use filtered channels for database loading
         channels = filtered_channels
 
@@ -166,18 +302,21 @@ async def load_epg_channels_async(
                 task_id, 3, "Loading EPG channels", 0
             )
 
-        # Process in batches to avoid blocking
+        # Process in batches using bulk operations
         completed_count = 0
         for i in range(0, len(channels), batch_size):
             batch = channels[i : i + batch_size]
 
-            for channel in batch:
-                result = _upsert_epg_channel(session, channel)
+            # Use bulk upsert for the entire batch
+            batch_results = await _bulk_upsert_epg_channels(session, batch)
+
+            # Yield results for each item in the batch
+            for result in batch_results:
                 yield result
                 completed_count += 1
 
                 # Update progress periodically
-                if task_id and completed_count % 25 == 0:
+                if task_id and completed_count % 100 == 0:
                     IngestTaskManager.update_item_progress(
                         task_id,
                         f"Loaded {completed_count} EPG channels",
@@ -185,13 +324,12 @@ async def load_epg_channels_async(
                         "channels",
                     )
 
-                # Yield control periodically to avoid blocking
-                if i % 10 == 0:
-                    await asyncio.sleep(0)
+            # Yield control periodically to avoid blocking
+            await asyncio.sleep(0)
 
-            # Commit batch
-            session.commit()
-            logger.debug(f"Committed batch {i // batch_size + 1} of EPG channels")
+            logger.debug(
+                f"Committed batch {i // batch_size + 1} of EPG channels ({len(batch)} records)"
+            )
 
     except Exception as e:
         logger.error(f"Error in async EPG channel loading: {e}")
@@ -204,9 +342,9 @@ async def load_programs_async(
     file_path: str,
     source_name: str,
     task_id: Optional[str] = None,
-    batch_size: int = 500,
+    batch_size: int = 2000,
 ) -> AsyncGenerator[LoadResult, None]:
-    """Async generator that loads programs and yields results as they're processed"""
+    """Async generator that loads programs using bulk operations for improved performance"""
     logger.info(
         f"Starting async program load from {file_path} for source {source_name}"
     )
@@ -215,13 +353,15 @@ async def load_programs_async(
         # Parse programs (this is synchronous but can be large)
         programs = parse_epg_for_programs(file_path, source_name, task_id)
         logger.info(f"Parsed {len(programs)} programs")
-        
+
         # Apply ingestion rules prefilter
         filtered_programs, rejected_programs = apply_ingestion_rules(
             programs, "programs", source_name
         )
-        logger.info(f"Ingestion rules: {len(filtered_programs)} passed, {len(rejected_programs)} rejected")
-        
+        logger.info(
+            f"Ingestion rules: {len(filtered_programs)} passed, {len(rejected_programs)} rejected"
+        )
+
         # Use filtered programs for database loading
         programs = filtered_programs
 
@@ -236,32 +376,34 @@ async def load_programs_async(
 
             IngestTaskManager.update_step_progress(task_id, 5, "Loading programs", 0)
 
-        # Process in batches to avoid blocking
+        # Process in batches using bulk operations
         completed_count = 0
         for i in range(0, len(programs), batch_size):
             batch = programs[i : i + batch_size]
 
-            for j, program in enumerate(batch):
-                result = _upsert_program(session, program)
+            # Use bulk upsert for the entire batch
+            batch_results = await _bulk_upsert_programs(session, batch)
+
+            # Yield results for each item in the batch
+            for result in batch_results:
                 yield result
                 completed_count += 1
 
                 # Update progress periodically
-                if task_id and completed_count % 100 == 0:
+                if task_id and completed_count % 500 == 0:
                     IngestTaskManager.update_item_progress(
                         task_id,
-                        f"Processing program: {program.title or 'Untitled'}",
+                        f"Loaded {completed_count} programs",
                         completed_count,
                         "programs",
                     )
 
-                # Yield control more frequently for large datasets
-                if j % 50 == 0:
-                    await asyncio.sleep(0)
+            # Yield control periodically to avoid blocking
+            await asyncio.sleep(0)
 
-            # Commit batch
-            session.commit()
-            logger.debug(f"Committed batch {i // batch_size + 1} of programs")
+            logger.debug(
+                f"Committed batch {i // batch_size + 1} of programs ({len(batch)} records)"
+            )
 
     except Exception as e:
         logger.error(f"Error in async program loading: {e}")
