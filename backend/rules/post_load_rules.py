@@ -274,6 +274,155 @@ class PostLoadRulesEngine:
             logger.error(f"Error getting sources from {table_name}: {e}")
             return []
 
+    def apply_single_rule_to_source(
+        self, rule_name: str, table_name: str, source_name: str
+    ) -> Dict[str, Any]:
+        """Apply a single rule to a specific table and source (atomic operation)"""
+        log_function(
+            f"Applying single rule '{rule_name}' to {table_name} for source {source_name}"
+        )
+
+        # Get source assignment and check if rule is assigned
+        source_assignment = self.ingestion_engine.get_source_assignment(source_name)
+        if not source_assignment:
+            log_function(
+                f"No source assignment found for {source_name}, skipping rule application"
+            )
+            return {"processed": 0, "filtered": 0, "passed": 0}
+
+        # Check if rule is assigned to this source
+        if rule_name not in source_assignment.assigned_rules:
+            log_function(
+                f"Rule '{rule_name}' not assigned to source {source_name}, skipping"
+            )
+            return {"processed": 0, "filtered": 0, "passed": 0}
+
+        # Get the specific rule
+        all_rules = self.ingestion_engine.get_applicable_rules(table_name, source_name)
+        target_rule = None
+        for rule in all_rules:
+            if rule.name == rule_name:
+                target_rule = rule
+                break
+
+        if not target_rule:
+            log_function(
+                f"Rule '{rule_name}' not found or not applicable to {table_name}, skipping"
+            )
+            return {"processed": 0, "filtered": 0, "passed": 0}
+
+        # Load records from database
+        records = self._load_records_from_db(table_name, source_name)
+        if not records:
+            log_function(f"No records found in {table_name} for source {source_name}")
+            return {"processed": 0, "filtered": 0, "passed": 0}
+
+        log_function(
+            f"Loaded {len(records)} records from {table_name} for {source_name}"
+        )
+
+        # Apply single rule using vectorized processing
+        results = self._apply_rules_vectorized(
+            records, [target_rule], source_assignment, table_name
+        )
+
+        # Update database with filter reasons
+        self._update_records_in_db(table_name, results["updated_records"])
+
+        log_function(
+            f"Single rule '{rule_name}' applied to {table_name}/{source_name}: {results['processed']} processed, {results['filtered']} filtered, {results['passed']} passed"
+        )
+
+        return results
+
+    def unapply_rules_from_source(
+        self, table_name: str, source_name: str, rule_names: List[str] = None
+    ) -> Dict[str, Any]:
+        """Unapply (remove) rules from a specific table and source (atomic operation)"""
+        log_function(
+            f"Unapplying rules from {table_name} for source {source_name}: {rule_names or 'all rules'}"
+        )
+
+        try:
+            with SessionLocal() as session:
+                if rule_names:
+                    # Unapply specific rules by clearing filter_reason for records filtered by those rules
+                    for rule_name in rule_names:
+                        # Clear filter_reason for records filtered by this specific rule
+                        result = session.execute(
+                            text(
+                                f"UPDATE {table_name} SET filter_reason = NULL "
+                                f"WHERE source = :source_name AND filter_reason LIKE :rule_pattern"
+                            ),
+                            {
+                                "source_name": source_name,
+                                "rule_pattern": f"%{rule_name}%",
+                            },
+                        )
+                        affected_rows = result.rowcount
+                        log_function(
+                            f"Unapplied rule '{rule_name}' from {affected_rows} records in {table_name}/{source_name}"
+                        )
+                else:
+                    # Unapply all rules by clearing all filter_reason fields
+                    result = session.execute(
+                        text(
+                            f"UPDATE {table_name} SET filter_reason = NULL "
+                            f"WHERE source = :source_name AND filter_reason IS NOT NULL"
+                        ),
+                        {"source_name": source_name},
+                    )
+                    affected_rows = result.rowcount
+                    log_function(
+                        f"Unapplied all rules from {affected_rows} records in {table_name}/{source_name}"
+                    )
+
+                session.commit()
+
+                # Get updated counts
+                count_result = session.execute(
+                    text(f"SELECT COUNT(*) FROM {table_name} WHERE source = :source_name"),
+                    {"source_name": source_name},
+                )
+                total_records = count_result.scalar()
+
+                return {
+                    "processed": total_records,
+                    "filtered": 0,  # All records are now unfiltered
+                    "passed": total_records,
+                    "unapplied_rules": rule_names or "all",
+                }
+
+        except Exception as e:
+            logger.error(f"Error unapplying rules from {table_name}/{source_name}: {e}")
+            return {"processed": 0, "filtered": 0, "passed": 0}
+
+    def apply_all_rules_to_source(
+        self, source_name: str, table_names: List[str] = None
+    ) -> Dict[str, Any]:
+        """Apply all assigned rules to a specific source across all or specified tables"""
+        if not table_names:
+            table_names = ["m3u_channels", "epg_channels", "programs"]
+
+        log_function(
+            f"Applying all rules to source {source_name} across tables: {table_names}"
+        )
+
+        total_results = {"processed": 0, "filtered": 0, "passed": 0, "tables": {}}
+
+        for table_name in table_names:
+            results = self.apply_rules_to_table(table_name, source_name)
+            total_results["processed"] += results["processed"]
+            total_results["filtered"] += results["filtered"]
+            total_results["passed"] += results["passed"]
+            total_results["tables"][table_name] = results
+
+        log_function(
+            f"All rules applied to source {source_name}: {total_results['processed']} processed, {total_results['filtered']} filtered, {total_results['passed']} passed"
+        )
+
+        return total_results
+
 
 # Global post-load rules engine instance
 post_load_engine = PostLoadRulesEngine()

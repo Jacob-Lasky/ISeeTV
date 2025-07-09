@@ -44,6 +44,13 @@
                                             outlined
                                             @click="viewLogs"
                                         />
+                                        <Button
+                                            icon="pi pi-play"
+                                            label="Apply Rules"
+                                            severity="primary"
+                                            :loading="applyingRules"
+                                            @click="applyRules"
+                                        />
                                     </div>
                                 </div>
                             </template>
@@ -193,17 +200,39 @@
                             </Column>
 
                             <Column
-                                style="width: 5%; min-width: 4rem"
+                                header="Actions"
+                                style="width: 15%; min-width: 12rem"
                                 bodyStyle="text-align:center"
                             >
                                 <template #body="{ data }">
-                                    <Button
-                                        icon="pi pi-trash"
-                                        severity="danger"
-                                        outlined
-                                        size="small"
-                                        @click="deleteRule(rules.indexOf(data))"
-                                    />
+                                    <div class="flex gap-1 justify-center">
+                                        <Button
+                                            icon="pi pi-play"
+                                            severity="success"
+                                            outlined
+                                            size="small"
+                                            v-tooltip="'Apply this rule to all assigned sources'"
+                                            :loading="applyingRule === data.name"
+                                            @click="applyRule(data.name)"
+                                        />
+                                        <Button
+                                            icon="pi pi-stop"
+                                            severity="warning"
+                                            outlined
+                                            size="small"
+                                            v-tooltip="'Unapply this rule from all assigned sources'"
+                                            :loading="unapplyingRule === data.name"
+                                            @click="unapplyRule(data.name)"
+                                        />
+                                        <Button
+                                            icon="pi pi-trash"
+                                            severity="danger"
+                                            outlined
+                                            size="small"
+                                            v-tooltip="'Delete this rule'"
+                                            @click="deleteRule(rules.indexOf(data))"
+                                        />
+                                    </div>
                                 </template>
                             </Column>
                         </DataTable>
@@ -368,21 +397,73 @@
                             </Column>
 
                             <Column
-                                style="width: 5%; min-width: 4rem"
+                                header="Actions"
+                                style="width: 25%; min-width: 20rem"
                                 bodyStyle="text-align:center"
                             >
                                 <template #body="{ data }">
-                                    <Button
-                                        icon="pi pi-trash"
-                                        severity="danger"
-                                        outlined
-                                        size="small"
-                                        @click="
-                                            deleteAssignment(
-                                                sourceAssignments.indexOf(data)
-                                            )
-                                        "
-                                    />
+                                    <div class="flex flex-col gap-2">
+                                        <!-- Source-level actions -->
+                                        <div class="flex gap-1 justify-center">
+                                            <Button
+                                                icon="pi pi-play"
+                                                severity="success"
+                                                outlined
+                                                size="small"
+                                                v-tooltip="'Apply all assigned rules to this source'"
+                                                :loading="applyingSourceRules === data.source_name"
+                                                :disabled="applyingSourceRules !== null || unapplyingSourceRules !== null || applyingSourceRule !== null || unapplyingSourceRule !== null"
+                                                @click="applySourceRules(data.source_name)"
+                                            />
+                                            <Button
+                                                icon="pi pi-stop"
+                                                severity="warning"
+                                                outlined
+                                                size="small"
+                                                v-tooltip="'Unapply all rules from this source'"
+                                                :loading="unapplyingSourceRules === data.source_name"
+                                                :disabled="applyingSourceRules !== null || unapplyingSourceRules !== null || applyingSourceRule !== null || unapplyingSourceRule !== null"
+                                                @click="unapplySourceRules(data.source_name)"
+                                            />
+                                            <Button
+                                                icon="pi pi-trash"
+                                                severity="danger"
+                                                outlined
+                                                size="small"
+                                                v-tooltip="'Delete this assignment'"
+                                                @click="
+                                                    deleteAssignment(
+                                                        sourceAssignments.indexOf(data)
+                                                    )
+                                                "
+                                            />
+                                        </div>
+                                        <!-- Per-rule actions -->
+                                        <div v-if="data.assigned_rules && data.assigned_rules.length > 0" class="flex flex-wrap gap-1 justify-center">
+                                            <div v-for="ruleName in data.assigned_rules" :key="`${data.source_name}-${ruleName}`" class="flex gap-1">
+                                                <Button
+                                                    icon="pi pi-filter"
+                                                    severity="info"
+                                                    text
+                                                    size="small"
+                                                    :v-tooltip="`Apply rule '${ruleName}' to source '${data.source_name}'`"
+                                                    :loading="applyingSourceRule === `${data.source_name}-${ruleName}`"
+                                                    :disabled="applyingSourceRules !== null || unapplyingSourceRules !== null || applyingSourceRule !== null || unapplyingSourceRule !== null"
+                                                    @click="applySourceRule(data.source_name, ruleName)"
+                                                />
+                                                <Button
+                                                    icon="pi pi-filter-slash"
+                                                    severity="help"
+                                                    text
+                                                    size="small"
+                                                    :v-tooltip="`Unapply rule '${ruleName}' from source '${data.source_name}'`"
+                                                    :loading="unapplyingSourceRule === `${data.source_name}-${ruleName}`"
+                                                    :disabled="applyingSourceRules !== null || unapplyingSourceRules !== null || applyingSourceRule !== null || unapplyingSourceRule !== null"
+                                                    @click="unapplySourceRule(data.source_name, ruleName)"
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
                                 </template>
                             </Column>
                         </DataTable>
@@ -497,6 +578,13 @@ const editingRows = ref([])
 const loading = ref(false)
 const hasChanges = ref(false)
 const validating = ref(false)
+const applyingRules = ref(false)
+const applyingRule = ref<string | null>(null)
+const unapplyingRule = ref<string | null>(null)
+const applyingSourceRules = ref<string | null>(null)
+const unapplyingSourceRules = ref<string | null>(null)
+const applyingSourceRule = ref<string | null>(null)
+const unapplyingSourceRule = ref<string | null>(null)
 const validationErrors = ref<string[]>([])
 const showLogsDialog = ref(false)
 const logFiles = ref<string[]>([])
@@ -946,6 +1034,505 @@ const preloadColumnData = async (): Promise<void> => {
     await Promise.all(
         Array.from(uniqueTables).map((table) => loadTableColumns(table))
     )
+}
+
+// Apply rules to database records
+const applyRules = async (): Promise<void> => {
+    try {
+        applyingRules.value = true
+        
+        // Apply rules to all tables
+        const tables = ["m3u_channels", "epg_channels", "programs"]
+        const results = []
+        
+        for (const table of tables) {
+            console.log(`Applying rules to ${table}...`)
+            
+            const response = await fetch("/api/rules/apply", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    table_name: table,
+                    // source_name is optional - omitting applies to all sources
+                }),
+            })
+            
+            const data = await response.json()
+            
+            if (!response.ok) {
+                throw new Error(data.detail || `Failed to apply rules to ${table}`)
+            }
+            
+            results.push({
+                table: table,
+                ...data.results
+            })
+        }
+        
+        // Calculate totals
+        const totals = results.reduce(
+            (acc, result) => ({
+                processed: acc.processed + (result.processed || 0),
+                filtered: acc.filtered + (result.filtered || 0),
+                passed: acc.passed + (result.passed || 0),
+            }),
+            { processed: 0, filtered: 0, passed: 0 }
+        )
+        
+        console.log("Rule application results:", results)
+        console.log("Totals:", totals)
+        
+        toast.add({
+            severity: "success",
+            summary: "Rules Applied Successfully",
+            detail: `Processed ${totals.processed} records: ${totals.passed} passed, ${totals.filtered} filtered`,
+            life: 5000,
+        })
+        
+    } catch (error) {
+        console.error("Error applying rules:", error)
+        toast.add({
+            severity: "error",
+            summary: "Rule Application Failed",
+            detail: error instanceof Error ? error.message : "Failed to apply rules",
+            life: 5000,
+        })
+    } finally {
+        applyingRules.value = false
+    }
+}
+
+// Apply a single rule to all assigned sources
+const applyRule = async (ruleName: string): Promise<void> => {
+    try {
+        applyingRule.value = ruleName
+        
+        // Get sources assigned to this rule
+        const assignedSources = sourceAssignments.value
+            .filter(assignment => assignment.assigned_rules.includes(ruleName))
+            .map(assignment => assignment.source_name)
+        
+        if (assignedSources.length === 0) {
+            toast.add({
+                severity: "warning",
+                summary: "No Sources Assigned",
+                detail: `Rule '${ruleName}' is not assigned to any sources`,
+                life: 3000,
+            })
+            return
+        }
+        
+        // Get the rule details to determine applicable tables
+        const rule = rules.value.find(r => r.name === ruleName)
+        if (!rule) {
+            throw new Error(`Rule '${ruleName}' not found`)
+        }
+        
+        const tables = rule.tables || ["m3u_channels", "epg_channels", "programs"]
+        const results = []
+        
+        // Apply rule to each assigned source and applicable table
+        for (const sourceName of assignedSources) {
+            for (const tableName of tables) {
+                console.log(`Applying rule '${ruleName}' to ${tableName} for source ${sourceName}...`)
+                
+                const response = await fetch("/api/rules/apply/single", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        rule_name: ruleName,
+                        table_name: tableName,
+                        source_name: sourceName,
+                    }),
+                })
+                
+                const data = await response.json()
+                
+                if (!response.ok) {
+                    throw new Error(data.detail || `Failed to apply rule '${ruleName}' to ${tableName} for ${sourceName}`)
+                }
+                
+                results.push({
+                    rule: ruleName,
+                    table: tableName,
+                    source: sourceName,
+                    ...data.results
+                })
+            }
+        }
+        
+        // Calculate totals
+        const totals = results.reduce(
+            (acc, result) => ({
+                processed: acc.processed + (result.processed || 0),
+                filtered: acc.filtered + (result.filtered || 0),
+                passed: acc.passed + (result.passed || 0),
+            }),
+            { processed: 0, filtered: 0, passed: 0 }
+        )
+        
+        console.log(`Rule '${ruleName}' application results:`, results)
+        console.log("Totals:", totals)
+        
+        toast.add({
+            severity: "success",
+            summary: "Rule Applied Successfully",
+            detail: `Rule '${ruleName}' applied to ${assignedSources.length} sources: ${totals.passed} passed, ${totals.filtered} filtered`,
+            life: 5000,
+        })
+        
+    } catch (error) {
+        console.error(`Error applying rule '${ruleName}':`, error)
+        toast.add({
+            severity: "error",
+            summary: "Rule Application Failed",
+            detail: error instanceof Error ? error.message : `Failed to apply rule '${ruleName}'`,
+            life: 5000,
+        })
+    } finally {
+        applyingRule.value = null
+    }
+}
+
+// Unapply a single rule from all assigned sources
+const unapplyRule = async (ruleName: string): Promise<void> => {
+    try {
+        unapplyingRule.value = ruleName
+        
+        // Get sources assigned to this rule
+        const assignedSources = sourceAssignments.value
+            .filter(assignment => assignment.assigned_rules.includes(ruleName))
+            .map(assignment => assignment.source_name)
+        
+        if (assignedSources.length === 0) {
+            toast.add({
+                severity: "warning",
+                summary: "No Sources Assigned",
+                detail: `Rule '${ruleName}' is not assigned to any sources`,
+                life: 3000,
+            })
+            return
+        }
+        
+        // Get the rule details to determine applicable tables
+        const rule = rules.value.find(r => r.name === ruleName)
+        if (!rule) {
+            throw new Error(`Rule '${ruleName}' not found`)
+        }
+        
+        const tables = rule.tables || ["m3u_channels", "epg_channels", "programs"]
+        const results = []
+        
+        // Unapply rule from each assigned source and applicable table
+        for (const sourceName of assignedSources) {
+            for (const tableName of tables) {
+                console.log(`Unapplying rule '${ruleName}' from ${tableName} for source ${sourceName}...`)
+                
+                const response = await fetch("/api/rules/unapply", {
+                    method: "POST",
+                    headers: {
+                        "Content-Type": "application/json",
+                    },
+                    body: JSON.stringify({
+                        table_name: tableName,
+                        source_name: sourceName,
+                        rule_names: [ruleName],
+                    }),
+                })
+                
+                const data = await response.json()
+                
+                if (!response.ok) {
+                    throw new Error(data.detail || `Failed to unapply rule '${ruleName}' from ${tableName} for ${sourceName}`)
+                }
+                
+                results.push({
+                    rule: ruleName,
+                    table: tableName,
+                    source: sourceName,
+                    ...data.results
+                })
+            }
+        }
+        
+        // Calculate totals
+        const totalRecords = results.reduce(
+            (acc, result) => acc + (result.processed || 0),
+            0
+        )
+        
+        console.log(`Rule '${ruleName}' unapplication results:`, results)
+        
+        toast.add({
+            severity: "success",
+            summary: "Rule Unapplied Successfully",
+            detail: `Rule '${ruleName}' unapplied from ${assignedSources.length} sources (${totalRecords} records restored)`,
+            life: 5000,
+        })
+        
+    } catch (error) {
+        console.error(`Error unapplying rule '${ruleName}':`, error)
+        toast.add({
+            severity: "error",
+            summary: "Rule Unapplication Failed",
+            detail: error instanceof Error ? error.message : `Failed to unapply rule '${ruleName}'`,
+            life: 5000,
+        })
+    } finally {
+        unapplyingRule.value = null
+    }
+}
+
+// Apply all assigned rules to a specific source
+const applySourceRules = async (sourceName: string): Promise<void> => {
+    try {
+        applyingSourceRules.value = sourceName
+        
+        console.log(`Applying all rules to source ${sourceName}...`)
+        
+        const response = await fetch("/api/rules/apply/source", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                source_name: sourceName,
+                // table_names is optional - will apply to all tables by default
+            }),
+        })
+        
+        const data = await response.json()
+        
+        if (!response.ok) {
+            throw new Error(data.detail || `Failed to apply rules to source ${sourceName}`)
+        }
+        
+        console.log(`Source rules application results for ${sourceName}:`, data.results)
+        
+        // Calculate totals from the results
+        const totals = data.results.tables ? 
+            Object.values(data.results.tables).reduce(
+                (acc: any, result: any) => ({
+                    processed: acc.processed + (result.processed || 0),
+                    filtered: acc.filtered + (result.filtered || 0),
+                    passed: acc.passed + (result.passed || 0),
+                }),
+                { processed: 0, filtered: 0, passed: 0 }
+            ) : data.results
+        
+        toast.add({
+            severity: "success",
+            summary: "Source Rules Applied",
+            detail: `All rules applied to source '${sourceName}': ${totals.passed} passed, ${totals.filtered} filtered`,
+            life: 5000,
+        })
+        
+    } catch (error) {
+        console.error(`Error applying rules to source '${sourceName}':`, error)
+        toast.add({
+            severity: "error",
+            summary: "Source Rule Application Failed",
+            detail: error instanceof Error ? error.message : `Failed to apply rules to source '${sourceName}'`,
+            life: 5000,
+        })
+    } finally {
+        applyingSourceRules.value = null
+    }
+}
+
+// Unapply all rules from a specific source
+const unapplySourceRules = async (sourceName: string): Promise<void> => {
+    try {
+        unapplyingSourceRules.value = sourceName
+        
+        const tables = ["m3u_channels", "epg_channels", "programs"]
+        const results = []
+        
+        // Unapply rules from each table for this source
+        for (const tableName of tables) {
+            console.log(`Unapplying all rules from ${tableName} for source ${sourceName}...`)
+            
+            const response = await fetch("/api/rules/unapply", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    table_name: tableName,
+                    source_name: sourceName,
+                    // rule_names is optional - omitting unapplies all rules
+                }),
+            })
+            
+            const data = await response.json()
+            
+            if (!response.ok) {
+                throw new Error(data.detail || `Failed to unapply rules from ${tableName} for ${sourceName}`)
+            }
+            
+            results.push({
+                table: tableName,
+                source: sourceName,
+                ...data.results
+            })
+        }
+        
+        // Calculate totals
+        const totalRecords = results.reduce(
+            (acc, result) => acc + (result.processed || 0),
+            0
+        )
+        
+        console.log(`Source rules unapplication results for ${sourceName}:`, results)
+        
+        toast.add({
+            severity: "success",
+            summary: "Source Rules Unapplied",
+            detail: `All rules unapplied from source '${sourceName}' (${totalRecords} records restored)`,
+            life: 5000,
+        })
+        
+    } catch (error) {
+        console.error(`Error unapplying rules from source '${sourceName}':`, error)
+        toast.add({
+            severity: "error",
+            summary: "Source Rule Unapplication Failed",
+            detail: error instanceof Error ? error.message : `Failed to unapply rules from source '${sourceName}'`,
+            life: 5000,
+        })
+    } finally {
+        unapplyingSourceRules.value = null
+    }
+}
+
+// Apply a specific rule to a specific source (most granular control)
+const applySourceRule = async (sourceName: string, ruleName: string): Promise<void> => {
+    try {
+        const ruleKey = `${sourceName}-${ruleName}`
+        applyingSourceRule.value = ruleKey
+        
+        console.log(`Applying rule '${ruleName}' to source '${sourceName}'...`)
+        
+        const response = await fetch("/api/rules/apply/single", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                rule_name: ruleName,
+                source_name: sourceName,
+                // table_names is optional - will apply to all tables by default
+            }),
+        })
+        
+        const data = await response.json()
+        
+        if (!response.ok) {
+            throw new Error(data.detail || `Failed to apply rule '${ruleName}' to source '${sourceName}'`)
+        }
+        
+        console.log(`Single rule application results for '${ruleName}' on '${sourceName}':`, data.results)
+        
+        // Calculate totals from the results
+        const totals = data.results.tables ? 
+            Object.values(data.results.tables).reduce(
+                (acc: any, result: any) => ({
+                    processed: acc.processed + (result.processed || 0),
+                    filtered: acc.filtered + (result.filtered || 0),
+                    passed: acc.passed + (result.passed || 0),
+                }),
+                { processed: 0, filtered: 0, passed: 0 }
+            ) : data.results
+        
+        toast.add({
+            severity: "success",
+            summary: "Rule Applied",
+            detail: `Rule '${ruleName}' applied to source '${sourceName}': ${totals.passed} passed, ${totals.filtered} filtered`,
+            life: 5000,
+        })
+        
+    } catch (error) {
+        console.error(`Error applying rule '${ruleName}' to source '${sourceName}':`, error)
+        toast.add({
+            severity: "error",
+            summary: "Rule Application Failed",
+            detail: error instanceof Error ? error.message : `Failed to apply rule '${ruleName}' to source '${sourceName}'`,
+            life: 5000,
+        })
+    } finally {
+        applyingSourceRule.value = null
+    }
+}
+
+// Unapply a specific rule from a specific source (most granular control)
+const unapplySourceRule = async (sourceName: string, ruleName: string): Promise<void> => {
+    try {
+        const ruleKey = `${sourceName}-${ruleName}`
+        unapplyingSourceRule.value = ruleKey
+        
+        const tables = ["m3u_channels", "epg_channels", "programs"]
+        const results = []
+        
+        // Unapply the specific rule from each table for this source
+        for (const tableName of tables) {
+            console.log(`Unapplying rule '${ruleName}' from ${tableName} for source '${sourceName}'...`)
+            
+            const response = await fetch("/api/rules/unapply", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    table_name: tableName,
+                    source_name: sourceName,
+                    rule_names: [ruleName], // Specify the single rule to unapply
+                }),
+            })
+            
+            const data = await response.json()
+            
+            if (!response.ok) {
+                throw new Error(data.detail || `Failed to unapply rule '${ruleName}' from ${tableName} for '${sourceName}'`)
+            }
+            
+            results.push({
+                table: tableName,
+                source: sourceName,
+                rule: ruleName,
+                ...data.results
+            })
+        }
+        
+        // Calculate totals
+        const totalRecords = results.reduce(
+            (acc, result) => acc + (result.processed || 0),
+            0
+        )
+        
+        console.log(`Single rule unapplication results for '${ruleName}' on '${sourceName}':`, results)
+        
+        toast.add({
+            severity: "success",
+            summary: "Rule Unapplied",
+            detail: `Rule '${ruleName}' unapplied from source '${sourceName}' (${totalRecords} records restored)`,
+            life: 5000,
+        })
+        
+    } catch (error) {
+        console.error(`Error unapplying rule '${ruleName}' from source '${sourceName}':`, error)
+        toast.add({
+            severity: "error",
+            summary: "Rule Unapplication Failed",
+            detail: error instanceof Error ? error.message : `Failed to unapply rule '${ruleName}' from source '${sourceName}'`,
+            life: 5000,
+        })
+    } finally {
+        unapplyingSourceRule.value = null
+    }
 }
 
 // Lifecycle hooks

@@ -5,7 +5,7 @@ from typing import Dict, List, Literal, Any, Sequence, Optional
 from sqlalchemy import inspect, text, Row
 import uvicorn
 import json
-from fastapi import HTTPException, status
+from fastapi import HTTPException, status, Body
 from fastapi.responses import RedirectResponse, StreamingResponse
 import httpx
 from fastapi.responses import StreamingResponse
@@ -1563,6 +1563,255 @@ async def get_rules_log_content(filename: str) -> Dict[str, Any]:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get log content: {str(e)}",
+        )
+
+
+@app.post(
+    "/api/rules/apply",
+    response_model=Dict[str, Any],
+    tags=["Rules"],
+    summary="Apply rule assignments to database records",
+)
+async def apply_rule_assignments(request: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    """Apply rule assignments to database records for specified table and source"""
+    log_function("Applying rule assignments to database records")
+
+    try:
+        table_name = request.get("table_name")
+        source_name = request.get("source_name")  # Optional
+
+        # Validate required parameters
+        if not table_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST, detail="table_name is required"
+            )
+
+        # Validate table name against allowed tables
+        allowed_tables = ["m3u_channels", "epg_channels", "programs"]
+        if table_name not in allowed_tables:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid table_name. Must be one of: {allowed_tables}",
+            )
+
+        log_function(
+            f"Applying rules to table: {table_name}, source: {source_name or 'all sources'}"
+        )
+
+        # Import and apply post-load rules
+        from rules.post_load_rules import apply_post_load_rules
+
+        # Apply rules to the specified table and source
+        result = apply_post_load_rules(table_name, source_name)
+
+        log_function(
+            f"All rules application completed for the {table_name} from {source_name}"
+        )
+
+        return {
+            "success": True,
+            "message": f"Rules applied successfully to {table_name}"
+            + (f" for source {source_name}" if source_name else ""),
+            "table_name": table_name,
+            "source_name": source_name,
+            "results": result,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error applying rule assignments: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to apply rule assignments: {str(e)}",
+        )
+
+
+@app.post(
+    "/api/rules/apply/single",
+    response_model=Dict[str, Any],
+    tags=["Rules"],
+    summary="Apply a single rule to a specific source and table",
+)
+async def apply_single_rule(request: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    """Apply a single rule to a specific table and source"""
+    log_function("Applying single rule to database records")
+
+    try:
+        rule_name = request.get("rule_name")
+        table_name = request.get("table_name")
+        source_name = request.get("source_name")
+
+        # Validate required parameters
+        if not all([rule_name, table_name, source_name]):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="rule_name, table_name, and source_name are required",
+            )
+
+        # Validate table name
+        allowed_tables = ["m3u_channels", "epg_channels", "programs"]
+        if table_name not in allowed_tables:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid table_name. Must be one of: {allowed_tables}",
+            )
+
+        log_function(
+            f"Applying single rule '{rule_name}' to {table_name} for source {source_name}"
+        )
+
+        # Import and apply single rule
+        from rules.post_load_rules import post_load_engine
+
+        result = post_load_engine.apply_single_rule_to_source(
+            rule_name, table_name, source_name
+        )
+
+        log_function(
+            f"Single rule '{rule_name}' application completed for {table_name} from {source_name}"
+        )
+
+        return {
+            "success": True,
+            "message": f"Rule '{rule_name}' applied to {table_name} for source {source_name}",
+            "rule_name": rule_name,
+            "table_name": table_name,
+            "source_name": source_name,
+            "results": result,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error applying single rule: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to apply single rule: {str(e)}",
+        )
+
+
+@app.post(
+    "/api/rules/apply/source",
+    response_model=Dict[str, Any],
+    tags=["Rules"],
+    summary="Apply all rules to a specific source",
+)
+async def apply_rules_to_source(request: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    """Apply all assigned rules to a specific source across all tables"""
+    log_function("Applying all rules to source")
+
+    try:
+        source_name = request.get("source_name")
+        table_names = request.get("table_names")  # Optional
+
+        # Validate required parameters
+        if not source_name:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="source_name is required",
+            )
+
+        # Validate table names if provided
+        if table_names:
+            allowed_tables = ["m3u_channels", "epg_channels", "programs"]
+            invalid_tables = [t for t in table_names if t not in allowed_tables]
+            if invalid_tables:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Invalid table names: {invalid_tables}. Must be from: {allowed_tables}",
+                )
+
+        log_function(
+            f"Applying all rules to source {source_name} for tables: {table_names or 'all'}"
+        )
+
+        # Import and apply rules to source
+        from rules.post_load_rules import post_load_engine
+
+        result = post_load_engine.apply_all_rules_to_source(source_name, table_names)
+
+        log_function(f"All rules for {source_name} applied to {table_names}")
+
+        return {
+            "success": True,
+            "message": f"All rules applied to source {source_name}",
+            "source_name": source_name,
+            "table_names": table_names or ["m3u_channels", "epg_channels", "programs"],
+            "results": result,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error applying rules to source: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to apply rules to source: {str(e)}",
+        )
+
+
+@app.post(
+    "/api/rules/unapply",
+    response_model=Dict[str, Any],
+    tags=["Rules"],
+    summary="Unapply (remove) rules from database records",
+)
+async def unapply_rules(request: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    """Unapply (remove) rules from database records for specified table and source"""
+    log_function("Unapplying rules from database records")
+
+    try:
+        table_name = request.get("table_name")
+        source_name = request.get("source_name")
+        rule_names = request.get(
+            "rule_names"
+        )  # Optional - if not provided, unapply all
+
+        # Validate required parameters
+        if not all([table_name, source_name]):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="table_name and source_name are required",
+            )
+
+        # Validate table name
+        allowed_tables = ["m3u_channels", "epg_channels", "programs"]
+        if table_name not in allowed_tables:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid table_name. Must be one of: {allowed_tables}",
+            )
+
+        log_function(
+            f"Unapplying rules from {table_name} for source {source_name}: {rule_names or 'all rules'}"
+        )
+
+        # Import and unapply rules
+        from rules.post_load_rules import post_load_engine
+
+        result = post_load_engine.unapply_rules_from_source(
+            table_name, source_name, rule_names
+        )
+
+        log_function(f"Rule unapplication completed: {result}")
+
+        return {
+            "success": True,
+            "message": f"Rules unapplied from {table_name} for source {source_name}",
+            "table_name": table_name,
+            "source_name": source_name,
+            "rule_names": rule_names or "all",
+            "results": result,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error unapplying rules: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to unapply rules: {str(e)}",
         )
 
 

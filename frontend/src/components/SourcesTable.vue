@@ -19,6 +19,14 @@
                     :loading="refreshingAllEpg"
                     @click="refreshAllEpg"
                 />
+                <Button
+                    label="Reapply All Rules"
+                    icon="pi pi-play"
+                    severity="primary"
+                    size="small"
+                    :loading="applyingAllRules"
+                    @click="applyAllRules"
+                />
             </div>
         </div>
 
@@ -468,6 +476,28 @@
                                 @click="refreshFile(data)"
                             />
                             <Button
+                                icon="pi pi-filter"
+                                severity="warning"
+                                size="small"
+                                text
+                                rounded
+                                :loading="applyingSourceRules === data.sourceName"
+                                :disabled="applyingSourceRules !== null || unapplyingSourceRules !== null"
+                                title="Reapply all rules to this source"
+                                @click="applySourceRules(data.sourceName)"
+                            />
+                            <Button
+                                icon="pi pi-filter-slash"
+                                severity="help"
+                                size="small"
+                                text
+                                rounded
+                                :loading="unapplyingSourceRules === data.sourceName"
+                                :disabled="applyingSourceRules !== null || unapplyingSourceRules !== null"
+                                title="Unapply all rules from this source"
+                                @click="unapplySourceRules(data.sourceName)"
+                            />
+                            <Button
                                 icon="pi pi-trash"
                                 severity="danger"
                                 size="small"
@@ -723,6 +753,11 @@ const saveSuccess = ref("")
 // Refresh all loading states
 const refreshingAllM3u = ref(false)
 const refreshingAllEpg = ref(false)
+
+// Rule application states
+const applyingAllRules = ref(false)
+const applyingSourceRules = ref<string | null>(null)
+const unapplyingSourceRules = ref<string | null>(null)
 
 // Task ID tracking for progress bars
 const activeTaskIds = ref<Map<string, string>>(new Map()) // fileId -> taskId
@@ -1860,6 +1895,128 @@ function populateFormFromSource(source: Source): void {
         const value = fileData?.[fileConfig.property as keyof typeof fileData]
         ;(sourceForm.value as SourceFormData)[formField] = value || ""
     })
+}
+
+// Apply all assigned rules to a specific source
+async function applySourceRules(sourceName: string): Promise<void> {
+    try {
+        applyingSourceRules.value = sourceName
+        
+        console.log(`Applying all rules to source ${sourceName}...`)
+        
+        const response = await fetch("/api/rules/apply/source", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                source_name: sourceName,
+                // table_names is optional - will apply to all tables by default
+            }),
+        })
+        
+        const data = await response.json()
+        
+        if (!response.ok) {
+            throw new Error(data.detail || `Failed to apply rules to source ${sourceName}`)
+        }
+        
+        console.log(`Source rules application results for ${sourceName}:`, data.results)
+        
+        // Calculate totals from the results
+        const totals = data.results.tables ? 
+            Object.values(data.results.tables).reduce(
+                (acc: any, result: any) => ({
+                    processed: acc.processed + (result.processed || 0),
+                    filtered: acc.filtered + (result.filtered || 0),
+                    passed: acc.passed + (result.passed || 0),
+                }),
+                { processed: 0, filtered: 0, passed: 0 }
+            ) : data.results
+        
+        toast.add({
+            severity: "success",
+            summary: "Source Rules Applied",
+            detail: `All rules applied to source '${sourceName}': ${totals.passed} passed, ${totals.filtered} filtered`,
+            life: 5000,
+        })
+        
+    } catch (error) {
+        console.error(`Error applying rules to source '${sourceName}':`, error)
+        toast.add({
+            severity: "error",
+            summary: "Source Rule Application Failed",
+            detail: error instanceof Error ? error.message : `Failed to apply rules to source '${sourceName}'`,
+            life: 5000,
+        })
+    } finally {
+        applyingSourceRules.value = null
+    }
+}
+
+// Unapply all rules from a specific source
+async function unapplySourceRules(sourceName: string): Promise<void> {
+    try {
+        unapplyingSourceRules.value = sourceName
+        
+        const tables = ["m3u_channels", "epg_channels", "programs"]
+        const results = []
+        
+        // Unapply rules from each table for this source
+        for (const tableName of tables) {
+            console.log(`Unapplying all rules from ${tableName} for source ${sourceName}...`)
+            
+            const response = await fetch("/api/rules/unapply", {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify({
+                    table_name: tableName,
+                    source_name: sourceName,
+                    // rule_names is optional - omitting unapplies all rules
+                }),
+            })
+            
+            const data = await response.json()
+            
+            if (!response.ok) {
+                throw new Error(data.detail || `Failed to unapply rules from ${tableName} for ${sourceName}`)
+            }
+            
+            results.push({
+                table: tableName,
+                source: sourceName,
+                ...data.results
+            })
+        }
+        
+        // Calculate totals
+        const totalRecords = results.reduce(
+            (acc, result) => acc + (result.processed || 0),
+            0
+        )
+        
+        console.log(`Source rules unapplication results for ${sourceName}:`, results)
+        
+        toast.add({
+            severity: "success",
+            summary: "Source Rules Unapplied",
+            detail: `All rules unapplied from source '${sourceName}' (${totalRecords} records restored)`,
+            life: 5000,
+        })
+        
+    } catch (error) {
+        console.error(`Error unapplying rules from source '${sourceName}':`, error)
+        toast.add({
+            severity: "error",
+            summary: "Source Rule Unapplication Failed",
+            detail: error instanceof Error ? error.message : `Failed to unapply rules from source '${sourceName}'`,
+            life: 5000,
+        })
+    } finally {
+        unapplyingSourceRules.value = null
+    }
 }
 
 // Helper function to update source from form data
