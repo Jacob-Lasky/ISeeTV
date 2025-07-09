@@ -16,8 +16,7 @@
                             {{ tableConfig.displayName }}
                         </h2>
                         <p class="text-gray-600">
-                            Source: {{ sourceName }} • Passed filter:
-                            {{ passedRecords }} | Total: {{ totalRecords }}
+                            Source: {{ sourceName }} • Passed: {{ passedRecords }} | Caught by filter: {{ filteredRecords }} | Total: {{ totalRecords }}
                         </p>
                     </div>
                 </div>
@@ -249,6 +248,8 @@ const tableData = ref([])
 // Search and filtering state
 const filters = ref({})
 const globalFilterFields = ref([])
+
+// Filter statistics (from /api/tables/{table_name}/filtered_counts/{source})
 const totalRecords = ref(0)
 const passedRecords = ref(0)
 const filteredRecords = ref(0)
@@ -616,38 +617,41 @@ const loadFilterOptions = async () => {
     }
 }
 
-// Load filter statistics from database summary
+// Load filter statistics from new backend endpoint
 const loadFilterStatistics = async () => {
     try {
-        const response = await apiGet("/api/db/summary", false, {
-            showSuccessToast: false,
-        })
+        console.log(`Loading filter statistics for ${tableName.value}/${sourceName.value}...`)
+        
+        const response = await apiGet(
+            `/api/tables/${tableName.value}/filtered_counts/${encodeURIComponent(sourceName.value)}`,
+            false,
+            { showSuccessToast: false }
+        )
 
-        if (response.success && response.tables) {
-            const tableInfo = response.tables.find(
-                (t) => t.table === tableName.value
+        if (response.success && response.data) {
+            const data = response.data
+            
+            // Map the new API response to our variables
+            passedRecords.value = data.passed || 0
+            filteredRecords.value = data.all_not_passed || 0
+            totalRecords.value = data.total || 0
+
+            console.log(
+                `✅ Filter statistics loaded: ${passedRecords.value} passed, ${filteredRecords.value} caught by filter, ${totalRecords.value} total`
             )
-
-            if (
-                tableInfo &&
-                tableInfo.filtered &&
-                tableInfo.filtered[sourceName.value]
-            ) {
-                const sourceStats = tableInfo.filtered[sourceName.value]
-                passedRecords.value = sourceStats["Passed"] || 0
-                totalRecords.value = Object.values(sourceStats).reduce(
-                    (sum, count) => sum + count,
-                    0
-                )
-                filteredRecords.value = totalRecords.value - passedRecords.value
-
-                console.log(
-                    `Filter statistics for ${tableName.value}/${sourceName.value}: ${passedRecords.value} passed, ${filteredRecords.value} filtered, ${totalRecords.value} total`
-                )
-            }
+        } else {
+            console.warn(`⚠️ No filter statistics received for ${tableName.value}/${sourceName.value}`)
+            // Set default values
+            passedRecords.value = 0
+            filteredRecords.value = 0
+            totalRecords.value = 0
         }
     } catch (err) {
-        console.error("Error loading filter statistics:", err)
+        console.error(`❌ Error loading filter statistics:`, err)
+        // Set default values on error
+        passedRecords.value = 0
+        filteredRecords.value = 0
+        totalRecords.value = 0
     }
 }
 

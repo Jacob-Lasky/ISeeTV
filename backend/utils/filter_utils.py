@@ -193,3 +193,58 @@ def get_table_filter_statistics(session: Session, table_name: str) -> Dict[str, 
     except Exception as e:
         logger.error(f"Error getting filter statistics for table {table_name}: {e}")
         return {}
+
+
+def get_table_filter_statistics_by_source(
+    session: Session, table_name: str, source: str
+) -> Dict[str, int]:
+    try:
+        log_function(
+            f"Getting filter statistics for table: {table_name} and source: {source}"
+        )
+
+        query = text(
+            f"""
+            SELECT 
+                source,
+                CASE 
+                    WHEN filter_reason IS NULL THEN 'Passed'
+                    ELSE filter_reason 
+                END as reason,
+                COUNT(*) as count
+            FROM {table_name}
+            WHERE source = :source
+            GROUP BY source, filter_reason
+            ORDER BY source, count DESC
+        """
+        )
+
+        result = session.execute(query, {"source": source})
+        filter_stats = defaultdict(dict)
+        all_not_passed = 0
+        passed = 0
+        total = 0
+        for row in result:
+            reason = row.reason
+            count = row.count
+            if reason != "Passed":
+                all_not_passed += count
+            else:
+                passed += count
+            total += count
+            filter_stats[reason] = count
+
+        log_function(f"Filter statistics for {table_name}: {dict(filter_stats)}")
+
+        return {
+            "filter_stats": filter_stats,
+            "passed": passed,
+            "all_not_passed": all_not_passed,
+            "total": total,
+        }
+
+    except Exception as e:
+        logger.error(
+            f"Error getting filter statistics for table {table_name} and source {source}: {e}"
+        )
+        return {}

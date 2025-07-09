@@ -46,6 +46,7 @@ from utils.filter_utils import (
     precompute_filter_values,
     get_all_filter_values,
     get_table_filter_statistics,
+    get_table_filter_statistics_by_source,
 )
 from utils.stream_utils import (
     get_streams_query,
@@ -797,6 +798,32 @@ async def get_db_summary() -> Dict[str, Any]:
             )
 
     return {"tables": summary}
+
+
+@app.get(
+    "/api/tables/{table_name}/filtered_counts/{source}",
+    response_model=Dict[str, Any],
+    tags=["Database"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_table_filtered_counts(table_name: str, source: str) -> Dict[str, Any]:
+    """Get filter statistics for an entire table"""
+    try:
+        with SessionLocal() as session:
+            filter_stats = get_table_filter_statistics_by_source(
+                session, table_name, source
+            )
+
+            return {
+                "success": True,
+                "data": filter_stats,
+            }
+
+    except Exception as e:
+        logger.error(f"Error getting filter statistics for table {table_name}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
 
 
 @app.get(
