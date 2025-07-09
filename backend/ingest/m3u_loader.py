@@ -5,7 +5,7 @@
 import asyncio
 import logging
 from typing import AsyncGenerator, Optional
-from backend.common.utils import log_function
+from common.utils import log_function
 from sqlalchemy.orm import Session
 from sqlalchemy.dialects.sqlite import insert
 
