@@ -1647,7 +1647,7 @@ const fetchFilterStatsForRule = async (sourceName: string, ruleName: string): Pr
         const data = await response.json()
         
         if (data.success) {
-            console.log(`✅ API SUCCESS for ${sourceName}-${ruleName}: filtered_count=${data.data.filtered_count}`)
+            console.log(`API SUCCESS for ${sourceName}-${ruleName}: filtered_count=${data.data.filtered_count}`)
             filterStats.value[key] = data.data
             
             // Update the corresponding assignment with filter stats
@@ -1656,7 +1656,7 @@ const fetchFilterStatsForRule = async (sourceName: string, ruleName: string): Pr
                 const assignedRule = Array.isArray(a.assigned_rules) ? a.assigned_rules[0] : a.assigned_rules
                 return a.source_name === sourceName && assignedRule === ruleName
             })
-            console.log(`🔍 Found assignment for ${sourceName}-${ruleName}: ${assignment ? 'YES' : 'NO'}`)
+            console.log(`Found assignment for ${sourceName}-${ruleName}: ${assignment ? 'YES' : 'NO'}`)
             
             if (assignment) {
                 const newFilterStats = {
@@ -1666,14 +1666,14 @@ const fetchFilterStatsForRule = async (sourceName: string, ruleName: string): Pr
                     total: data.data.total,
                     rule_filtered_count: data.data.filtered_count
                 }
-                console.log(`📊 Setting filter_stats for ${sourceName}-${ruleName}: rule_filtered_count=${newFilterStats.rule_filtered_count}`)
+                console.log(`Setting filter_stats for ${sourceName}-${ruleName}: rule_filtered_count=${newFilterStats.rule_filtered_count}`)
                 assignment.filter_stats = newFilterStats
-                console.log(`✅ Assignment updated. Current filter_stats.rule_filtered_count: ${assignment.filter_stats.rule_filtered_count}`)
+                console.log(`Assignment updated. Current filter_stats.rule_filtered_count: ${assignment.filter_stats.rule_filtered_count}`)
             } else {
-                console.log(`❌ No assignment found for source-rule: ${sourceName}-${ruleName}`)
+                console.log(`No assignment found for source-rule: ${sourceName}-${ruleName}`)
             }
         } else {
-            console.log(`❌ API FAILED for ${sourceName}-${ruleName}: ${JSON.stringify(data)}`)
+            console.log(`API FAILED for ${sourceName}-${ruleName}: ${JSON.stringify(data)}`)
         }
     } catch (error) {
         console.error(`Error fetching filter stats for ${sourceName} with rule ${ruleName}:`, error)
@@ -1685,29 +1685,29 @@ const fetchFilterStatsForRule = async (sourceName: string, ruleName: string): Pr
 
 // Load filter statistics for specific assignments
 const loadFilterStatsForAssignments = async (assignments: any[]): Promise<void> => {
-    console.log(`📊 loadFilterStatsForAssignments: Starting with ${assignments.length} assignments`)
+    console.log(`loadFilterStatsForAssignments: Starting with ${assignments.length} assignments`)
     
     const validAssignments = assignments
         .filter(assignment => assignment.source_name && assignment.assigned_rules)
     
-    console.log(`📊 Found ${validAssignments.length} valid assignments to load stats for`)
+    console.log(`Found ${validAssignments.length} valid assignments to load stats for`)
     
     const promises = validAssignments.map(assignment => {
         const ruleName = Array.isArray(assignment.assigned_rules) 
             ? assignment.assigned_rules[0] 
             : assignment.assigned_rules
-        console.log(`📊 Will fetch stats for: ${assignment.source_name} - ${ruleName}`)
+        console.log(`Will fetch stats for: ${assignment.source_name} - ${ruleName}`)
         return fetchFilterStatsForRule(assignment.source_name, ruleName)
     })
     
-    console.log(`📊 Starting ${promises.length} parallel API calls...`)
+    console.log(`Starting ${promises.length} parallel API calls...`)
     await Promise.all(promises)
-    console.log(`📊 All API calls completed. Assignments with filter_stats: ${sourceAssignments.value.filter(a => a.filter_stats).length}`)
+    console.log(`All API calls completed. Assignments with filter_stats: ${sourceAssignments.value.filter(a => a.filter_stats).length}`)
 }
 
 // Load filter statistics for all assignments
 const loadAllFilterStats = async (): Promise<void> => {
-    console.log(`📊 loadAllFilterStats: Starting with ${sourceAssignments.value.length} assignments`)
+    console.log(`loadAllFilterStats: Starting with ${sourceAssignments.value.length} assignments`)
     await loadFilterStatsForAssignments(sourceAssignments.value)
 }
 
