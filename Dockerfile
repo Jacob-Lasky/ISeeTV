@@ -17,8 +17,8 @@ RUN npm run build
 # Stage 2: Set up the Python backend
 FROM python:3.11-slim-bookworm AS backend-builder
 
-# Install uv
-COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/
+# Install uv (pinned version for reproducible builds)
+COPY --from=ghcr.io/astral-sh/uv:0.7.20 /uv /bin/
 
 # Set working directory
 WORKDIR /app

@@ -7,7 +7,7 @@ RUN npm install
 COPY frontend/ ./
 
 # Backend (FastAPI) Dev Image
-FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim AS backend
+FROM ghcr.io/astral-sh/uv:0.7.20-python3.11-bookworm-slim AS backend
 
 WORKDIR /app
 
