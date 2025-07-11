@@ -279,9 +279,6 @@ async def load_epg_channels_async(
         channels = parse_epg_for_channels(file_path, source_name, task_id)
         log_function(f"Parsed {len(channels)} EPG channels")
 
-        # Use filtered channels for database loading
-        channels = filtered_channels
-
         # Update task progress if task_id provided
         if task_id:
             # Update total_items with actual parsed count

@@ -827,6 +827,42 @@ async def get_table_filtered_counts(table_name: str, source: str) -> Dict[str, A
 
 
 @app.get(
+    "/api/tables/{table_name}/filtered_counts/{source}/{rule}",
+    response_model=Dict[str, Any],
+    tags=["Database"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_table_filtered_counts_by_rule(table_name: str, source: str, rule: str) -> Dict[str, Any]:
+    """Get filter statistics for a specific rule on a specific table and source"""
+    try:
+        with SessionLocal() as session:
+            filter_stats = get_table_filter_statistics_by_source(
+                session, table_name, source
+            )
+            
+            # Extract the count for the specific rule
+            # filter_stats structure: {"filter_stats": {"MKV Filter": 217434, "Passed": 63989}, "passed": 63989, ...}
+            rule_count = filter_stats.get("filter_stats", {}).get(rule, 0)
+            
+            return {
+                "success": True,
+                "data": {
+                    "rule_name": rule,
+                    "filtered_count": rule_count,
+                    "total": filter_stats.get("total", 0),
+                    "passed": filter_stats.get("passed", 0),
+                    "all_not_passed": filter_stats.get("all_not_passed", 0)
+                },
+            }
+
+    except Exception as e:
+        logger.error(f"Error getting filter statistics for rule {rule} on table {table_name}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
+
+
+@app.get(
     "/api/tables/{table_name}/filters",
     response_model=Dict[str, Any],
     tags=["Database"],

@@ -200,7 +200,7 @@
                                 <template #body="{ data }">
                                     <div class="flex gap-1 justify-center">
                                         <Button
-                                            icon="pi pi-play"
+                                            icon="pi pi-filter"
                                             severity="success"
                                             outlined
                                             size="small"
@@ -213,8 +213,8 @@
                                             @click="applyRule(data.name)"
                                         />
                                         <Button
-                                            icon="pi pi-stop"
-                                            severity="warning"
+                                            icon="pi pi-filter-slash"
+                                            severity="warn"
                                             outlined
                                             size="small"
                                             v-tooltip="
@@ -328,28 +328,44 @@
 
                             <Column
                                 field="assigned_rules"
-                                header="Assigned Rules"
-                                style="min-width: 300px"
+                                header="Assigned Rule"
+                                style="min-width: 200px"
                             >
                                 <template #body="{ data }">
-                                    <div class="flex flex-wrap gap-1">
-                                        <Tag
-                                            v-for="ruleName in data.assigned_rules"
-                                            :key="ruleName"
-                                            :value="ruleName"
-                                            severity="info"
-                                        />
-                                    </div>
+                                    <Tag
+                                        v-if="data.assigned_rules && data.assigned_rules.length > 0"
+                                        :value="Array.isArray(data.assigned_rules) ? data.assigned_rules[0] : data.assigned_rules"
+                                        severity="info"
+                                    />
+                                    <span v-else class="text-gray-400">No rule assigned</span>
                                 </template>
                                 <template #editor="{ data, field }">
-                                    <MultiSelect
+                                    <Select
                                         v-model="data[field]"
                                         :options="ruleOptions"
                                         optionLabel="label"
                                         optionValue="value"
-                                        placeholder="Select rules"
-                                        :maxSelectedLabels="3"
+                                        placeholder="Select rule"
+                                        showClear
                                     />
+                                </template>
+                            </Column>
+
+                            <Column
+                                field="filter_stats"
+                                header="Filtered by Rule"
+                                style="min-width: 150px"
+                            >
+                                <template #body="{ data }">
+                                    <div v-if="data.filter_stats" class="flex flex-col gap-1">
+                                        <div class="text-sm">
+                                            <span class="font-semibold text-blue-600">{{ data.filter_stats.rule_filtered_count || 0 }}</span>
+                                        </div>
+                                    </div>
+                                    <div v-else class="text-gray-400 text-sm">
+                                        <i class="pi pi-spin pi-spinner" v-if="loadingFilterStats[`${data.source_name}-${Array.isArray(data.assigned_rules) ? data.assigned_rules[0] : data.assigned_rules}`]"></i>
+                                        <span v-else>Never run</span>
+                                    </div>
                                 </template>
                             </Column>
 
@@ -405,178 +421,84 @@
                                 bodyStyle="text-align:center"
                             >
                                 <template #body="{ data }">
-                                    <div class="flex flex-col gap-2">
-                                        <!-- Source-level actions -->
-                                        <div class="flex gap-1 justify-center">
-                                            <Button
-                                                icon="pi pi-play"
-                                                severity="success"
-                                                outlined
-                                                size="small"
-                                                v-tooltip="
-                                                    'Apply all assigned rules to this source'
-                                                "
-                                                :loading="
-                                                    applyingSourceRules ===
-                                                    data.source_name
-                                                "
-                                                :disabled="
-                                                    applyingSourceRules !==
-                                                        null ||
-                                                    unapplyingSourceRules !==
-                                                        null ||
-                                                    applyingSourceRule !==
-                                                        null ||
-                                                    unapplyingSourceRule !==
-                                                        null
-                                                "
-                                                @click="
-                                                    applySourceRules(
-                                                        data.source_name
-                                                    )
-                                                "
-                                            />
-                                            <Button
-                                                icon="pi pi-stop"
-                                                severity="warning"
-                                                outlined
-                                                size="small"
-                                                v-tooltip="
-                                                    'Unapply all rules from this source'
-                                                "
-                                                :loading="
-                                                    unapplyingSourceRules ===
-                                                    data.source_name
-                                                "
-                                                :disabled="
-                                                    applyingSourceRules !==
-                                                        null ||
-                                                    unapplyingSourceRules !==
-                                                        null ||
-                                                    applyingSourceRule !==
-                                                        null ||
-                                                    unapplyingSourceRule !==
-                                                        null
-                                                "
-                                                @click="
-                                                    unapplySourceRules(
-                                                        data.source_name
-                                                    )
-                                                "
-                                            />
-                                            <Button
-                                                icon="pi pi-trash"
-                                                severity="danger"
-                                                outlined
-                                                size="small"
-                                                v-tooltip="
-                                                    'Delete this assignment'
-                                                "
-                                                @click="
-                                                    deleteAssignment(
-                                                        sourceAssignments.indexOf(
-                                                            data
-                                                        )
-                                                    )
-                                                "
-                                            />
-                                        </div>
-                                        <!-- Per-rule actions -->
-                                        <div
-                                            v-if="
-                                                data.assigned_rules &&
-                                                data.assigned_rules.length > 0
+                                    <div class="flex gap-1 justify-center">
+                                        <Button
+                                            icon="pi pi-filter"
+                                            severity="success"
+                                            outlined
+                                            size="small"
+                                            v-tooltip="
+                                                'Apply all assigned rules to this source'
                                             "
-                                            class="flex flex-wrap gap-1 justify-center"
-                                        >
-                                            <div
-                                                v-for="ruleName in data.assigned_rules"
-                                                :key="`${data.source_name}-${ruleName}`"
-                                                class="flex gap-1"
-                                            >
-                                                <Button
-                                                    icon="pi pi-filter"
-                                                    severity="info"
-                                                    text
-                                                    size="small"
-                                                    :v-tooltip="`Apply rule '${ruleName}' to source '${data.source_name}'`"
-                                                    :loading="
-                                                        applyingSourceRule ===
-                                                        `${data.source_name}-${ruleName}`
-                                                    "
-                                                    :disabled="
-                                                        applyingSourceRules !==
-                                                            null ||
-                                                        unapplyingSourceRules !==
-                                                            null ||
-                                                        applyingSourceRule !==
-                                                            null ||
-                                                        unapplyingSourceRule !==
-                                                            null
-                                                    "
-                                                    @click="
-                                                        applySourceRule(
-                                                            data.source_name,
-                                                            ruleName
-                                                        )
-                                                    "
-                                                />
-                                                <Button
-                                                    icon="pi pi-filter-slash"
-                                                    severity="help"
-                                                    text
-                                                    size="small"
-                                                    :v-tooltip="`Unapply rule '${ruleName}' from source '${data.source_name}'`"
-                                                    :loading="
-                                                        unapplyingSourceRule ===
-                                                        `${data.source_name}-${ruleName}`
-                                                    "
-                                                    :disabled="
-                                                        applyingSourceRules !==
-                                                            null ||
-                                                        unapplyingSourceRules !==
-                                                            null ||
-                                                        applyingSourceRule !==
-                                                            null ||
-                                                        unapplyingSourceRule !==
-                                                            null
-                                                    "
-                                                    @click="
-                                                        unapplySourceRule(
-                                                            data.source_name,
-                                                            ruleName
-                                                        )
-                                                    "
-                                                />
-                                            </div>
-                                        </div>
+                                            :loading="
+                                                applyingSourceRules ===
+                                                data.source_name
+                                            "
+                                            :disabled="
+                                                applyingSourceRules !==
+                                                    null ||
+                                                unapplyingSourceRules !==
+                                                    null ||
+                                                applyingSourceRule !==
+                                                    null ||
+                                                unapplyingSourceRule !==
+                                                    null
+                                            "
+                                            @click="
+                                                applySourceRules(
+                                                    data.source_name
+                                                )
+                                            "
+                                        />
+                                        <Button
+                                            icon="pi pi-filter-slash"
+                                            severity="warn"
+                                            outlined                                            size="small"
+                                            v-tooltip="
+                                                'Unapply all rules from this source'
+                                            "
+                                            :loading="
+                                                unapplyingSourceRules ===
+                                                data.source_name
+                                            "
+                                            :disabled="
+                                                applyingSourceRules !==
+                                                    null ||
+                                                unapplyingSourceRules !==
+                                                    null ||
+                                                applyingSourceRule !==
+                                                    null ||
+                                                unapplyingSourceRule !==
+                                                    null
+                                            "
+                                            @click="
+                                                unapplySourceRules(
+                                                    data.source_name
+                                                )
+                                            "
+                                        />
+                                        <Button
+                                            icon="pi pi-trash"
+                                            severity="danger"
+                                            outlined
+                                            size="small"
+                                            v-tooltip="
+                                                'Delete this assignment'
+                                            "
+                                            @click="
+                                                deleteAssignment(
+                                                    sourceAssignments.indexOf(
+                                                        data
+                                                    )
+                                                )
+                                            "
+                                        />
                                     </div>
                                 </template>
                             </Column>
                         </DataTable>
                     </template>
                 </Card>
-                <div v-if="selectedLogContent" class="log-content">
-                    <h3 class="text-lg font-semibold mb-2">
-                        {{ selectedLogFile?.filename }}
-                    </h3>
-                    <DataTable
-                        :value="selectedLogContent"
-                        :paginator="true"
-                        :rows="10"
-                        responsiveLayout="scroll"
-                    >
-                        <Column field="reason" header="Rejection Reason" />
-                        <Column field="rejected_by" header="Rule" />
-                        <Column field="table_name" header="Table" />
-                        <Column field="source_name" header="Source" />
-                        <Column field="rejected_at" header="Rejected At">
-                            <template #body="{ data }">
-                                {{ formatDate(data.rejected_at) }}
-                            </template>
-                        </Column>
-                    </DataTable>
-                </div>
             </div>
         </div>
     </div>
@@ -609,8 +531,15 @@ interface IngestionRule {
 interface SourceRuleAssignment {
     source_name: string
     rule_mode: "whitelist" | "blacklist"
-    assigned_rules: string[]
+    assigned_rules: string[] | string | null
     enabled: boolean
+    filter_stats?: {
+        filter_stats: Record<string, number>
+        passed: number
+        all_not_passed: number
+        total: number
+        rule_filtered_count?: number
+    }
 }
 
 interface Source {
@@ -635,6 +564,10 @@ const unapplyingSourceRules = ref<string | null>(null)
 const applyingSourceRule = ref<string | null>(null)
 const unapplyingSourceRule = ref<string | null>(null)
 const validationErrors = ref<string[]>([])
+
+// Filter statistics state
+const loadingFilterStats = ref<Record<string, boolean>>({})
+const filterStats = ref<Record<string, any>>({})
 
 // Column options for field selection
 const columnOptions = ref<Record<string, { label: string; value: string }[]>>(
@@ -663,25 +596,87 @@ const tableOptions = computed(() => [
 ])
 
 // Load configuration from API
+let loadingConfiguration = false
 const loadConfiguration = async (): Promise<void> => {
+    // Prevent multiple simultaneous calls
+    if (loadingConfiguration) {
+        console.log('loadConfiguration already in progress, skipping')
+        return
+    }
+    
+    loadingConfiguration = true
     try {
+        console.log(`Fetching /api/rules...`)
         const response = await fetch("/api/rules")
+        console.log(`Response status: ${response.status} ${response.statusText}`)
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`)
+        }
+        
         const data = await response.json()
+        console.log(`API response data:`, data)
 
         if (data.rules && data.source_assignments) {
+            console.log(`loadConfiguration: Starting to update assignments`)
+            console.log(`Current assignments count: ${sourceAssignments.value.length}`)
+            console.log(`Current assignments with filter_stats: ${sourceAssignments.value.filter(a => a.filter_stats).length}`)
+            
             rules.value = data.rules
-            sourceAssignments.value = data.source_assignments
+            
+            // Preserve existing filter_stats when updating assignments
+            const existingFilterStats = new Map()
+            sourceAssignments.value.forEach(assignment => {
+                if (assignment.filter_stats) {
+                    console.log(`Preserving filter_stats for ${assignment.source_name}: ${assignment.filter_stats.rule_filtered_count}`)
+                    existingFilterStats.set(assignment.source_name, assignment.filter_stats)
+                }
+            })
+            
+            console.log(`Preserved filter_stats for ${existingFilterStats.size} assignments`)
+            
+            // Update assignments and restore filter stats
+            sourceAssignments.value = data.source_assignments.map(assignment => {
+                const existingStats = existingFilterStats.get(assignment.source_name)
+                if (existingStats) {
+                    console.log(`Restoring filter_stats for ${assignment.source_name}: ${existingStats.rule_filtered_count}`)
+                    return { ...assignment, filter_stats: existingStats }
+                } else {
+                    console.log(`No existing filter_stats for ${assignment.source_name}`)
+                    return assignment
+                }
+            })
+            
+            console.log(`Updated assignments. Count with filter_stats: ${sourceAssignments.value.filter(a => a.filter_stats).length}`)
+            
             hasChanges.value = false
             validationErrors.value = []
+            
+            // Load filter statistics only for assignments that don't have them yet
+            const assignmentsNeedingStats = sourceAssignments.value.filter(a => !a.filter_stats)
+            console.log(`Found ${assignmentsNeedingStats.length} assignments needing filter stats`)
+            
+            if (assignmentsNeedingStats.length > 0) {
+                await loadFilterStatsForAssignments(assignmentsNeedingStats)
+            }
+            
+            console.log(`Filter stats loading completed. Final count with filter_stats: ${sourceAssignments.value.filter(a => a.filter_stats).length}`)
         }
     } catch (error) {
         console.error("Error loading configuration:", error)
+        console.error("Error details:", {
+            message: error.message,
+            stack: error.stack,
+            name: error.name
+        })
         toast.add({
             severity: "error",
             summary: "Error",
             detail: "Failed to load rules configuration",
             life: 3000,
         })
+    } finally {
+        loadingConfiguration = false
     }
 }
 
@@ -842,9 +837,9 @@ const deleteRule = async (index: number): Promise<void> => {
 
     // Remove rule from all source assignments
     sourceAssignments.value.forEach((assignment) => {
-        assignment.assigned_rules = assignment.assigned_rules.filter(
-            (name) => name !== ruleName
-        )
+        if (assignment.assigned_rules === ruleName) {
+            assignment.assigned_rules = null
+        }
     })
 
     hasChanges.value = true
@@ -889,7 +884,7 @@ const addNewAssignment = (): void => {
     const newAssignment: SourceRuleAssignment = {
         source_name: "",
         rule_mode: "blacklist",
-        assigned_rules: [],
+        assigned_rules: null,
         enabled: true,
         isNew: true, // Flag to indicate this is a new assignment
     }
@@ -1113,7 +1108,7 @@ const applyRule = async (ruleName: string): Promise<void> => {
         // Get sources assigned to this rule
         const assignedSources = sourceAssignments.value
             .filter((assignment) =>
-                assignment.assigned_rules.includes(ruleName)
+                assignment.assigned_rules === ruleName
             )
             .map((assignment) => assignment.source_name)
 
@@ -1220,7 +1215,7 @@ const unapplyRule = async (ruleName: string): Promise<void> => {
         // Get sources assigned to this rule
         const assignedSources = sourceAssignments.value
             .filter((assignment) =>
-                assignment.assigned_rules.includes(ruleName)
+                assignment.assigned_rules === ruleName
             )
             .map((assignment) => assignment.source_name)
 
@@ -1616,7 +1611,7 @@ const unapplySourceRule = async (
 
 // Lifecycle hooks
 onMounted(async () => {
-    await Promise.all([loadConfiguration(), loadSources(), loadLogFiles()])
+    await Promise.all([loadConfiguration(), loadSources()])
     // Preload column data after configuration is loaded
     await preloadColumnData()
 })
@@ -1637,6 +1632,83 @@ const getTableSeverity = (table: string): string => {
         programs: "warning",
     }
     return severityMap[table] || "secondary"
+}
+
+// Fetch filter statistics for a specific source and rule
+const fetchFilterStatsForRule = async (sourceName: string, ruleName: string): Promise<void> => {
+    if (!sourceName || !ruleName) return
+    
+    try {
+        const key = `${sourceName}-${ruleName}`
+        loadingFilterStats.value[key] = true
+        
+        // Fetch filter stats for m3u_channels table (most common) with specific rule
+        const response = await fetch(`/api/tables/m3u_channels/filtered_counts/${sourceName}/${ruleName}`)
+        const data = await response.json()
+        
+        if (data.success) {
+            console.log(`✅ API SUCCESS for ${sourceName}-${ruleName}: filtered_count=${data.data.filtered_count}`)
+            filterStats.value[key] = data.data
+            
+            // Update the corresponding assignment with filter stats
+            // Find the specific assignment that matches both source and rule
+            const assignment = sourceAssignments.value.find(a => {
+                const assignedRule = Array.isArray(a.assigned_rules) ? a.assigned_rules[0] : a.assigned_rules
+                return a.source_name === sourceName && assignedRule === ruleName
+            })
+            console.log(`🔍 Found assignment for ${sourceName}-${ruleName}: ${assignment ? 'YES' : 'NO'}`)
+            
+            if (assignment) {
+                const newFilterStats = {
+                    filter_stats: { [ruleName]: data.data.filtered_count },
+                    passed: data.data.passed,
+                    all_not_passed: data.data.all_not_passed,
+                    total: data.data.total,
+                    rule_filtered_count: data.data.filtered_count
+                }
+                console.log(`📊 Setting filter_stats for ${sourceName}-${ruleName}: rule_filtered_count=${newFilterStats.rule_filtered_count}`)
+                assignment.filter_stats = newFilterStats
+                console.log(`✅ Assignment updated. Current filter_stats.rule_filtered_count: ${assignment.filter_stats.rule_filtered_count}`)
+            } else {
+                console.log(`❌ No assignment found for source-rule: ${sourceName}-${ruleName}`)
+            }
+        } else {
+            console.log(`❌ API FAILED for ${sourceName}-${ruleName}: ${JSON.stringify(data)}`)
+        }
+    } catch (error) {
+        console.error(`Error fetching filter stats for ${sourceName} with rule ${ruleName}:`, error)
+    } finally {
+        const key = `${sourceName}-${ruleName}`
+        loadingFilterStats.value[key] = false
+    }
+}
+
+// Load filter statistics for specific assignments
+const loadFilterStatsForAssignments = async (assignments: any[]): Promise<void> => {
+    console.log(`📊 loadFilterStatsForAssignments: Starting with ${assignments.length} assignments`)
+    
+    const validAssignments = assignments
+        .filter(assignment => assignment.source_name && assignment.assigned_rules)
+    
+    console.log(`📊 Found ${validAssignments.length} valid assignments to load stats for`)
+    
+    const promises = validAssignments.map(assignment => {
+        const ruleName = Array.isArray(assignment.assigned_rules) 
+            ? assignment.assigned_rules[0] 
+            : assignment.assigned_rules
+        console.log(`📊 Will fetch stats for: ${assignment.source_name} - ${ruleName}`)
+        return fetchFilterStatsForRule(assignment.source_name, ruleName)
+    })
+    
+    console.log(`📊 Starting ${promises.length} parallel API calls...`)
+    await Promise.all(promises)
+    console.log(`📊 All API calls completed. Assignments with filter_stats: ${sourceAssignments.value.filter(a => a.filter_stats).length}`)
+}
+
+// Load filter statistics for all assignments
+const loadAllFilterStats = async (): Promise<void> => {
+    console.log(`📊 loadAllFilterStats: Starting with ${sourceAssignments.value.length} assignments`)
+    await loadFilterStatsForAssignments(sourceAssignments.value)
 }
 
 // Clean up - functions already defined above

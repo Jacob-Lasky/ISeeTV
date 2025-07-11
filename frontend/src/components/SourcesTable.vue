@@ -488,7 +488,7 @@
                             />
                             <Button
                                 icon="pi pi-filter-slash"
-                                severity="help"
+                                severity="warn"
                                 size="small"
                                 text
                                 rounded

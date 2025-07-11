@@ -157,9 +157,7 @@ class PostLoadRulesEngine:
                         passed_mask = passed_mask & ~matches
 
                         # Set filter reason for blacklisted records
-                        df.loc[filtered_mask, "filter_reason"] = (
-                            f"Blacklisted by rule '{rule.name}': matched pattern '{rule.regex}' in field '{rule.field}'"
-                        )
+                        df.loc[filtered_mask, "filter_reason"] = rule.name
 
                     else:
                         # Whitelist: only matching records pass
@@ -167,9 +165,7 @@ class PostLoadRulesEngine:
                         passed_mask = passed_mask & matches
 
                         # Set filter reason for non-whitelisted records
-                        df.loc[filtered_mask, "filter_reason"] = (
-                            f"Not whitelisted by rule '{rule.name}': did not match pattern '{rule.regex}' in field '{rule.field}'"
-                        )
+                        df.loc[filtered_mask, "filter_reason"] = rule.name
 
                     filtered_count += filtered_mask.sum()
 
