@@ -4,3 +4,5 @@ frontend/.vscode
 backend/__pycache__
 backend/.mypy_cache
 backend/.ruff_cache
+backend/.venv
+.venv

@@ -15,35 +15,37 @@ COPY frontend/ ./
 RUN npm run build
 
 # Stage 2: Set up the Python backend
-FROM python:3.11-slim AS backend-builder
-WORKDIR /app/backend
+FROM python:3.11-slim-bookworm AS backend-builder
 
-# Copy backend files
-COPY backend/ /app/backend/
+# Install uv
+COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/
 
-# Install Poetry
-RUN pip install poetry==2.1.1
+# Set working directory
+WORKDIR /app
 
-# Copy backend files
-COPY backend/pyproject.toml backend/poetry.lock* ./
+# Copy Python project files
+COPY backend/pyproject.toml backend/uv.lock ./
 
-# Configure Poetry to not create a virtual environment
-RUN poetry config virtualenvs.create false
+# Install dependencies without the project itself
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-install-project --no-editable
 
-# Install dependencies
-RUN poetry install --no-root --no-interaction --without dev
+# Copy backend source code
+COPY backend/ ./
+
+# Install the project in non-editable mode
+RUN --mount=type=cache,target=/root/.cache/uv \
+    uv sync --locked --no-editable
 
 # Stage 3: Final image
-FROM python:3.11-slim
+FROM python:3.11-slim-bookworm
 WORKDIR /app
 
 # Install Nginx for serving the frontend
 RUN apt-get update && apt-get install -y nginx && rm -rf /var/lib/apt/lists/*
 
-# Copy backend from backend-builder
-COPY --from=backend-builder /usr/local/lib/python3.11/site-packages /usr/local/lib/python3.11/site-packages
-COPY --from=backend-builder /usr/local/bin /usr/local/bin
-COPY backend/ /app/backend/
+# Copy virtual environment from backend-builder (no source code needed)
+COPY --from=backend-builder /app/.venv /app/.venv
 
 # Copy frontend build from frontend-builder
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
@@ -75,8 +77,8 @@ RUN ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/
 # Create a startup script
 RUN printf '%s\n' \
   '#!/bin/bash' \
-  '# Start the backend API server' \
-  'cd /app/backend && python -m uvicorn main:app --host 0.0.0.0 --port 1314 &' \
+  '# Start the backend API server using venv binary directly' \
+  'cd /app && /app/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 1314 &' \
   '' \
   '# Start Nginx' \
   'nginx -g "daemon off;"' \

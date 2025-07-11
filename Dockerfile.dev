@@ -7,11 +7,15 @@ RUN npm install
 COPY frontend/ ./
 
 # Backend (FastAPI) Dev Image
-FROM python:3.11-slim AS backend
+FROM ghcr.io/astral-sh/uv:python3.11-bookworm-slim AS backend
 
 WORKDIR /app
-RUN pip install poetry==2.1.1
-COPY backend/pyproject.toml backend/poetry.lock* ./
-RUN poetry config virtualenvs.create false
-RUN poetry install --no-root --no-interaction
+
+# Copy project files
+COPY backend/pyproject.toml backend/uv.lock* ./
+
+# Install dependencies
+RUN uv sync --frozen --no-cache
+
+# Copy the rest of the backend code
 COPY backend/ /app

@@ -3,10 +3,10 @@
 set -e
 
 echo "Running Ruff..."
-poetry run ruff check .
+uv run ruff check .
 
 echo "Running Black..."
-poetry run black .
+uv run black .
 
 echo "Running MyPy..."
-poetry run mypy .
+uv run mypy .

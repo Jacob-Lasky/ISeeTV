@@ -13,6 +13,19 @@ services:
     environment:
       - NODE_ENV=development
       - VITE_BACKEND_URL=http://192.168.86.183:1314
+    develop:
+      watch:
+        # Sync frontend source code changes
+        - action: sync
+          path: ./frontend/src
+          target: /app/frontend/src
+        # Sync frontend public assets
+        - action: sync
+          path: ./frontend/public
+          target: /app/frontend/public
+        # Rebuild on package.json changes
+        - action: rebuild
+          path: ./frontend/package.json
 
   backend:
     build:
@@ -20,7 +33,7 @@ services:
       dockerfile: Dockerfile.dev
       target: backend
     working_dir: /app/backend
-    command: uvicorn main:app --host 0.0.0.0 --port 1314 --reload
+    command: uv run uvicorn main:app --host 0.0.0.0 --port 1314 --reload
     ports:
       - "1314:1314"
     volumes:
@@ -28,3 +41,21 @@ services:
       - ./data:/app/data
     environment:
       - PYTHONUNBUFFERED=1
+      - UV_LINK_MODE=copy
+    develop:
+      watch:
+        # Sync backend source code changes
+        - action: sync
+          path: ./backend
+          target: /app/backend
+          ignore:
+            - .venv/
+            - __pycache__/
+            - .mypy_cache/
+            - .ruff_cache/
+        # Rebuild on dependency changes
+        - action: rebuild
+          path: ./backend/pyproject.toml
+        # Rebuild on uv.lock changes
+        - action: rebuild
+          path: ./backend/uv.lock
