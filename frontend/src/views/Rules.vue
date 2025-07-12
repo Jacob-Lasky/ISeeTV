@@ -328,16 +328,20 @@
 
                             <Column
                                 field="assigned_rules"
-                                header="Assigned Rule"
-                                style="min-width: 200px"
+                                header="Assigned Rules"
+                                style="min-width: 300px"
                             >
                                 <template #body="{ data }">
-                                    <Tag
-                                        v-if="data.assigned_rules && data.assigned_rules.length > 0"
-                                        :value="Array.isArray(data.assigned_rules) ? data.assigned_rules[0] : data.assigned_rules"
-                                        severity="info"
-                                    />
-                                    <span v-else class="text-gray-400">No rule assigned</span>
+                                    <div v-if="data.assigned_rules && data.assigned_rules.length > 0" class="flex flex-wrap gap-1">
+                                        <Tag
+                                            v-for="rule in (Array.isArray(data.assigned_rules) ? data.assigned_rules : [data.assigned_rules])"
+                                            :key="rule"
+                                            :value="rule"
+                                            severity="info"
+                                            class="text-xs"
+                                        />
+                                    </div>
+                                    <span v-else class="text-gray-400">No rules assigned</span>
                                 </template>
                                 <template #editor="{ data, field }">
                                     <Select
@@ -448,13 +452,10 @@
                                             outlined
                                             size="small"
                                             v-tooltip="
-                                                'Apply this rule to this source'
+                                                'Apply this assignment (all rules)'
                                             "
                                             @click="
-                                                applySourceRule(
-                                                    data.source_name,
-                                                    Array.isArray(data.assigned_rules) ? data.assigned_rules[0] : data.assigned_rules
-                                                )
+                                                applyAssignmentToTables(data.assignment_id)
                                             "
                                             :disabled="
                                                 applyingSourceRules !==
@@ -1471,7 +1472,142 @@ const unapplySourceRules = async (sourceName: string): Promise<void> => {
     }
 }
 
-// Apply a specific rule to a specific source (most granular control)
+// Apply an assignment to all relevant tables based on its rules
+const applyAssignmentToTables = async (assignmentId: string): Promise<void> => {
+    try {
+        // Find the assignment
+        const assignment = sourceAssignments.value.find(a => a.assignment_id === assignmentId)
+        if (!assignment) {
+            console.error(`Assignment '${assignmentId}' not found`)
+            toast.add({
+                severity: "error",
+                summary: "Assignment Not Found",
+                detail: `Assignment '${assignmentId}' not found`,
+                life: 3000,
+            })
+            return
+        }
+
+        console.log(`Applying assignment '${assignmentId}' to all relevant tables...`)
+        
+        // Determine which tables to apply to based on the rules in the assignment
+        const tablesToApply = new Set<string>()
+        for (const ruleName of assignment.assigned_rules) {
+            const rule = rules.value.find(r => r.name === ruleName)
+            if (rule && rule.tables) {
+                rule.tables.forEach(table => tablesToApply.add(table))
+            }
+        }
+
+        if (tablesToApply.size === 0) {
+            console.warn(`No tables found for assignment '${assignmentId}'`)
+            return
+        }
+
+        console.log(`Will apply assignment '${assignmentId}' to tables: ${Array.from(tablesToApply).join(', ')}`)
+
+        // Apply the assignment to each relevant table
+        const applyPromises = Array.from(tablesToApply).map(tableName => 
+            applyAssignment(assignmentId, tableName)
+        )
+
+        await Promise.all(applyPromises)
+        
+        toast.add({
+            severity: "success",
+            summary: "Assignment Applied",
+            detail: `Assignment '${assignment.assignment_name}' applied to ${tablesToApply.size} table(s)`,
+            life: 5000,
+        })
+
+    } catch (error) {
+        console.error(`Error applying assignment '${assignmentId}':`, error)
+        toast.add({
+            severity: "error",
+            summary: "Assignment Application Failed",
+            detail: error instanceof Error ? error.message : `Failed to apply assignment '${assignmentId}'`,
+            life: 5000,
+        })
+    }
+}
+
+// Apply a specific assignment by ID (new multi-assignment architecture)
+const applyAssignment = async (
+    assignmentId: string,
+    tableName: string
+): Promise<void> => {
+    try {
+        const assignmentKey = `${assignmentId}-${tableName}`
+        applyingSourceRule.value = assignmentKey
+
+        console.log(`Applying assignment '${assignmentId}' to table '${tableName}'...`)
+
+        const response = await fetch("/api/assignments/apply", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+                assignment_id: assignmentId,
+                table_name: tableName,
+            }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+            throw new Error(
+                data.detail ||
+                    `Failed to apply assignment '${assignmentId}' to table '${tableName}'`
+            )
+        }
+
+        console.log(
+            `Assignment application results for '${assignmentId}' on '${tableName}':`,
+            data.results
+        )
+
+        const totals =
+            data.results && typeof data.results === "object"
+                ? {
+                      passed: data.results.passed || 0,
+                      filtered: data.results.filtered || 0,
+                  }
+                : data.results
+
+        toast.add({
+            severity: "success",
+            summary: "Assignment Applied",
+            detail: `Assignment '${assignmentId}' applied to table '${tableName}': ${totals.passed} passed, ${totals.filtered} filtered`,
+            life: 5000,
+        })
+        
+        // Refresh filter statistics for all rules in this assignment
+        const assignment = sourceAssignments.value.find(a => a.assignment_id === assignmentId)
+        if (assignment) {
+            console.log(`Refreshing filter stats for assignment: ${assignmentId}`)
+            for (const ruleName of assignment.assigned_rules) {
+                await fetchFilterStatsForRule(assignment.source_name, ruleName)
+            }
+        }
+    } catch (error) {
+        console.error(
+            `Error applying assignment '${assignmentId}' to table '${tableName}':`,
+            error
+        )
+        toast.add({
+            severity: "error",
+            summary: "Assignment Application Failed",
+            detail:
+                error instanceof Error
+                    ? error.message
+                    : `Failed to apply assignment '${assignmentId}' to table '${tableName}'`,
+            life: 5000,
+        })
+    } finally {
+        applyingSourceRule.value = null
+    }
+}
+
+// Apply a specific rule to a specific source (legacy method)
 const applySourceRule = async (
     sourceName: string,
     ruleName: string

@@ -67,6 +67,7 @@ from rules.ingestion_rules import (
     IngestionRule,
     SourceRuleAssignment,
     INGESTION_RULES_LOGS,
+    
 )
 from common.rules_storage import (
     load_rules,
@@ -1417,29 +1418,60 @@ async def get_rules() -> Dict[str, Any]:
 
 
 @app.post(
-    "/api/rules/save",
+    "/api/assignments/apply",
     response_model=Dict[str, Any],
     tags=["Rules"],
     status_code=status.HTTP_200_OK,
 )
-async def save_rules_only(rules_data: List[Dict[str, Any]]) -> Dict[str, Any]:
-    """Save only ingestion rules to rules.json file"""
-    log_function("Saving ingestion rules only")
+async def apply_assignment(
+    assignment_id: str = Body(..., description="ID of the assignment to apply"),
+    table_name: str = Body(..., description="Name of the table to apply assignment to"),
+) -> Dict[str, Any]:
+    """Apply a specific assignment by ID to a table (new multi-assignment architecture)"""
     try:
+        logger.info(f"[apply_assignment]: Applying assignment '{assignment_id}' to {table_name}")
+        
+        # Import post_load_engine and get the assignment by ID
+        from rules.post_load_rules import post_load_engine
+        assignment = post_load_engine.ingestion_engine.get_assignment_by_id(assignment_id)
+        if not assignment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Assignment '{assignment_id}' not found"
+            )
+        
+        # Apply the assignment to the specified table
+        result = post_load_engine.apply_assignment_to_table(
+            assignment_id, table_name, assignment.source_name
+        )
+        
+        logger.info(
+            f"Assignment '{assignment_id}' application completed for {table_name} from {assignment.source_name}"
+        )
 
-        result = save_rules(rules_data)
+        # Convert numpy types to Python types for JSON serialization
+        serializable_result = {
+            "processed": int(result.get("processed", 0)),
+            "filtered": int(result.get("filtered", 0)),
+            "passed": int(result.get("passed", 0))
+        }
+        
+        return {
+            "success": True,
+            "message": f"Assignment '{assignment_id}' applied to {table_name} for source {assignment.source_name}",
+            "assignment_id": assignment_id,
+            "table_name": table_name,
+            "source_name": assignment.source_name,
+            "results": serializable_result,
+        }
 
-        if not result["success"]:
-            return result
-
-        log_function(f"Successfully saved rules")
-        return result
-
+    except HTTPException:
+        raise
     except Exception as e:
-        logger.error(f"Error saving rules: {e}")
+        logger.error(f"Error applying assignment: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to save rules: {str(e)}",
+            detail=f"Failed to apply assignment: {str(e)}"
         )
 
 

@@ -72,10 +72,12 @@ class IngestionRule:
 
 @dataclass
 class SourceRuleAssignment:
-    """Atomic representation of rules assigned to a source"""
+    """Named assignment of rules to a source with unique identifier"""
 
     log_function("Creating source rule assignment")
 
+    assignment_id: str
+    assignment_name: str
     source_name: str
     rule_mode: Literal[
         "whitelist", "blacklist"
@@ -85,6 +87,10 @@ class SourceRuleAssignment:
 
     def __post_init__(self):
         """Validate source rule assignment"""
+        if not self.assignment_id or not self.assignment_id.strip():
+            raise ValueError("Assignment ID cannot be empty")
+        if not self.assignment_name or not self.assignment_name.strip():
+            raise ValueError("Assignment name cannot be empty")
         if not self.source_name or not self.source_name.strip():
             raise ValueError("Source name cannot be empty")
         if self.rule_mode not in ["whitelist", "blacklist"]:
@@ -254,13 +260,9 @@ class IngestionRulesEngine:
         )
         return applicable_rules
 
-    def get_source_assignment(self, source_name: str) -> Optional[SourceRuleAssignment]:
-        """Get source rule assignment for a specific source (atomic operation)
-        
-        Handles multiple assignments per source by consolidating them into a single
-        assignment object with all assigned rules.
-        """
-        log_function("Getting source rule assignment for source", level="debug")
+    def get_source_assignments(self, source_name: str) -> List[SourceRuleAssignment]:
+        """Get all assignments for a specific source (supports multi-assignment architecture)"""
+        log_function(f"Getting all assignments for source: {source_name}", level="debug")
         _, assignments = self.load_rules()
 
         # Find all enabled assignments for this source
@@ -269,42 +271,28 @@ class IngestionRulesEngine:
             if assignment.source_name == source_name and assignment.enabled
         ]
         
-        if not source_assignments:
-            return None
-            
-        # If only one assignment, return it as-is
-        if len(source_assignments) == 1:
-            return source_assignments[0]
-            
-        # Multiple assignments: consolidate into a single assignment
-        consolidated_rules = []
-        rule_mode = source_assignments[0].rule_mode  # Use first assignment's mode
-        
-        for assignment in source_assignments:
-            # Handle both string and list formats for assigned_rules
-            if isinstance(assignment.assigned_rules, str):
-                consolidated_rules.append(assignment.assigned_rules)
-            elif isinstance(assignment.assigned_rules, list):
-                consolidated_rules.extend(assignment.assigned_rules)
-                
-        # Remove duplicates while preserving order
-        unique_rules = []
-        for rule in consolidated_rules:
-            if rule not in unique_rules:
-                unique_rules.append(rule)
-                
         log_function(
-            f"Consolidated {len(source_assignments)} assignments for {source_name} into {len(unique_rules)} rules: {unique_rules}",
+            f"Found {len(source_assignments)} assignments for {source_name}: {[a.assignment_id for a in source_assignments]}",
             level="debug"
         )
         
-        # Create consolidated assignment
-        return SourceRuleAssignment(
-            source_name=source_name,
-            rule_mode=rule_mode,
-            assigned_rules=unique_rules,
-            enabled=True
-        )
+        return source_assignments
+    
+    def get_assignment_by_id(self, assignment_id: str) -> Optional[SourceRuleAssignment]:
+        """Get a specific assignment by its ID"""
+        log_function(f"Getting assignment by ID: {assignment_id}", level="debug")
+        _, assignments = self.load_rules()
+        
+        for assignment in assignments:
+            if assignment.assignment_id == assignment_id and assignment.enabled:
+                return assignment
+                
+        return None
+        
+    def get_source_assignment(self, source_name: str) -> Optional[SourceRuleAssignment]:
+        """Legacy method for backwards compatibility - returns first assignment for source"""
+        assignments = self.get_source_assignments(source_name)
+        return assignments[0] if assignments else None
 
     def apply_rules_to_records_batch(
         self,

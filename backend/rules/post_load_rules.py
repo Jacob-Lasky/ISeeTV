@@ -270,6 +270,115 @@ class PostLoadRulesEngine:
             logger.error(f"Error getting sources from {table_name}: {e}")
             return []
 
+    def apply_assignment_to_table(
+        self, assignment_id: str, table_name: str, source_name: str
+    ) -> Dict[str, Any]:
+        """Apply a specific assignment to a table (new multi-assignment architecture)"""
+        log_function(
+            f"Applying assignment '{assignment_id}' to {table_name} for source {source_name}"
+        )
+
+        # Get the assignment by ID
+        assignment = self.ingestion_engine.get_assignment_by_id(assignment_id)
+        if not assignment:
+            log_function(
+                f"Assignment '{assignment_id}' not found, skipping"
+            )
+            return {"processed": 0, "filtered": 0, "passed": 0}
+
+        # Get all rules for this assignment
+        rules, _ = self.ingestion_engine.load_rules()
+        assignment_rules = []
+        for rule_name in assignment.assigned_rules:
+            rule = next((r for r in rules if r.name == rule_name and table_name in r.tables), None)
+            if rule:
+                assignment_rules.append(rule)
+            else:
+                log_function(
+                    f"Rule '{rule_name}' not found or not applicable to {table_name}, skipping"
+                )
+
+        if not assignment_rules:
+            log_function(
+                f"No applicable rules found for assignment '{assignment_id}' on {table_name}"
+            )
+            return {"processed": 0, "filtered": 0, "passed": 0}
+
+        # Load records from database
+        records = self._load_records_from_db(table_name, source_name)
+        if not records:
+            log_function(f"No records found in {table_name} for source {source_name}")
+            return {"processed": 0, "filtered": 0, "passed": 0}
+
+        log_function(f"Loaded {len(records)} records from {table_name} for {source_name}")
+        
+        # Create DataFrame for vectorized processing
+        df = pd.DataFrame(records)
+        log_function(f"Created DataFrame with {len(df)} rows and {len(df.columns)} columns", level="debug")
+        
+        # Initialize assignment match tracking
+        assignment_matches = pd.Series([False] * len(df), index=df.index)
+        
+        # Check each rule in the assignment using vectorized operations
+        for rule in assignment_rules:
+            if rule.field not in df.columns:
+                logger.warning(f"Field '{rule.field}' not found in records, skipping rule '{rule.name}'")
+                continue
+                
+            try:
+                # Vectorized regex matching
+                field_series = df[rule.field].astype(str)
+                rule_matches = field_series.str.match(rule.regex, na=False)
+                
+                # For assignments, if ANY rule matches, the assignment matches
+                assignment_matches = assignment_matches | rule_matches
+                
+            except Exception as e:
+                logger.warning(f"Error applying rule '{rule.name}': {e}")
+                continue
+        
+        # Process filter_reasons for each record
+        processed_count = len(df)
+        filtered_count = 0
+        passed_count = 0
+        
+        for idx, record in enumerate(records):
+            # Get current filter_reasons (list of assignment IDs)
+            current_filter_reasons = record.get('filter_reasons', [])
+            if isinstance(current_filter_reasons, str):
+                # Handle legacy single filter_reason
+                current_filter_reasons = [current_filter_reasons] if current_filter_reasons else []
+            elif current_filter_reasons is None:
+                current_filter_reasons = []
+
+            # Update filter_reasons list based on assignment match
+            if assignment_matches.iloc[idx]:
+                # Add assignment ID to filter_reasons if not already present
+                if assignment_id not in current_filter_reasons:
+                    current_filter_reasons.append(assignment_id)
+                    record['filter_reasons'] = current_filter_reasons
+                filtered_count += 1
+            else:
+                # Remove assignment ID from filter_reasons if present
+                if assignment_id in current_filter_reasons:
+                    current_filter_reasons.remove(assignment_id)
+                    record['filter_reasons'] = current_filter_reasons if current_filter_reasons else None
+                passed_count += 1
+
+        # Update records in database
+        self._update_records_in_db(table_name, records)
+        log_function(f"Updated {len(records)} records in {table_name} with filter reasons")
+
+        log_function(
+            f"Assignment '{assignment_id}' applied to {table_name}/{source_name}: {processed_count} processed, {filtered_count} filtered, {passed_count} passed"
+        )
+
+        return {
+            "processed": processed_count,
+            "filtered": filtered_count,
+            "passed": passed_count,
+        }
+
     def apply_single_rule_to_source(
         self, rule_name: str, table_name: str, source_name: str
     ) -> Dict[str, Any]:
