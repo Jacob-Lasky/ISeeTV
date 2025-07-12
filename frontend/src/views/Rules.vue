@@ -357,14 +357,34 @@
                                 style="min-width: 150px"
                             >
                                 <template #body="{ data }">
-                                    <div v-if="data.filter_stats" class="flex flex-col gap-1">
-                                        <div class="text-sm">
-                                            <span class="font-semibold text-blue-600">{{ data.filter_stats.rule_filtered_count || 0 }}</span>
+                                    <div class="flex flex-col gap-1">
+                                        <!-- Rule application progress bar -->
+                                        <div v-if="isRuleBeingApplied(data.source_name, Array.isArray(data.assigned_rules) ? data.assigned_rules[0] : data.assigned_rules)" class="w-full">
+                                            <div class="text-xs text-blue-600 font-medium mb-1">Applying rule...</div>
+                                            <ProgressBar mode="indeterminate" style="height: 8px" />
                                         </div>
-                                    </div>
-                                    <div v-else class="text-gray-400 text-sm">
-                                        <i class="pi pi-spin pi-spinner" v-if="loadingFilterStats[`${data.source_name}-${Array.isArray(data.assigned_rules) ? data.assigned_rules[0] : data.assigned_rules}`]"></i>
-                                        <span v-else>Never run</span>
+                                        
+                                        <!-- Filter stats display -->
+                                        <div v-else-if="data.filter_stats" class="text-sm">
+                                            <!-- Show different states based on has_been_run flag -->
+                                            <div v-if="data.filter_stats.has_been_run === false" class="text-orange-600 font-medium">
+                                                Not Run
+                                            </div>
+                                            <div v-else-if="data.filter_stats.rule_filtered_count === 0" class="text-green-600 font-medium">
+                                                0 (No matches)
+                                            </div>
+                                            <div v-else class="text-blue-600 font-semibold">
+                                                {{ data.filter_stats.rule_filtered_count }}
+                                            </div>
+                                        </div>
+                                        
+                                        <!-- Loading filter stats -->
+                                        <div v-else class="text-gray-400 text-sm">
+                                            <i class="pi pi-spin pi-spinner" v-if="loadingFilterStats[`${data.source_name}-${Array.isArray(data.assigned_rules) ? data.assigned_rules[0] : data.assigned_rules}`]"></i>
+                                            <span v-else class="text-gray-500">
+                                                Unknown
+                                            </span>
+                                        </div>
                                     </div>
                                 </template>
                             </Column>
@@ -423,16 +443,18 @@
                                 <template #body="{ data }">
                                     <div class="flex gap-1 justify-center">
                                         <Button
-                                            icon="pi pi-filter"
-                                            severity="success"
+                                            icon="pi pi-play"
+                                            severity="info"
                                             outlined
                                             size="small"
                                             v-tooltip="
-                                                'Apply all assigned rules to this source'
+                                                'Apply this rule to this source'
                                             "
-                                            :loading="
-                                                applyingSourceRules ===
-                                                data.source_name
+                                            @click="
+                                                applySourceRule(
+                                                    data.source_name,
+                                                    Array.isArray(data.assigned_rules) ? data.assigned_rules[0] : data.assigned_rules
+                                                )
                                             "
                                             :disabled="
                                                 applyingSourceRules !==
@@ -444,12 +466,8 @@
                                                 unapplyingSourceRule !==
                                                     null
                                             "
-                                            @click="
-                                                applySourceRules(
-                                                    data.source_name
-                                                )
-                                            "
                                         />
+
                                         <Button
                                             icon="pi pi-filter-slash"
                                             severity="warn"
@@ -513,6 +531,7 @@ import Column from "primevue/column"
 import DataTable from "primevue/datatable"
 import InputText from "primevue/inputtext"
 import MultiSelect from "primevue/multiselect"
+import ProgressBar from "primevue/progressbar"
 import Select from "primevue/select"
 import Tag from "primevue/tag"
 import ToggleButton from "primevue/togglebutton"
@@ -1463,6 +1482,16 @@ const applySourceRule = async (
 
         console.log(`Applying rule '${ruleName}' to source '${sourceName}'...`)
 
+        // Find the rule configuration to get the table name
+        const rule = rules.value.find(r => r.name === ruleName)
+        if (!rule || !rule.tables || rule.tables.length === 0) {
+            throw new Error(`Rule '${ruleName}' not found or has no tables configured`)
+        }
+        
+        // Use the first table from the rule configuration
+        const tableName = rule.tables[0]
+        console.log(`Applying rule '${ruleName}' to table '${tableName}' for source '${sourceName}'...`)
+
         const response = await fetch("/api/rules/apply/single", {
             method: "POST",
             headers: {
@@ -1470,8 +1499,8 @@ const applySourceRule = async (
             },
             body: JSON.stringify({
                 rule_name: ruleName,
+                table_name: tableName,
                 source_name: sourceName,
-                // table_names is optional - will apply to all tables by default
             }),
         })
 
@@ -1642,8 +1671,19 @@ const fetchFilterStatsForRule = async (sourceName: string, ruleName: string): Pr
         const key = `${sourceName}-${ruleName}`
         loadingFilterStats.value[key] = true
         
-        // Fetch filter stats for m3u_channels table (most common) with specific rule
-        const response = await fetch(`/api/tables/m3u_channels/filtered_counts/${sourceName}/${ruleName}`)
+        // Find the rule configuration to get the correct table
+        const rule = rules.value.find(r => r.name === ruleName)
+        if (!rule || !rule.tables || rule.tables.length === 0) {
+            console.error(`Rule '${ruleName}' not found or has no tables configured`)
+            return
+        }
+        
+        // Use the first table configured for this rule
+        const tableName = rule.tables[0]
+        console.log(`Fetching filter stats for rule '${ruleName}' from table '${tableName}'`)
+        
+        // Fetch filter stats for the correct table with specific rule
+        const response = await fetch(`/api/tables/${tableName}/filtered_counts/${sourceName}/${ruleName}`)
         const data = await response.json()
         
         if (data.success) {
@@ -1664,9 +1704,10 @@ const fetchFilterStatsForRule = async (sourceName: string, ruleName: string): Pr
                     passed: data.data.passed,
                     all_not_passed: data.data.all_not_passed,
                     total: data.data.total,
-                    rule_filtered_count: data.data.filtered_count
+                    rule_filtered_count: data.data.filtered_count,
+                    has_been_run: data.data.has_been_run
                 }
-                console.log(`Setting filter_stats for ${sourceName}-${ruleName}: rule_filtered_count=${newFilterStats.rule_filtered_count}`)
+                console.log(`Setting filter_stats for ${sourceName}-${ruleName}: rule_filtered_count=${newFilterStats.rule_filtered_count}, has_been_run=${newFilterStats.has_been_run}`)
                 assignment.filter_stats = newFilterStats
                 console.log(`Assignment updated. Current filter_stats.rule_filtered_count: ${assignment.filter_stats.rule_filtered_count}`)
             } else {
@@ -1709,6 +1750,12 @@ const loadFilterStatsForAssignments = async (assignments: any[]): Promise<void> 
 const loadAllFilterStats = async (): Promise<void> => {
     console.log(`loadAllFilterStats: Starting with ${sourceAssignments.value.length} assignments`)
     await loadFilterStatsForAssignments(sourceAssignments.value)
+}
+
+// Check if a specific rule is currently being applied
+const isRuleBeingApplied = (sourceName: string, ruleName: string): boolean => {
+    const ruleKey = `${sourceName}-${ruleName}`
+    return applyingSourceRule.value === ruleKey
 }
 
 // Clean up - functions already defined above

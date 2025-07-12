@@ -231,15 +231,10 @@ class IngestionRulesEngine:
     ) -> List[IngestionRule]:
         """Get rules that apply to a specific table and source (atomic operation)"""
         log_function("Getting applicable rules for table and source", level="debug")
-        rules, assignments = self.load_rules()
+        rules, _ = self.load_rules()
 
-        # Find assignment for this source
-        source_assignment = None
-        for assignment in assignments:
-            if assignment.source_name == source_name and assignment.enabled:
-                source_assignment = assignment
-                break
-
+        # Use the consolidated assignment logic for consistency
+        source_assignment = self.get_source_assignment(source_name)
         if not source_assignment:
             return []  # No rules assigned to this source
 
@@ -253,18 +248,63 @@ class IngestionRulesEngine:
             ):
                 applicable_rules.append(rule)
 
+        log_function(
+            f"Found {len(applicable_rules)} applicable rules for {table_name}/{source_name}: {[r.name for r in applicable_rules]}",
+            level="debug"
+        )
         return applicable_rules
 
     def get_source_assignment(self, source_name: str) -> Optional[SourceRuleAssignment]:
-        """Get source rule assignment for a specific source (atomic operation)"""
+        """Get source rule assignment for a specific source (atomic operation)
+        
+        Handles multiple assignments per source by consolidating them into a single
+        assignment object with all assigned rules.
+        """
         log_function("Getting source rule assignment for source", level="debug")
         _, assignments = self.load_rules()
 
-        for assignment in assignments:
-            if assignment.source_name == source_name and assignment.enabled:
-                return assignment
-
-        return None
+        # Find all enabled assignments for this source
+        source_assignments = [
+            assignment for assignment in assignments 
+            if assignment.source_name == source_name and assignment.enabled
+        ]
+        
+        if not source_assignments:
+            return None
+            
+        # If only one assignment, return it as-is
+        if len(source_assignments) == 1:
+            return source_assignments[0]
+            
+        # Multiple assignments: consolidate into a single assignment
+        consolidated_rules = []
+        rule_mode = source_assignments[0].rule_mode  # Use first assignment's mode
+        
+        for assignment in source_assignments:
+            # Handle both string and list formats for assigned_rules
+            if isinstance(assignment.assigned_rules, str):
+                consolidated_rules.append(assignment.assigned_rules)
+            elif isinstance(assignment.assigned_rules, list):
+                consolidated_rules.extend(assignment.assigned_rules)
+                
+        # Remove duplicates while preserving order
+        unique_rules = []
+        for rule in consolidated_rules:
+            if rule not in unique_rules:
+                unique_rules.append(rule)
+                
+        log_function(
+            f"Consolidated {len(source_assignments)} assignments for {source_name} into {len(unique_rules)} rules: {unique_rules}",
+            level="debug"
+        )
+        
+        # Create consolidated assignment
+        return SourceRuleAssignment(
+            source_name=source_name,
+            rule_mode=rule_mode,
+            assigned_rules=unique_rules,
+            enabled=True
+        )
 
     def apply_rules_to_records_batch(
         self,

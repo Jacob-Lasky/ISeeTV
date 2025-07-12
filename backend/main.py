@@ -842,13 +842,18 @@ async def get_table_filtered_counts_by_rule(table_name: str, source: str, rule: 
             
             # Extract the count for the specific rule
             # filter_stats structure: {"filter_stats": {"MKV Filter": 217434, "Passed": 63989}, "passed": 63989, ...}
-            rule_count = filter_stats.get("filter_stats", {}).get(rule, 0)
+            filter_stats_dict = filter_stats.get("filter_stats", {})
+            
+            # Check if the rule has been run (exists in filter_stats)
+            has_been_run = rule in filter_stats_dict
+            rule_count = filter_stats_dict.get(rule, 0) if has_been_run else None
             
             return {
                 "success": True,
                 "data": {
                     "rule_name": rule,
                     "filtered_count": rule_count,
+                    "has_been_run": has_been_run,
                     "total": filter_stats.get("total", 0),
                     "passed": filter_stats.get("passed", 0),
                     "all_not_passed": filter_stats.get("all_not_passed", 0)
@@ -1708,13 +1713,20 @@ async def apply_single_rule(request: Dict[str, Any] = Body(...)) -> Dict[str, An
             f"Single rule '{rule_name}' application completed for {table_name} from {source_name}"
         )
 
+        # Convert numpy types to Python types for JSON serialization
+        serializable_result = {
+            "processed": int(result.get("processed", 0)),
+            "filtered": int(result.get("filtered", 0)),
+            "passed": int(result.get("passed", 0))
+        }
+        
         return {
             "success": True,
             "message": f"Rule '{rule_name}' applied to {table_name} for source {source_name}",
             "rule_name": rule_name,
             "table_name": table_name,
             "source_name": source_name,
-            "results": result,
+            "results": serializable_result,
         }
 
     except HTTPException:
