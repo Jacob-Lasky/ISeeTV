@@ -361,33 +361,42 @@
                                 style="min-width: 150px"
                             >
                                 <template #body="{ data }">
-                                    <div class="flex flex-col gap-1">
-                                        <!-- Rule application progress bar -->
-                                        <div v-if="isAssignmentBeingApplied(data.source_name, data.id)" class="w-full">
-                                            <div class="text-xs text-blue-600 font-medium mb-1">Applying rule...</div>
-                                            <ProgressBar mode="indeterminate" style="height: 8px" />
+                                    <div class="flex flex-column gap-1">
+                                        <!-- Show progress bar when assignment is being applied -->
+                                        <div v-if="applyingAssignments[data.id]" class="assignment-progress">
+                                            <div class="text-sm text-blue-600 font-medium mb-1">
+                                                Applying assignment...
+                                            </div>
+                                            <ProgressBar
+                                                mode="indeterminate"
+                                                style="height: 8px"
+                                            />
                                         </div>
                                         
-                                        <!-- Filter stats display -->
-                                        <div v-else-if="data.filter_stats" class="text-sm">
-                                            <!-- Show different states based on has_been_run flag -->
-                                            <div v-if="data.filter_stats.has_been_run === false" class="text-orange-600 font-medium">
-                                                Not Run
+                                        <!-- Loading filter stats -->
+                                        <div v-else-if="loadingFilterStats[`${data.source_name}-${data.id}`]" class="filter-stats-loading">
+                                            <div class="text-sm text-gray-600 font-medium mb-1">
+                                                Loading stats...
                                             </div>
-                                            <div v-else-if="data.filter_stats.rule_filtered_count === 0" class="text-green-600 font-medium">
-                                                0 (No matches)
+                                            <ProgressBar
+                                                mode="indeterminate"
+                                                style="height: 6px"
+                                            />
+                                        </div>
+                                        
+                                        <!-- Show filter stats if available -->
+                                        <div v-else-if="data.filter_stats && data.filter_stats.rule_filtered_count !== null">
+                                            <div v-if="data.filter_stats.rule_filtered_count === 0" class="text-green-600 font-semibold">
+                                                No records filtered
                                             </div>
                                             <div v-else class="text-blue-600 font-semibold">
                                                 {{ data.filter_stats.rule_filtered_count }}
                                             </div>
                                         </div>
                                         
-                                        <!-- Loading filter stats -->
-                                        <div v-else class="text-gray-400 text-sm">
-                                            <i class="pi pi-spin pi-spinner" v-if="loadingFilterStats[`${data.source_name}-${Array.isArray(data.assigned_rules) ? data.assigned_rules[0] : data.assigned_rules}`]"></i>
-                                            <span v-else class="text-gray-500">
-                                                Unknown
-                                            </span>
+                                        <!-- Unknown state -->
+                                        <div v-else class="text-gray-500 text-sm">
+                                            Unknown
                                         </div>
                                     </div>
                                 </template>
@@ -457,6 +466,9 @@
                                             @click="
                                                 applyAssignmentToTables(data.id)
                                             "
+                                            :loading="
+                                                applyingAssignments[data.id]
+                                            "
                                             :disabled="
                                                 applyingSourceRules !==
                                                     null ||
@@ -465,7 +477,8 @@
                                                 applyingSourceRule !==
                                                     null ||
                                                 unapplyingSourceRule !==
-                                                    null
+                                                    null ||
+                                                applyingAssignments[data.id]
                                             "
                                         />
 
@@ -602,6 +615,9 @@ const validationErrors = ref<string[]>([])
 // Filter statistics state
 const loadingFilterStats = ref<Record<string, boolean>>({})
 const filterStats = ref<Record<string, any>>({})
+
+// Assignment application progress tracking
+const applyingAssignments = ref<Record<string, boolean>>({})
 
 // Column options for field selection
 const columnOptions = ref<Record<string, { label: string; value: string }[]>>(
@@ -1495,6 +1511,9 @@ const unapplySourceRules = async (sourceName: string): Promise<void> => {
 // Apply an assignment to all relevant tables based on its rules
 const applyAssignmentToTables = async (assignmentId: string): Promise<void> => {
     try {
+        // Set loading state
+        applyingAssignments.value[assignmentId] = true
+        
         // Find the assignment
         const assignment = sourceAssignments.value.find(a => a.id === assignmentId)
         if (!assignment) {
@@ -1533,6 +1552,10 @@ const applyAssignmentToTables = async (assignmentId: string): Promise<void> => {
 
         await Promise.all(applyPromises)
         
+        // Refresh filter statistics after successful application
+        console.log(`Refreshing filter statistics for assignment '${assignmentId}'...`)
+        await fetchFilterStatsForAssignment(assignmentId, assignment.source_name)
+        
         toast.add({
             severity: "success",
             summary: "Assignment Applied",
@@ -1548,6 +1571,9 @@ const applyAssignmentToTables = async (assignmentId: string): Promise<void> => {
             detail: error instanceof Error ? error.message : `Failed to apply assignment '${assignmentId}'`,
             life: 5000,
         })
+    } finally {
+        // Clear loading state
+        applyingAssignments.value[assignmentId] = false
     }
 }
 
