@@ -590,7 +590,6 @@ const sources = ref<Source[]>([])
 watch(sourceAssignments, (newVal, oldVal) => {
     console.log(`DEBUG: sourceAssignments changed!`)
     console.log(`DEBUG: Old length: ${oldVal?.length || 0}, New length: ${newVal?.length || 0}`)
-    console.log(`DEBUG: New assignments:`, newVal)
 }, { deep: true })
 
 // Debug: Computed property to track assignments
