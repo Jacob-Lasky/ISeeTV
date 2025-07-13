@@ -205,7 +205,7 @@ class PostLoadRulesEngine:
         )
         try:
             with SessionLocal() as session:
-                # Update each record with its filter reason
+                # Update each record with its filter reason(s)
                 for record in records:
                     # Get the primary key (assuming 'id' exists)
                     if "id" not in record:
@@ -214,15 +214,18 @@ class PostLoadRulesEngine:
                         )
                         continue
 
-                    # Use SQLAlchemy text for raw SQL execution
+                    # Use filter_reasons JSON array field for assignment IDs
+                    filter_reasons = record.get("filter_reasons")
+                    
+                    # Update filter_reasons field with JSON array of assignment IDs or None
                     session.execute(
                         text(
-                            "UPDATE {} SET filter_reason = :filter_reason WHERE id = :record_id".format(
+                            "UPDATE {} SET filter_reasons = :filter_reasons WHERE id = :record_id".format(
                                 table_name
                             )
                         ),
                         {
-                            "filter_reason": record.get("filter_reason"),
+                            "filter_reasons": filter_reasons,
                             "record_id": record["id"],
                         },
                     )
@@ -337,32 +340,35 @@ class PostLoadRulesEngine:
                 logger.warning(f"Error applying rule '{rule.name}': {e}")
                 continue
         
-        # Process filter_reasons for each record
+        # Process filter_reasons for each record (JSON array approach)
+        import json
         processed_count = len(df)
         filtered_count = 0
         passed_count = 0
         
         for idx, record in enumerate(records):
-            # Get current filter_reasons (list of assignment IDs)
-            current_filter_reasons = record.get('filter_reasons', [])
-            if isinstance(current_filter_reasons, str):
-                # Handle legacy single filter_reason
-                current_filter_reasons = [current_filter_reasons] if current_filter_reasons else []
-            elif current_filter_reasons is None:
+            # Get current filter_reasons (JSON array of assignment IDs)
+            current_filter_reasons = record.get('filter_reasons')
+            if current_filter_reasons:
+                try:
+                    current_filter_reasons = json.loads(current_filter_reasons) if isinstance(current_filter_reasons, str) else current_filter_reasons
+                except (json.JSONDecodeError, TypeError):
+                    current_filter_reasons = []
+            else:
                 current_filter_reasons = []
-
-            # Update filter_reasons list based on assignment match
+            
+            # Update filter_reasons based on assignment match
             if assignment_matches.iloc[idx]:
                 # Add assignment ID to filter_reasons if not already present
                 if assignment_id not in current_filter_reasons:
                     current_filter_reasons.append(assignment_id)
-                    record['filter_reasons'] = current_filter_reasons
+                record['filter_reasons'] = json.dumps(current_filter_reasons)
                 filtered_count += 1
             else:
                 # Remove assignment ID from filter_reasons if present
                 if assignment_id in current_filter_reasons:
                     current_filter_reasons.remove(assignment_id)
-                    record['filter_reasons'] = current_filter_reasons if current_filter_reasons else None
+                record['filter_reasons'] = json.dumps(current_filter_reasons) if current_filter_reasons else None
                 passed_count += 1
 
         # Update records in database

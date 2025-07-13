@@ -203,27 +203,54 @@ def get_table_filter_statistics_by_source(
             f"Getting filter statistics for table: {table_name} and source: {source}"
         )
 
+        # Query using filter_reasons JSON array field for assignment IDs
+        # We need to extract individual assignment IDs from JSON arrays and count them
         query = text(
             f"""
+            WITH RECURSIVE assignment_counts AS (
+                SELECT 
+                    id,
+                    source,
+                    CASE 
+                        WHEN filter_reasons IS NULL OR filter_reasons = '[]' OR filter_reasons = '' THEN 'Passed'
+                        ELSE json_extract(filter_reasons, '$[0]')
+                    END as assignment_id,
+                    filter_reasons,
+                    0 as idx
+                FROM {table_name}
+                WHERE source = :source
+                
+                UNION ALL
+                
+                SELECT 
+                    id,
+                    source,
+                    json_extract(filter_reasons, '$[' || (idx + 1) || ']') as assignment_id,
+                    filter_reasons,
+                    idx + 1
+                FROM assignment_counts
+                WHERE assignment_id IS NOT NULL 
+                    AND idx + 1 < json_array_length(filter_reasons)
+            )
             SELECT 
-                source,
                 CASE 
-                    WHEN filter_reason IS NULL THEN 'Passed'
-                    ELSE filter_reason 
+                    WHEN assignment_id IS NULL OR assignment_id = 'Passed' THEN 'Passed'
+                    ELSE assignment_id
                 END as reason,
-                COUNT(*) as count
-            FROM {table_name}
-            WHERE source = :source
-            GROUP BY source, filter_reason
-            ORDER BY source, count DESC
-        """
-        )
+                COUNT(DISTINCT id) as count
+            FROM assignment_counts
+            WHERE assignment_id IS NOT NULL
+            GROUP BY assignment_id
+            ORDER BY count DESC
+        """)
+        
 
         result = session.execute(query, {"source": source})
         filter_stats = defaultdict(dict)
         all_not_passed = 0
         passed = 0
         total = 0
+        
         for row in result:
             reason = row.reason
             count = row.count

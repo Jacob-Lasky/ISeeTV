@@ -76,7 +76,7 @@ class SourceRuleAssignment:
 
     log_function("Creating source rule assignment")
 
-    assignment_id: str
+    id: str
     assignment_name: str
     source_name: str
     rule_mode: Literal[
@@ -87,7 +87,7 @@ class SourceRuleAssignment:
 
     def __post_init__(self):
         """Validate source rule assignment"""
-        if not self.assignment_id or not self.assignment_id.strip():
+        if not self.id or not self.id.strip():
             raise ValueError("Assignment ID cannot be empty")
         if not self.assignment_name or not self.assignment_name.strip():
             raise ValueError("Assignment name cannot be empty")
@@ -272,7 +272,7 @@ class IngestionRulesEngine:
         ]
         
         log_function(
-            f"Found {len(source_assignments)} assignments for {source_name}: {[a.assignment_id for a in source_assignments]}",
+            f"Found {len(source_assignments)} assignments for {source_name}: {[a.id for a in source_assignments]}",
             level="debug"
         )
         
@@ -284,7 +284,7 @@ class IngestionRulesEngine:
         _, assignments = self.load_rules()
         
         for assignment in assignments:
-            if assignment.assignment_id == assignment_id and assignment.enabled:
+            if assignment.id == assignment_id and assignment.enabled:
                 return assignment
                 
         return None
