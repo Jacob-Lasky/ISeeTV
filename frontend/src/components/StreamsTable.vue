@@ -286,11 +286,27 @@
                 <template #body="{ data }">
                     <div v-if="data.filter_reason" class="filter-reason">
                         <Tag
-                            :value="data.filter_reason.includes('Blacklisted') ? 'Filtered' : 'Not Whitelisted'"
-                            :severity="data.filter_reason.includes('Blacklisted') ? 'danger' : 'warn'"
+                            :value="
+                                data.filter_reason.includes('Blacklisted')
+                                    ? 'Filtered'
+                                    : 'Not Whitelisted'
+                            "
+                            :severity="
+                                data.filter_reason.includes('Blacklisted')
+                                    ? 'danger'
+                                    : 'warn'
+                            "
                         />
-                        <div class="filter-detail" v-tooltip="data.filter_reason">
-                            {{ data.filter_reason.length > 50 ? data.filter_reason.substring(0, 50) + '...' : data.filter_reason }}
+                        <div
+                            class="filter-detail"
+                            v-tooltip="data.filter_reason"
+                        >
+                            {{
+                                data.filter_reason.length > 50
+                                    ? data.filter_reason.substring(0, 50) +
+                                      "..."
+                                    : data.filter_reason
+                            }}
                         </div>
                     </div>
                     <Tag v-else value="Active" severity="success" />
@@ -436,9 +452,9 @@ const groupOptions = ref<{ label: string; value: string }[]>([])
 const sourceFilterOptions = ref<string[]>([])
 const groupFilterOptions = ref<string[]>([])
 const filterStatusOptions = ref<{ label: string; value: string }[]>([
-    { label: 'Active', value: 'null' },
-    { label: 'Filtered', value: 'filtered' },
-    { label: 'Not Whitelisted', value: 'not_whitelisted' }
+    { label: "Active", value: "null" },
+    { label: "Filtered", value: "filtered" },
+    { label: "Not Whitelisted", value: "not_whitelisted" },
 ])
 
 // PrimeVue DataTable filters
@@ -448,9 +464,15 @@ const filters = ref({
     tvg_id: { value: null, matchMode: FilterMatchMode.CONTAINS },
     source: { value: null, matchMode: FilterMatchMode.CONTAINS },
     group: { value: null, matchMode: FilterMatchMode.CONTAINS },
-    filter_reason: { value: 'null', matchMode: FilterMatchMode.EQUALS }, // Default to show only active (non-filtered) records
+    filter_reason: { value: "null", matchMode: FilterMatchMode.EQUALS }, // Default to show only active (non-filtered) records
 })
-const globalFilterFields = ref<string[]>(["name", "tvg_id", "source", "group", "filter_reason"])
+const globalFilterFields = ref<string[]>([
+    "name",
+    "tvg_id",
+    "source",
+    "group",
+    "filter_reason",
+])
 
 // Skeleton data for loading state (15 empty rows)
 const skeletonData = ref(new Array(15).fill({}))

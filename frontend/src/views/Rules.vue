@@ -244,7 +244,7 @@
 
                 <!-- Source Rule Assignments Section -->
                 <Card class="mb-6">
-                    <template #content>                        
+                    <template #content>
                         <DataTable
                             v-model:editingRows="editingRows"
                             :value="sourceAssignments"
@@ -332,16 +332,28 @@
                                 style="min-width: 300px"
                             >
                                 <template #body="{ data }">
-                                    <div v-if="data.assigned_rules && data.assigned_rules.length > 0" class="flex flex-wrap gap-1">
+                                    <div
+                                        v-if="
+                                            data.assigned_rules &&
+                                            data.assigned_rules.length > 0
+                                        "
+                                        class="flex flex-wrap gap-1"
+                                    >
                                         <Tag
-                                            v-for="rule in (Array.isArray(data.assigned_rules) ? data.assigned_rules : [data.assigned_rules])"
+                                            v-for="rule in Array.isArray(
+                                                data.assigned_rules
+                                            )
+                                                ? data.assigned_rules
+                                                : [data.assigned_rules]"
                                             :key="rule"
                                             :value="rule"
                                             severity="info"
                                             class="text-xs"
                                         />
                                     </div>
-                                    <span v-else class="text-gray-400">No rules assigned</span>
+                                    <span v-else class="text-gray-400"
+                                        >No rules assigned</span
+                                    >
                                 </template>
                                 <template #editor="{ data, field }">
                                     <Select
@@ -363,8 +375,13 @@
                                 <template #body="{ data }">
                                     <div class="flex flex-column gap-1">
                                         <!-- Show progress bar when assignment is being applied -->
-                                        <div v-if="applyingAssignments[data.id]" class="assignment-progress">
-                                            <div class="text-sm text-blue-600 font-medium mb-1">
+                                        <div
+                                            v-if="applyingAssignments[data.id]"
+                                            class="assignment-progress"
+                                        >
+                                            <div
+                                                class="text-sm text-blue-600 font-medium mb-1"
+                                            >
                                                 Applying assignment...
                                             </div>
                                             <ProgressBar
@@ -372,10 +389,19 @@
                                                 style="height: 8px"
                                             />
                                         </div>
-                                        
+
                                         <!-- Loading filter stats -->
-                                        <div v-else-if="loadingFilterStats[`${data.source_name}-${data.id}`]" class="filter-stats-loading">
-                                            <div class="text-sm text-gray-600 font-medium mb-1">
+                                        <div
+                                            v-else-if="
+                                                loadingFilterStats[
+                                                    `${data.source_name}-${data.id}`
+                                                ]
+                                            "
+                                            class="filter-stats-loading"
+                                        >
+                                            <div
+                                                class="text-sm text-gray-600 font-medium mb-1"
+                                            >
                                                 Loading stats...
                                             </div>
                                             <ProgressBar
@@ -383,19 +409,42 @@
                                                 style="height: 6px"
                                             />
                                         </div>
-                                        
+
                                         <!-- Show filter stats if available -->
-                                        <div v-else-if="data.filter_stats && data.filter_stats.rule_filtered_count !== null">
-                                            <div v-if="data.filter_stats.rule_filtered_count === 0" class="text-green-600 font-semibold">
+                                        <div
+                                            v-else-if="
+                                                data.filter_stats &&
+                                                data.filter_stats
+                                                    .rule_filtered_count !==
+                                                    null
+                                            "
+                                        >
+                                            <div
+                                                v-if="
+                                                    data.filter_stats
+                                                        .rule_filtered_count ===
+                                                    0
+                                                "
+                                                class="text-green-600 font-semibold"
+                                            >
                                                 No records filtered
                                             </div>
-                                            <div v-else class="text-blue-600 font-semibold">
-                                                {{ data.filter_stats.rule_filtered_count }}
+                                            <div
+                                                v-else
+                                                class="text-blue-600 font-semibold"
+                                            >
+                                                {{
+                                                    data.filter_stats
+                                                        .rule_filtered_count
+                                                }}
                                             </div>
                                         </div>
-                                        
+
                                         <!-- Unknown state -->
-                                        <div v-else class="text-gray-500 text-sm">
+                                        <div
+                                            v-else
+                                            class="text-gray-500 text-sm"
+                                        >
                                             Unknown
                                         </div>
                                     </div>
@@ -460,9 +509,7 @@
                                             severity="success"
                                             outlined
                                             size="small"
-                                            v-tooltip="
-                                                'Apply this assignment'
-                                            "
+                                            v-tooltip="'Apply this assignment'"
                                             @click="
                                                 applyAssignmentToTables(data.id)
                                             "
@@ -470,14 +517,11 @@
                                                 applyingAssignments[data.id]
                                             "
                                             :disabled="
-                                                applyingSourceRules !==
-                                                    null ||
+                                                applyingSourceRules !== null ||
                                                 unapplyingSourceRules !==
                                                     null ||
-                                                applyingSourceRule !==
-                                                    null ||
-                                                unapplyingSourceRule !==
-                                                    null ||
+                                                applyingSourceRule !== null ||
+                                                unapplyingSourceRule !== null ||
                                                 applyingAssignments[data.id]
                                             "
                                         />
@@ -485,7 +529,8 @@
                                         <Button
                                             icon="pi pi-filter-slash"
                                             severity="warn"
-                                            outlined                                            size="small"
+                                            outlined
+                                            size="small"
                                             v-tooltip="
                                                 'Unapply all rules from this source'
                                             "
@@ -494,14 +539,11 @@
                                                 data.source_name
                                             "
                                             :disabled="
-                                                applyingSourceRules !==
-                                                    null ||
+                                                applyingSourceRules !== null ||
                                                 unapplyingSourceRules !==
                                                     null ||
-                                                applyingSourceRule !==
-                                                    null ||
-                                                unapplyingSourceRule !==
-                                                    null
+                                                applyingSourceRule !== null ||
+                                                unapplyingSourceRule !== null
                                             "
                                             @click="
                                                 unapplySourceRules(
@@ -514,9 +556,7 @@
                                             severity="danger"
                                             outlined
                                             size="small"
-                                            v-tooltip="
-                                                'Delete this assignment'
-                                            "
+                                            v-tooltip="'Delete this assignment'"
                                             @click="
                                                 deleteAssignment(
                                                     sourceAssignments.indexOf(
@@ -587,14 +627,22 @@ const sourceAssignments = ref<SourceRuleAssignment[]>([])
 const sources = ref<Source[]>([])
 
 // Debug: Watch sourceAssignments for changes
-watch(sourceAssignments, (newVal, oldVal) => {
-    console.log(`DEBUG: sourceAssignments changed!`)
-    console.log(`DEBUG: Old length: ${oldVal?.length || 0}, New length: ${newVal?.length || 0}`)
-}, { deep: true })
+watch(
+    sourceAssignments,
+    (newVal, oldVal) => {
+        console.log(`DEBUG: sourceAssignments changed!`)
+        console.log(
+            `DEBUG: Old length: ${oldVal?.length || 0}, New length: ${newVal?.length || 0}`
+        )
+    },
+    { deep: true }
+)
 
 // Debug: Computed property to track assignments
 const debugAssignments = computed(() => {
-    console.log(`DEBUG: Computed debugAssignments called, length: ${sourceAssignments.value.length}`)
+    console.log(
+        `DEBUG: Computed debugAssignments called, length: ${sourceAssignments.value.length}`
+    )
     return sourceAssignments.value
 })
 
@@ -649,80 +697,118 @@ let loadingConfiguration = false
 const loadConfiguration = async (): Promise<void> => {
     // Prevent multiple simultaneous calls
     if (loadingConfiguration) {
-        console.log('loadConfiguration already in progress, skipping')
+        console.log("loadConfiguration already in progress, skipping")
         return
     }
-    
+
     loadingConfiguration = true
     try {
         console.log(`Fetching /api/rules...`)
         const response = await fetch("/api/rules")
-        console.log(`Response status: ${response.status} ${response.statusText}`)
-        
+        console.log(
+            `Response status: ${response.status} ${response.statusText}`
+        )
+
         if (!response.ok) {
             throw new Error(`HTTP error! status: ${response.status}`)
         }
-        
+
         const data = await response.json()
         console.log(`API response data:`, data)
 
         if (data.rules && data.source_assignments) {
             console.log(`loadConfiguration: Starting to update assignments`)
-            console.log(`Current assignments count: ${sourceAssignments.value.length}`)
-            console.log(`Current assignments with filter_stats: ${sourceAssignments.value.filter(a => a.filter_stats).length}`)
-            
+            console.log(
+                `Current assignments count: ${sourceAssignments.value.length}`
+            )
+            console.log(
+                `Current assignments with filter_stats: ${sourceAssignments.value.filter((a) => a.filter_stats).length}`
+            )
+
             rules.value = data.rules
-            
+
             // Preserve existing filter_stats when updating assignments
             const existingFilterStats = new Map()
-            sourceAssignments.value.forEach(assignment => {
+            sourceAssignments.value.forEach((assignment) => {
                 if (assignment.filter_stats) {
-                    console.log(`Preserving filter_stats for ${assignment.source_name}: ${assignment.filter_stats.rule_filtered_count}`)
-                    existingFilterStats.set(assignment.source_name, assignment.filter_stats)
+                    console.log(
+                        `Preserving filter_stats for ${assignment.source_name}: ${assignment.filter_stats.rule_filtered_count}`
+                    )
+                    existingFilterStats.set(
+                        assignment.source_name,
+                        assignment.filter_stats
+                    )
                 }
             })
-            
-            console.log(`Preserved filter_stats for ${existingFilterStats.size} assignments`)
-            
+
+            console.log(
+                `Preserved filter_stats for ${existingFilterStats.size} assignments`
+            )
+
             // Update assignments and restore filter stats
-            sourceAssignments.value = data.source_assignments.map(assignment => {
-                const existingStats = existingFilterStats.get(assignment.source_name)
-                if (existingStats) {
-                    console.log(`Restoring filter_stats for ${assignment.source_name}: ${existingStats.rule_filtered_count}`)
-                    return { ...assignment, filter_stats: existingStats }
-                } else {
-                    console.log(`No existing filter_stats for ${assignment.source_name}`)
-                    return assignment
+            sourceAssignments.value = data.source_assignments.map(
+                (assignment) => {
+                    const existingStats = existingFilterStats.get(
+                        assignment.source_name
+                    )
+                    if (existingStats) {
+                        console.log(
+                            `Restoring filter_stats for ${assignment.source_name}: ${existingStats.rule_filtered_count}`
+                        )
+                        return { ...assignment, filter_stats: existingStats }
+                    } else {
+                        console.log(
+                            `No existing filter_stats for ${assignment.source_name}`
+                        )
+                        return assignment
+                    }
                 }
-            })
-            
-            console.log(`Updated assignments. Count with filter_stats: ${sourceAssignments.value.filter(a => a.filter_stats).length}`)
-            
+            )
+
+            console.log(
+                `Updated assignments. Count with filter_stats: ${sourceAssignments.value.filter((a) => a.filter_stats).length}`
+            )
+
             hasChanges.value = false
             validationErrors.value = []
-            
+
             // Load filter statistics only for assignments that don't have them yet
-            const assignmentsNeedingStats = sourceAssignments.value.filter(a => !a.filter_stats)
-            console.log(`Found ${assignmentsNeedingStats.length} assignments needing filter stats`)
-            
+            const assignmentsNeedingStats = sourceAssignments.value.filter(
+                (a) => !a.filter_stats
+            )
+            console.log(
+                `Found ${assignmentsNeedingStats.length} assignments needing filter stats`
+            )
+
             if (assignmentsNeedingStats.length > 0) {
                 await loadFilterStatsForAssignments(assignmentsNeedingStats)
             }
-            
-            console.log(`Filter stats loading completed. Final count with filter_stats: ${sourceAssignments.value.filter(a => a.filter_stats).length}`)
-            
+
+            console.log(
+                `Filter stats loading completed. Final count with filter_stats: ${sourceAssignments.value.filter((a) => a.filter_stats).length}`
+            )
+
             // Debug: Log final assignments state
-            console.log(`DEBUG: Final sourceAssignments.value:`, sourceAssignments.value)
-            console.log(`DEBUG: sourceAssignments.value.length:`, sourceAssignments.value.length)
+            console.log(
+                `DEBUG: Final sourceAssignments.value:`,
+                sourceAssignments.value
+            )
+            console.log(
+                `DEBUG: sourceAssignments.value.length:`,
+                sourceAssignments.value.length
+            )
             console.log(`DEBUG: First assignment:`, sourceAssignments.value[0])
-            console.log(`DEBUG: Assignment IDs:`, sourceAssignments.value.map(a => a.id))
+            console.log(
+                `DEBUG: Assignment IDs:`,
+                sourceAssignments.value.map((a) => a.id)
+            )
         }
     } catch (error) {
         console.error("Error loading configuration:", error)
         console.error("Error details:", {
             message: error.message,
             stack: error.stack,
-            name: error.name
+            name: error.name,
         })
         toast.add({
             severity: "error",
@@ -1162,9 +1248,7 @@ const applyRule = async (ruleName: string): Promise<void> => {
 
         // Get sources assigned to this rule
         const assignedSources = sourceAssignments.value
-            .filter((assignment) =>
-                assignment.assigned_rules === ruleName
-            )
+            .filter((assignment) => assignment.assigned_rules === ruleName)
             .map((assignment) => assignment.source_name)
 
         if (assignedSources.length === 0) {
@@ -1269,9 +1353,7 @@ const unapplyRule = async (ruleName: string): Promise<void> => {
 
         // Get sources assigned to this rule
         const assignedSources = sourceAssignments.value
-            .filter((assignment) =>
-                assignment.assigned_rules === ruleName
-            )
+            .filter((assignment) => assignment.assigned_rules === ruleName)
             .map((assignment) => assignment.source_name)
 
         if (assignedSources.length === 0) {
@@ -1512,9 +1594,11 @@ const applyAssignmentToTables = async (assignmentId: string): Promise<void> => {
     try {
         // Set loading state
         applyingAssignments.value[assignmentId] = true
-        
+
         // Find the assignment
-        const assignment = sourceAssignments.value.find(a => a.id === assignmentId)
+        const assignment = sourceAssignments.value.find(
+            (a) => a.id === assignmentId
+        )
         if (!assignment) {
             console.error(`Assignment '${assignmentId}' not found`)
             toast.add({
@@ -1526,14 +1610,16 @@ const applyAssignmentToTables = async (assignmentId: string): Promise<void> => {
             return
         }
 
-        console.log(`Applying assignment '${assignmentId}' to all relevant tables...`)
-        
+        console.log(
+            `Applying assignment '${assignmentId}' to all relevant tables...`
+        )
+
         // Determine which tables to apply to based on the rules in the assignment
         const tablesToApply = new Set<string>()
         for (const ruleName of assignment.assigned_rules) {
-            const rule = rules.value.find(r => r.name === ruleName)
+            const rule = rules.value.find((r) => r.name === ruleName)
             if (rule && rule.tables) {
-                rule.tables.forEach(table => tablesToApply.add(table))
+                rule.tables.forEach((table) => tablesToApply.add(table))
             }
         }
 
@@ -1542,32 +1628,41 @@ const applyAssignmentToTables = async (assignmentId: string): Promise<void> => {
             return
         }
 
-        console.log(`Will apply assignment '${assignmentId}' to tables: ${Array.from(tablesToApply).join(', ')}`)
+        console.log(
+            `Will apply assignment '${assignmentId}' to tables: ${Array.from(tablesToApply).join(", ")}`
+        )
 
         // Apply the assignment to each relevant table
-        const applyPromises = Array.from(tablesToApply).map(tableName => 
+        const applyPromises = Array.from(tablesToApply).map((tableName) =>
             applyAssignment(assignmentId, tableName)
         )
 
         await Promise.all(applyPromises)
-        
+
         // Refresh filter statistics after successful application
-        console.log(`Refreshing filter statistics for assignment '${assignmentId}'...`)
-        await fetchFilterStatsForAssignment(assignmentId, assignment.source_name)
-        
+        console.log(
+            `Refreshing filter statistics for assignment '${assignmentId}'...`
+        )
+        await fetchFilterStatsForAssignment(
+            assignmentId,
+            assignment.source_name
+        )
+
         toast.add({
             severity: "success",
             summary: "Assignment Applied",
             detail: `Assignment '${assignment.assignment_name}' applied to ${tablesToApply.size} table(s)`,
             life: 5000,
         })
-
     } catch (error) {
         console.error(`Error applying assignment '${assignmentId}':`, error)
         toast.add({
             severity: "error",
             summary: "Assignment Application Failed",
-            detail: error instanceof Error ? error.message : `Failed to apply assignment '${assignmentId}'`,
+            detail:
+                error instanceof Error
+                    ? error.message
+                    : `Failed to apply assignment '${assignmentId}'`,
             life: 5000,
         })
     } finally {
@@ -1585,7 +1680,9 @@ const applyAssignment = async (
         const assignmentKey = `${assignmentId}-${tableName}`
         applyingSourceRule.value = assignmentKey
 
-        console.log(`Applying assignment '${assignmentId}' to table '${tableName}'...`)
+        console.log(
+            `Applying assignment '${assignmentId}' to table '${tableName}'...`
+        )
 
         const response = await fetch("/api/assignments/apply", {
             method: "POST",
@@ -1624,11 +1721,15 @@ const applyAssignment = async (
             detail: `Assignment '${assignmentId}' applied to table '${tableName}': ${totals.passed} passed, ${totals.filtered} filtered`,
             life: 5000,
         })
-        
+
         // Refresh filter statistics for all rules in this assignment
-        const assignment = sourceAssignments.value.find(a => a.assignment_id === assignmentId)
+        const assignment = sourceAssignments.value.find(
+            (a) => a.assignment_id === assignmentId
+        )
         if (assignment) {
-            console.log(`Refreshing filter stats for assignment: ${assignmentId}`)
+            console.log(
+                `Refreshing filter stats for assignment: ${assignmentId}`
+            )
             for (const ruleName of assignment.assigned_rules) {
                 await fetchFilterStatsForRule(assignment.source_name, ruleName)
             }
@@ -1664,14 +1765,18 @@ const applySourceRule = async (
         console.log(`Applying rule '${ruleName}' to source '${sourceName}'...`)
 
         // Find the rule configuration to get the table name
-        const rule = rules.value.find(r => r.name === ruleName)
+        const rule = rules.value.find((r) => r.name === ruleName)
         if (!rule || !rule.tables || rule.tables.length === 0) {
-            throw new Error(`Rule '${ruleName}' not found or has no tables configured`)
+            throw new Error(
+                `Rule '${ruleName}' not found or has no tables configured`
+            )
         }
-        
+
         // Use the first table from the rule configuration
         const tableName = rule.tables[0]
-        console.log(`Applying rule '${ruleName}' to table '${tableName}' for source '${sourceName}'...`)
+        console.log(
+            `Applying rule '${ruleName}' to table '${tableName}' for source '${sourceName}'...`
+        )
 
         const response = await fetch("/api/rules/apply/single", {
             method: "POST",
@@ -1845,40 +1950,57 @@ const getTableSeverity = (table: string): string => {
 }
 
 // Fetch filter statistics for a specific assignment
-const fetchFilterStatsForAssignment = async (assignmentId: string, sourceName: string): Promise<void> => {
+const fetchFilterStatsForAssignment = async (
+    assignmentId: string,
+    sourceName: string
+): Promise<void> => {
     if (!assignmentId || !sourceName) return
-    
+
     try {
         const key = `${sourceName}-${assignmentId}`
         loadingFilterStats.value[key] = true
-        
+
         // Find the assignment to get the correct tables
-        const assignment = sourceAssignments.value.find(a => a.id === assignmentId && a.source_name === sourceName)
+        const assignment = sourceAssignments.value.find(
+            (a) => a.id === assignmentId && a.source_name === sourceName
+        )
         if (!assignment) {
-            console.error(`Assignment '${assignmentId}' not found for source '${sourceName}'`)
+            console.error(
+                `Assignment '${assignmentId}' not found for source '${sourceName}'`
+            )
             return
         }
-        
+
         // Get the first rule to determine the table
-        const firstRuleName = Array.isArray(assignment.assigned_rules) ? assignment.assigned_rules[0] : assignment.assigned_rules
-        const rule = rules.value.find(r => r.name === firstRuleName)
+        const firstRuleName = Array.isArray(assignment.assigned_rules)
+            ? assignment.assigned_rules[0]
+            : assignment.assigned_rules
+        const rule = rules.value.find((r) => r.name === firstRuleName)
         if (!rule || !rule.tables || rule.tables.length === 0) {
-            console.error(`Rule '${firstRuleName}' not found or has no tables configured`)
+            console.error(
+                `Rule '${firstRuleName}' not found or has no tables configured`
+            )
             return
         }
-        
+
         // Use the first table configured for this rule
         const tableName = rule.tables[0]
-        console.log(`Fetching filter stats for assignment '${assignmentId}' from table '${tableName}'`)
-        
+        console.log(
+            `Fetching filter stats for assignment '${assignmentId}' from table '${tableName}'`
+        )
+
         // Fetch filter stats using the assignment ID (not individual rule names)
-        const response = await fetch(`/api/tables/${tableName}/filtered_counts/${sourceName}/${assignmentId}`)
+        const response = await fetch(
+            `/api/tables/${tableName}/filtered_counts/${sourceName}/${assignmentId}`
+        )
         const data = await response.json()
-        
+
         if (data.success) {
-            console.log(`API SUCCESS for ${sourceName}-${assignmentId}: filtered_count=${data.data.filtered_count}`)
+            console.log(
+                `API SUCCESS for ${sourceName}-${assignmentId}: filtered_count=${data.data.filtered_count}`
+            )
             filterStats.value[key] = data.data
-            
+
             // Update the assignment with filter stats
             const newFilterStats = {
                 filter_stats: { [assignmentId]: data.data.filtered_count },
@@ -1886,16 +2008,25 @@ const fetchFilterStatsForAssignment = async (assignmentId: string, sourceName: s
                 all_not_passed: data.data.all_not_passed,
                 total: data.data.total,
                 rule_filtered_count: data.data.filtered_count,
-                has_been_run: data.data.has_been_run
+                has_been_run: data.data.has_been_run,
             }
-            console.log(`Setting filter_stats for ${sourceName}-${assignmentId}: rule_filtered_count=${newFilterStats.rule_filtered_count}, has_been_run=${newFilterStats.has_been_run}`)
+            console.log(
+                `Setting filter_stats for ${sourceName}-${assignmentId}: rule_filtered_count=${newFilterStats.rule_filtered_count}, has_been_run=${newFilterStats.has_been_run}`
+            )
             assignment.filter_stats = newFilterStats
-            console.log(`Assignment updated. Current filter_stats.rule_filtered_count: ${assignment.filter_stats.rule_filtered_count}`)
+            console.log(
+                `Assignment updated. Current filter_stats.rule_filtered_count: ${assignment.filter_stats.rule_filtered_count}`
+            )
         } else {
-            console.log(`API FAILED for ${sourceName}-${assignmentId}: ${JSON.stringify(data)}`)
+            console.log(
+                `API FAILED for ${sourceName}-${assignmentId}: ${JSON.stringify(data)}`
+            )
         }
     } catch (error) {
-        console.error(`Error fetching filter stats for ${sourceName} with assignment ${assignmentId}:`, error)
+        console.error(
+            `Error fetching filter stats for ${sourceName} with assignment ${assignmentId}:`,
+            error
+        )
     } finally {
         const key = `${sourceName}-${assignmentId}`
         loadingFilterStats.value[key] = false
@@ -1903,32 +2034,52 @@ const fetchFilterStatsForAssignment = async (assignmentId: string, sourceName: s
 }
 
 // Load filter statistics for specific assignments
-const loadFilterStatsForAssignments = async (assignments: any[]): Promise<void> => {
-    console.log(`loadFilterStatsForAssignments: Starting with ${assignments.length} assignments`)
-    
-    const validAssignments = assignments
-        .filter(assignment => assignment.id && assignment.source_name && assignment.assigned_rules)
-    
-    console.log(`Found ${validAssignments.length} valid assignments to load stats for`)
-    
-    const promises = validAssignments.map(assignment => {
-        console.log(`Will fetch stats for assignment: ${assignment.id} (${assignment.source_name})`)
-        return fetchFilterStatsForAssignment(assignment.id, assignment.source_name)
+const loadFilterStatsForAssignments = async (
+    assignments: any[]
+): Promise<void> => {
+    console.log(
+        `loadFilterStatsForAssignments: Starting with ${assignments.length} assignments`
+    )
+
+    const validAssignments = assignments.filter(
+        (assignment) =>
+            assignment.id && assignment.source_name && assignment.assigned_rules
+    )
+
+    console.log(
+        `Found ${validAssignments.length} valid assignments to load stats for`
+    )
+
+    const promises = validAssignments.map((assignment) => {
+        console.log(
+            `Will fetch stats for assignment: ${assignment.id} (${assignment.source_name})`
+        )
+        return fetchFilterStatsForAssignment(
+            assignment.id,
+            assignment.source_name
+        )
     })
-    
+
     console.log(`Starting ${promises.length} parallel API calls...`)
     await Promise.all(promises)
-    console.log(`All API calls completed. Assignments with filter_stats: ${sourceAssignments.value.filter(a => a.filter_stats).length}`)
+    console.log(
+        `All API calls completed. Assignments with filter_stats: ${sourceAssignments.value.filter((a) => a.filter_stats).length}`
+    )
 }
 
 // Load filter statistics for all assignments
 const loadAllFilterStats = async (): Promise<void> => {
-    console.log(`loadAllFilterStats: Starting with ${sourceAssignments.value.length} assignments`)
+    console.log(
+        `loadAllFilterStats: Starting with ${sourceAssignments.value.length} assignments`
+    )
     await loadFilterStatsForAssignments(sourceAssignments.value)
 }
 
 // Check if a specific assignment is currently being applied
-const isAssignmentBeingApplied = (sourceName: string, assignmentId: string): boolean => {
+const isAssignmentBeingApplied = (
+    sourceName: string,
+    assignmentId: string
+): boolean => {
     const assignmentKey = `${sourceName}-${assignmentId}`
     return applyingSourceRule.value === assignmentKey
 }

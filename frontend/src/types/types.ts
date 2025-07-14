@@ -75,7 +75,7 @@ export interface Source {
     subscription_expires?: string | null
     source_timezone?: string | null
     enabled: boolean
-    rule_mode?: "whitelist" | "blacklist"  // Default to blacklist (start with all channels)
+    rule_mode?: "whitelist" | "blacklist" // Default to blacklist (start with all channels)
     file_metadata?: Record<string, FileMetadata>
 }
 
@@ -160,21 +160,21 @@ export interface StreamChannel {
     // M3U Channel Data (primary)
     m3u_id: number
     source: string
-    tvg_id: string  // This is the canonical channel_id
+    tvg_id: string // This is the canonical channel_id
     name: string
     stream_url: string
     logo_url?: string | null
     group?: string | null
-    
+
     // EPG Channel Data (joined)
     epg_id?: number | null
     display_name?: string | null
     icon_url?: string | null
-    
+
     // Metadata
     created_at: string
     updated_at: string
-    
+
     // Program counts (aggregated)
     program_count: number
     next_program_title?: string | null
@@ -194,7 +194,7 @@ export interface StreamProgram {
     end_time: string
     title?: string | null
     description?: string | null
-    
+
     // Channel Context (joined)
     channel_name?: string | null
     channel_display_name?: string | null
@@ -202,7 +202,7 @@ export interface StreamProgram {
     stream_url?: string | null
     logo_url?: string | null
     icon_url?: string | null
-    
+
     // Metadata
     created_at: string
     updated_at: string
