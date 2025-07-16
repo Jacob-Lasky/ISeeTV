@@ -99,89 +99,365 @@
                         </p>
                     </div>
                 </template>
-                <Column
-                    v-for="column in tableConfig.columns"
-                    :key="column.field"
-                    :field="column.field"
-                    :header="column.header"
-                    :style="column.style"
-                    :sortable="column.sortable !== false"
-                    :filter-field="column.field"
-                >
+
+                <!-- ID Column -->
+                <Column field="id" header="ID" style="width: 80px; height: 44px" :sortable="true">
                     <template #body="{ data }">
-                        <span v-if="column.type === 'datetime'">
-                            {{ formatDateTime(data[column.field]) }}
-                        </span>
-                        <a
-                            v-else-if="
-                                column.type === 'url' && data[column.field]
-                            "
-                            :href="data[column.field]"
-                            target="_blank"
-                            class="text-blue-600 hover:text-blue-800 underline"
-                        >
-                            {{ data[column.field] }}
-                        </a>
-                        <span v-else-if="column.field === 'filter_reasons'">
-                            {{ data[column.field] || "Passed" }}
-                        </span>
-                        <span v-else>
-                            {{ data[column.field] || "N/A" }}
-                        </span>
+                        {{ data.id }}
                     </template>
                     <template #filter="{ filterModel, filterCallback }">
-                        <!-- Source column filter -->
+                        <InputText
+                            v-model="filterModel.value"
+                            type="text"
+                            placeholder="Search ID..."
+                            class="w-full"
+                            @input="filterCallback()"
+                        />
+                    </template>
+                </Column>
+
+                <!-- Source Column -->
+                <Column field="source" header="Source" style="width: 150px; height: 44px" :sortable="true" :showFilterMenu="false">
+                    <template #body="{ data }">
+                        <Tag :value="data.source" severity="info" />
+                    </template>
+                    <template #filter="{ filterModel, filterCallback }">
                         <Select
-                            v-if="column.field === 'source'"
                             v-model="filterModel.value"
                             :options="sourceOptions"
                             placeholder="All Sources"
                             class="w-full"
                             :show-clear="true"
                             @change="filterCallback()"
+                        >
+                            <template #option="slotProps">
+                                <Tag :value="slotProps.option" severity="info" />
+                            </template>
+                        </Select>
+                    </template>
+                </Column>
+
+                <!-- Filter Reason Column -->
+                <Column field="filter_reasons" header="Filter Reason" style="width: 200px; height: 44px" :sortable="true" :showFilterMenu="false">
+                    <template #body="{ data }">
+                        <Tag 
+                            :value="formatFilterReasons(data.filter_reasons)" 
+                            :severity="getFilterReasonSeverity(data.filter_reasons)"
                         />
-                        <!-- Group column filter (M3U channels only) -->
+                    </template>
+                    <template #filter="{ filterModel, filterCallback }">
                         <Select
-                            v-else-if="
-                                column.field === 'group' &&
-                                tableName === 'm3u_channels'
-                            "
-                            v-model="filterModel.value"
-                            :options="groupOptions"
-                            placeholder="All Groups"
-                            class="w-full"
-                            :show-clear="true"
-                            @change="filterCallback()"
-                        />
-                        <!-- Filter reason column filter -->
-                        <Select
-                            v-else-if="column.field === 'filter_reasons'"
                             v-model="filterModel.value"
                             :options="filterReasonOptions"
                             placeholder="All Filter Reasons"
                             class="w-full"
                             :show-clear="true"
                             @change="filterCallback()"
-                        />
-                        <!-- Date column filter -->
+                        >
+                            <template #option="slotProps">
+                                <Tag 
+                                    :value="slotProps.option" 
+                                    :severity="getFilterReasonSeverity(slotProps.option === 'Passed' ? null : slotProps.option)"
+                                />
+                            </template>
+                        </Select>
+                    </template>
+                </Column>
+
+                <!-- Dynamic columns based on table type -->
+                <template v-if="tableName === 'epg_channels'">
+                    <!-- Channel ID Column -->
+                    <Column field="channel_id" header="Channel ID" style="width: 150px; height: 44px" :sortable="true">
+                        <template #body="{ data }">
+                            {{ data.channel_id }}
+                        </template>
+                        <template #filter="{ filterModel, filterCallback }">
+                            <InputText
+                                v-model="filterModel.value"
+                                type="text"
+                                placeholder="Search channel ID..."
+                                class="w-full"
+                                @input="filterCallback()"
+                            />
+                        </template>
+                    </Column>
+
+                    <!-- Display Name Column -->
+                    <Column field="display_name" header="Display Name" style="width: 200px; height: 44px" :sortable="true">
+                        <template #body="{ data }">
+                            {{ data.display_name }}
+                        </template>
+                        <template #filter="{ filterModel, filterCallback }">
+                            <InputText
+                                v-model="filterModel.value"
+                                type="text"
+                                placeholder="Search display name..."
+                                class="w-full"
+                                @input="filterCallback()"
+                            />
+                        </template>
+                    </Column>
+
+                    <!-- Icon URL Column -->
+                    <Column field="icon_url" header="Icon URL" style="width: 300px; height: 44px" :sortable="true">
+                        <template #body="{ data }">
+                            <a
+                                v-if="data.icon_url"
+                                :href="data.icon_url"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="url-link"
+                            >
+                                {{ data.icon_url }}
+                            </a>
+                        </template>
+                        <template #filter="{ filterModel, filterCallback }">
+                            <InputText
+                                v-model="filterModel.value"
+                                type="text"
+                                placeholder="Search icon URL..."
+                                class="w-full"
+                                @input="filterCallback()"
+                            />
+                        </template>
+                    </Column>
+                </template>
+
+                <template v-else-if="tableName === 'm3u_channels'">
+                    <!-- Group Column -->
+                    <Column field="group" header="Group" style="width: 150px; height: 44px" :sortable="true" :showFilterMenu="false">
+                        <template #body="{ data }">
+                            <Tag v-if="data.group" :value="data.group" severity="secondary" />
+                        </template>
+                        <template #filter="{ filterModel, filterCallback }">
+                            <Select
+                                v-model="filterModel.value"
+                                :options="groupOptions"
+                                placeholder="All Groups"
+                                class="w-full"
+                                :show-clear="true"
+                                @change="filterCallback()"
+                            >
+                                <template #option="slotProps">
+                                    <Tag :value="slotProps.option" severity="secondary" />
+                                </template>
+                            </Select>
+                        </template>
+                    </Column>
+
+                    <!-- TVG ID Column -->
+                    <Column field="tvg_id" header="TVG ID" style="width: 150px; height: 44px" :sortable="true">
+                        <template #body="{ data }">
+                            <code>{{ data.tvg_id }}</code>
+                        </template>
+                        <template #filter="{ filterModel, filterCallback }">
+                            <InputText
+                                v-model="filterModel.value"
+                                type="text"
+                                placeholder="Search TVG ID..."
+                                class="w-full"
+                                @input="filterCallback()"
+                            />
+                        </template>
+                    </Column>
+
+                    <!-- Name Column -->
+                    <Column field="name" header="Name" style="width: 200px; height: 44px" :sortable="true">
+                        <template #body="{ data }">
+                            {{ data.name }}
+                        </template>
+                        <template #filter="{ filterModel, filterCallback }">
+                            <InputText
+                                v-model="filterModel.value"
+                                type="text"
+                                placeholder="Search name..."
+                                class="w-full"
+                                @input="filterCallback()"
+                            />
+                        </template>
+                    </Column>
+
+                    <!-- Stream URL Column -->
+                    <Column field="stream_url" header="Stream URL" style="width: 300px; height: 44px" :sortable="true">
+                        <template #body="{ data }">
+                            <a
+                                :href="data.stream_url"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="url-link"
+                            >
+                                {{ data.stream_url }}
+                            </a>
+                        </template>
+                        <template #filter="{ filterModel, filterCallback }">
+                            <InputText
+                                v-model="filterModel.value"
+                                type="text"
+                                placeholder="Search stream URL..."
+                                class="w-full"
+                                @input="filterCallback()"
+                            />
+                        </template>
+                    </Column>
+
+                    <!-- Logo URL Column -->
+                    <Column field="logo_url" header="Logo URL" style="width: 300px; height: 44px" :sortable="true">
+                        <template #body="{ data }">
+                            <a
+                                v-if="data.logo_url"
+                                :href="data.logo_url"
+                                target="_blank"
+                                rel="noopener noreferrer"
+                                class="url-link"
+                            >
+                                {{ data.logo_url }}
+                            </a>
+                        </template>
+                        <template #filter="{ filterModel, filterCallback }">
+                            <InputText
+                                v-model="filterModel.value"
+                                type="text"
+                                placeholder="Search logo URL..."
+                                class="w-full"
+                                @input="filterCallback()"
+                            />
+                        </template>
+                    </Column>
+                </template>
+
+                <template v-else-if="tableName === 'programs'">
+                    <!-- Program ID Column -->
+                    <Column field="program_id" header="Program ID" style="width: 150px; height: 44px" :sortable="true">
+                        <template #body="{ data }">
+                            {{ data.program_id }}
+                        </template>
+                        <template #filter="{ filterModel, filterCallback }">
+                            <InputText
+                                v-model="filterModel.value"
+                                type="text"
+                                placeholder="Search program ID..."
+                                class="w-full"
+                                @input="filterCallback()"
+                            />
+                        </template>
+                    </Column>
+
+                    <!-- Channel ID Column -->
+                    <Column field="channel_id" header="Channel ID" style="width: 150px; height: 44px" :sortable="true">
+                        <template #body="{ data }">
+                            {{ data.channel_id }}
+                        </template>
+                        <template #filter="{ filterModel, filterCallback }">
+                            <InputText
+                                v-model="filterModel.value"
+                                type="text"
+                                placeholder="Search channel ID..."
+                                class="w-full"
+                                @input="filterCallback()"
+                            />
+                        </template>
+                    </Column>
+
+                    <!-- Title Column -->
+                    <Column field="title" header="Title" style="width: 250px; height: 44px" :sortable="true">
+                        <template #body="{ data }">
+                            {{ data.title }}
+                        </template>
+                        <template #filter="{ filterModel, filterCallback }">
+                            <InputText
+                                v-model="filterModel.value"
+                                type="text"
+                                placeholder="Search title..."
+                                class="w-full"
+                                @input="filterCallback()"
+                            />
+                        </template>
+                    </Column>
+
+                    <!-- Description Column -->
+                    <Column field="description" header="Description" style="width: 400px; height: 44px" :sortable="true">
+                        <template #body="{ data }">
+                            {{ data.description }}
+                        </template>
+                        <template #filter="{ filterModel, filterCallback }">
+                            <InputText
+                                v-model="filterModel.value"
+                                type="text"
+                                placeholder="Search description..."
+                                class="w-full"
+                                @input="filterCallback()"
+                            />
+                        </template>
+                    </Column>
+
+                    <!-- Start Time Column -->
+                    <Column field="start_time" header="Start Time" style="width: 180px; height: 44px" :sortable="true">
+                        <template #body="{ data }">
+                            {{ formatDateTime(data.start_time) }}
+                        </template>
+                        <template #filter="{ filterModel, filterCallback }">
+                            <DatePicker
+                                v-model="filterModel.value"
+                                placeholder="Filter start time..."
+                                show-time
+                                hour-format="24"
+                                class="w-full"
+                                @date-select="filterCallback()"
+                                @clear-click="filterCallback()"
+                            />
+                        </template>
+                    </Column>
+
+                    <!-- End Time Column -->
+                    <Column field="end_time" header="End Time" style="width: 180px; height: 44px" :sortable="true">
+                        <template #body="{ data }">
+                            {{ formatDateTime(data.end_time) }}
+                        </template>
+                        <template #filter="{ filterModel, filterCallback }">
+                            <DatePicker
+                                v-model="filterModel.value"
+                                placeholder="Filter end time..."
+                                show-time
+                                hour-format="24"
+                                class="w-full"
+                                @date-select="filterCallback()"
+                                @clear-click="filterCallback()"
+                            />
+                        </template>
+                    </Column>
+                </template>
+
+                <!-- Common timestamp columns -->
+                <Column field="created_at" header="Created" style="width: 180px; height: 44px" :sortable="true">
+                    <template #body="{ data }">
+                        {{ formatDateTime(data.created_at) }}
+                    </template>
+                    <template #filter="{ filterModel, filterCallback }">
                         <DatePicker
-                            v-else-if="column.type === 'datetime'"
                             v-model="filterModel.value"
-                            :placeholder="`Filter ${column.header.toLowerCase()}...`"
+                            placeholder="Filter created..."
                             show-time
                             hour-format="24"
                             class="w-full"
                             @date-select="filterCallback()"
                             @clear-click="filterCallback()"
                         />
-                        <!-- Default text input filter -->
-                        <InputText
-                            v-else
+                    </template>
+                </Column>
+
+                <Column field="updated_at" header="Updated" style="width: 180px; height: 44px" :sortable="true">
+                    <template #body="{ data }">
+                        {{ formatDateTime(data.updated_at) }}
+                    </template>
+                    <template #filter="{ filterModel, filterCallback }">
+                        <DatePicker
                             v-model="filterModel.value"
-                            type="text"
-                            :placeholder="`Search ${column.header.toLowerCase()}...`"
+                            placeholder="Filter updated..."
+                            show-time
+                            hour-format="24"
                             class="w-full"
-                            @input="filterCallback()"
+                            @date-select="filterCallback()"
+                            @clear-click="filterCallback()"
                         />
                     </template>
                 </Column>
@@ -229,6 +505,7 @@ import IconField from "primevue/iconfield"
 import InputIcon from "primevue/inputicon"
 import DatePicker from "primevue/datepicker"
 import Select from "primevue/select"
+import Tag from "primevue/tag"
 
 // Route and navigation
 const route = useRoute()
@@ -491,8 +768,18 @@ FilterService.register('filterReasonEquals', (value, filter) => {
         return !value || value === "" || value === "[]" || value === null
     }
     
-    // For other filter values, do exact match
-    return value === filter
+    // For other filter values, parse JSON array and check if filter is included
+    try {
+        if (typeof value === 'string' && value.startsWith('[')) {
+            const filterReasons = JSON.parse(value)
+            return Array.isArray(filterReasons) && filterReasons.includes(filter)
+        }
+        // Fallback for non-JSON values
+        return value === filter
+    } catch (e) {
+        // If JSON parsing fails, fall back to exact match
+        return value === filter
+    }
 })
 
 // Initialize filters when table config changes
@@ -537,6 +824,34 @@ const formatDateTime = (dateString: string): string => {
     } catch {
         return dateString
     }
+}
+
+// Format filter reasons for display
+const formatFilterReasons = (filterReasons: string | null): string => {
+    if (!filterReasons || filterReasons === "" || filterReasons === "[]" || filterReasons === null) {
+        return "Passed"
+    }
+    
+    try {
+        if (typeof filterReasons === 'string' && filterReasons.startsWith('[')) {
+            const parsed = JSON.parse(filterReasons)
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                return parsed.join(", ")
+            }
+        }
+        return filterReasons
+    } catch (e) {
+        return filterReasons
+    }
+}
+
+// Get severity for filter reason tags
+const getFilterReasonSeverity = (filterReason: string | null): string => {
+    const formatted = formatFilterReasons(filterReason)
+    if (!filterReason || filterReason === "Passed" || formatted === "Passed") {
+        return "success"
+    }
+    return "warn"
 }
 
 const goBack = () => {
