@@ -292,6 +292,23 @@
                             </Column>
 
                             <Column
+                                field="assignment_name"
+                                header="Assignment Name"
+                                style="min-width: 250px"
+                            >
+                                <template #body="{ data }">
+                                    {{ data.assignment_name }}
+                                </template>
+                                <template #editor="{ data, field }">
+                                    <InputText
+                                        v-model="data[field]"
+                                        placeholder="Enter assignment name"
+                                        @input="updateAssignmentId(data)"
+                                    />
+                                </template>
+                            </Column>
+
+                            <Column
                                 field="rule_mode"
                                 header="Mode"
                                 style="min-width: 120px"
@@ -602,6 +619,8 @@ interface IngestionRule {
 }
 
 interface SourceRuleAssignment {
+    id: string
+    assignment_name: string
     source_name: string
     rule_mode: "whitelist" | "blacklist"
     assigned_rules: string[] | string | null
@@ -613,6 +632,7 @@ interface SourceRuleAssignment {
         total: number
         rule_filtered_count?: number
     }
+    isNew?: boolean // Flag for new assignments
 }
 
 interface Source {
@@ -625,26 +645,6 @@ interface Source {
 const rules = ref<IngestionRule[]>([])
 const sourceAssignments = ref<SourceRuleAssignment[]>([])
 const sources = ref<Source[]>([])
-
-// Debug: Watch sourceAssignments for changes
-watch(
-    sourceAssignments,
-    (newVal, oldVal) => {
-        console.log(`DEBUG: sourceAssignments changed!`)
-        console.log(
-            `DEBUG: Old length: ${oldVal?.length || 0}, New length: ${newVal?.length || 0}`
-        )
-    },
-    { deep: true }
-)
-
-// Debug: Computed property to track assignments
-const debugAssignments = computed(() => {
-    console.log(
-        `DEBUG: Computed debugAssignments called, length: ${sourceAssignments.value.length}`
-    )
-    return sourceAssignments.value
-})
 
 const editingRows = ref([])
 const loading = ref(false)
@@ -786,21 +786,6 @@ const loadConfiguration = async (): Promise<void> => {
 
             console.log(
                 `Filter stats loading completed. Final count with filter_stats: ${sourceAssignments.value.filter((a) => a.filter_stats).length}`
-            )
-
-            // Debug: Log final assignments state
-            console.log(
-                `DEBUG: Final sourceAssignments.value:`,
-                sourceAssignments.value
-            )
-            console.log(
-                `DEBUG: sourceAssignments.value.length:`,
-                sourceAssignments.value.length
-            )
-            console.log(`DEBUG: First assignment:`, sourceAssignments.value[0])
-            console.log(
-                `DEBUG: Assignment IDs:`,
-                sourceAssignments.value.map((a) => a.id)
             )
         }
     } catch (error) {
@@ -1020,9 +1005,42 @@ const onRuleEditCancel = (): void => {
     // No changes needed for cancel
 }
 
+// Utility function to generate ID from assignment name
+const generateIdFromName = (name: string): string => {
+    return name
+        .toLowerCase()
+        .replace(/[^a-z0-9\s]/g, "") // Remove special characters
+        .replace(/\s+/g, "_") // Replace spaces with underscores
+        .replace(/_{2,}/g, "_") // Replace multiple underscores with single
+        .replace(/^_|_$/g, "") // Remove leading/trailing underscores
+}
+
+// Function to ensure unique ID
+const ensureUniqueId = (baseId: string): string => {
+    let id = baseId
+    let counter = 1
+
+    while (sourceAssignments.value.some((assignment) => assignment.id === id)) {
+        id = `${baseId}_${counter}`
+        counter++
+    }
+
+    return id
+}
+
+// Function to update assignment ID when name changes
+const updateAssignmentId = (assignment: any): void => {
+    if (assignment.assignment_name && assignment.assignment_name.trim()) {
+        const baseId = generateIdFromName(assignment.assignment_name.trim())
+        assignment.id = ensureUniqueId(baseId)
+    }
+}
+
 // Source assignment management functions
 const addNewAssignment = (): void => {
     const newAssignment: SourceRuleAssignment = {
+        id: "", // Will be generated when assignment_name is entered
+        assignment_name: "",
         source_name: "",
         rule_mode: "blacklist",
         assigned_rules: null,
@@ -1049,8 +1067,39 @@ const deleteAssignment = async (index: number): Promise<void> => {
 
 const onAssignmentEditSave = async (event: any): Promise<void> => {
     try {
+        const assignment = event.newData
+
+        // Validate required fields
+        if (!assignment.assignment_name || !assignment.assignment_name.trim()) {
+            toast.add({
+                severity: "error",
+                summary: "Validation Error",
+                detail: "Assignment name is required",
+                life: 3000,
+            })
+            return
+        }
+
+        if (!assignment.source_name || !assignment.source_name.trim()) {
+            toast.add({
+                severity: "error",
+                summary: "Validation Error",
+                detail: "Source name is required",
+                life: 3000,
+            })
+            return
+        }
+
+        // Generate ID if not present or empty
+        if (!assignment.id || !assignment.id.trim()) {
+            updateAssignmentId(assignment)
+        }
+
+        // Remove the isNew flag if present
+        delete assignment.isNew
+
         // Save assignments immediately when an assignment is edited
-        await saveAssignments()
+        await saveAssignmentsOnly()
 
         toast.add({
             severity: "success",

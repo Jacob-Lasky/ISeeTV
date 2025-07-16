@@ -1445,6 +1445,34 @@ async def get_rules() -> Dict[str, Any]:
 
 
 @app.post(
+    "/api/rules/save",
+    response_model=Dict[str, Any],
+    tags=["Rules"],
+    status_code=status.HTTP_200_OK,
+)
+async def save_rules_only(
+    rules_data: List[Dict[str, Any]]
+) -> Dict[str, Any]:
+    """Save only ingestion rules to rules.json file"""
+    log_function("Saving ingestion rules only")
+    try:
+        result = save_rules(rules_data)
+
+        if not result["success"]:
+            return result
+
+        log_function(f"Successfully saved rules")
+        return result
+
+    except Exception as e:
+        logger.error(f"Error saving rules: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to save rules: {str(e)}",
+        )
+
+
+@app.post(
     "/api/assignments/apply",
     response_model=Dict[str, Any],
     tags=["Rules"],

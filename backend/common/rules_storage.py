@@ -72,11 +72,20 @@ def save_assignments(assignments: List[Dict[str, Any]]) -> Dict[str, Any]:
         # Validate assignments structure
         from rules.ingestion_rules import SourceRuleAssignment
         
+        # Filter out unknown fields before validation and saving
+        valid_fields = {'id', 'assignment_name', 'source_name', 'rule_mode', 'assigned_rules', 'enabled'}
+        cleaned_assignments = []
+        
         for assignment_data in assignments:
-            SourceRuleAssignment(**assignment_data)  # This will raise if invalid
+            # Filter out unknown fields (like filter_stats)
+            cleaned_data = {k: v for k, v in assignment_data.items() if k in valid_fields}
+            
+            # Validate the cleaned data
+            SourceRuleAssignment(**cleaned_data)  # This will raise if invalid
+            cleaned_assignments.append(cleaned_data)
         
         # Atomically write assignments to file
-        atomic_write_json(ASSIGNMENTS_FILE, assignments)
+        atomic_write_json(ASSIGNMENTS_FILE, cleaned_assignments)
         
         log_function(f"Successfully saved {len(assignments)} assignments")
         return {
