@@ -101,7 +101,12 @@
                 </template>
 
                 <!-- ID Column -->
-                <Column field="id" header="ID" style="width: 80px; height: 44px" :sortable="true">
+                <Column
+                    field="id"
+                    header="ID"
+                    style="width: 80px; height: 44px"
+                    :sortable="true"
+                >
                     <template #body="{ data }">
                         {{ data.id }}
                     </template>
@@ -117,7 +122,13 @@
                 </Column>
 
                 <!-- Source Column -->
-                <Column field="source" header="Source" style="width: 150px; height: 44px" :sortable="true" :showFilterMenu="false">
+                <Column
+                    field="source"
+                    header="Source"
+                    style="width: 150px; height: 44px"
+                    :sortable="true"
+                    :showFilterMenu="false"
+                >
                     <template #body="{ data }">
                         <Tag :value="data.source" severity="info" />
                     </template>
@@ -131,18 +142,29 @@
                             @change="filterCallback()"
                         >
                             <template #option="slotProps">
-                                <Tag :value="slotProps.option" severity="info" />
+                                <Tag
+                                    :value="slotProps.option"
+                                    severity="info"
+                                />
                             </template>
                         </Select>
                     </template>
                 </Column>
 
                 <!-- Filter Reason Column -->
-                <Column field="filter_reasons" header="Filter Reason" style="width: 200px; height: 44px" :sortable="true" :showFilterMenu="false">
+                <Column
+                    field="filter_reasons"
+                    header="Filter Reason"
+                    style="width: 200px; height: 44px"
+                    :sortable="true"
+                    :showFilterMenu="false"
+                >
                     <template #body="{ data }">
-                        <Tag 
-                            :value="formatFilterReasons(data.filter_reasons)" 
-                            :severity="getFilterReasonSeverity(data.filter_reasons)"
+                        <Tag
+                            :value="formatFilterReasons(data.filter_reasons)"
+                            :severity="
+                                getFilterReasonSeverity(data.filter_reasons)
+                            "
                         />
                     </template>
                     <template #filter="{ filterModel, filterCallback }">
@@ -155,9 +177,15 @@
                             @change="filterCallback()"
                         >
                             <template #option="slotProps">
-                                <Tag 
-                                    :value="slotProps.option" 
-                                    :severity="getFilterReasonSeverity(slotProps.option === 'Passed' ? null : slotProps.option)"
+                                <Tag
+                                    :value="slotProps.option"
+                                    :severity="
+                                        getFilterReasonSeverity(
+                                            slotProps.option === 'Passed'
+                                                ? null
+                                                : slotProps.option
+                                        )
+                                    "
                                 />
                             </template>
                         </Select>
@@ -167,7 +195,12 @@
                 <!-- Dynamic columns based on table type -->
                 <template v-if="tableName === 'epg_channels'">
                     <!-- Channel ID Column -->
-                    <Column field="channel_id" header="Channel ID" style="width: 150px; height: 44px" :sortable="true">
+                    <Column
+                        field="channel_id"
+                        header="Channel ID"
+                        style="width: 150px; height: 44px"
+                        :sortable="true"
+                    >
                         <template #body="{ data }">
                             {{ data.channel_id }}
                         </template>
@@ -183,7 +216,12 @@
                     </Column>
 
                     <!-- Display Name Column -->
-                    <Column field="display_name" header="Display Name" style="width: 200px; height: 44px" :sortable="true">
+                    <Column
+                        field="display_name"
+                        header="Display Name"
+                        style="width: 200px; height: 44px"
+                        :sortable="true"
+                    >
                         <template #body="{ data }">
                             {{ data.display_name }}
                         </template>
@@ -199,7 +237,12 @@
                     </Column>
 
                     <!-- Icon URL Column -->
-                    <Column field="icon_url" header="Icon URL" style="width: 300px; height: 44px" :sortable="true">
+                    <Column
+                        field="icon_url"
+                        header="Icon URL"
+                        style="width: 300px; height: 44px"
+                        :sortable="true"
+                    >
                         <template #body="{ data }">
                             <a
                                 v-if="data.icon_url"
@@ -225,9 +268,19 @@
 
                 <template v-else-if="tableName === 'm3u_channels'">
                     <!-- Group Column -->
-                    <Column field="group" header="Group" style="width: 150px; height: 44px" :sortable="true" :showFilterMenu="false">
+                    <Column
+                        field="group"
+                        header="Group"
+                        style="width: 150px; height: 44px"
+                        :sortable="true"
+                        :showFilterMenu="false"
+                    >
                         <template #body="{ data }">
-                            <Tag v-if="data.group" :value="data.group" severity="secondary" />
+                            <Tag
+                                v-if="data.group"
+                                :value="data.group"
+                                severity="secondary"
+                            />
                         </template>
                         <template #filter="{ filterModel, filterCallback }">
                             <Select
@@ -239,14 +292,22 @@
                                 @change="filterCallback()"
                             >
                                 <template #option="slotProps">
-                                    <Tag :value="slotProps.option" severity="secondary" />
+                                    <Tag
+                                        :value="slotProps.option"
+                                        severity="secondary"
+                                    />
                                 </template>
                             </Select>
                         </template>
                     </Column>
 
                     <!-- TVG ID Column -->
-                    <Column field="tvg_id" header="TVG ID" style="width: 150px; height: 44px" :sortable="true">
+                    <Column
+                        field="tvg_id"
+                        header="TVG ID"
+                        style="width: 150px; height: 44px"
+                        :sortable="true"
+                    >
                         <template #body="{ data }">
                             <code>{{ data.tvg_id }}</code>
                         </template>
@@ -262,7 +323,12 @@
                     </Column>
 
                     <!-- Name Column -->
-                    <Column field="name" header="Name" style="width: 200px; height: 44px" :sortable="true">
+                    <Column
+                        field="name"
+                        header="Name"
+                        style="width: 200px; height: 44px"
+                        :sortable="true"
+                    >
                         <template #body="{ data }">
                             {{ data.name }}
                         </template>
@@ -278,7 +344,12 @@
                     </Column>
 
                     <!-- Stream URL Column -->
-                    <Column field="stream_url" header="Stream URL" style="width: 300px; height: 44px" :sortable="true">
+                    <Column
+                        field="stream_url"
+                        header="Stream URL"
+                        style="width: 300px; height: 44px"
+                        :sortable="true"
+                    >
                         <template #body="{ data }">
                             <a
                                 :href="data.stream_url"
@@ -301,7 +372,12 @@
                     </Column>
 
                     <!-- Logo URL Column -->
-                    <Column field="logo_url" header="Logo URL" style="width: 300px; height: 44px" :sortable="true">
+                    <Column
+                        field="logo_url"
+                        header="Logo URL"
+                        style="width: 300px; height: 44px"
+                        :sortable="true"
+                    >
                         <template #body="{ data }">
                             <a
                                 v-if="data.logo_url"
@@ -327,7 +403,12 @@
 
                 <template v-else-if="tableName === 'programs'">
                     <!-- Program ID Column -->
-                    <Column field="program_id" header="Program ID" style="width: 150px; height: 44px" :sortable="true">
+                    <Column
+                        field="program_id"
+                        header="Program ID"
+                        style="width: 150px; height: 44px"
+                        :sortable="true"
+                    >
                         <template #body="{ data }">
                             {{ data.program_id }}
                         </template>
@@ -343,7 +424,12 @@
                     </Column>
 
                     <!-- Channel ID Column -->
-                    <Column field="channel_id" header="Channel ID" style="width: 150px; height: 44px" :sortable="true">
+                    <Column
+                        field="channel_id"
+                        header="Channel ID"
+                        style="width: 150px; height: 44px"
+                        :sortable="true"
+                    >
                         <template #body="{ data }">
                             {{ data.channel_id }}
                         </template>
@@ -359,7 +445,12 @@
                     </Column>
 
                     <!-- Title Column -->
-                    <Column field="title" header="Title" style="width: 250px; height: 44px" :sortable="true">
+                    <Column
+                        field="title"
+                        header="Title"
+                        style="width: 250px; height: 44px"
+                        :sortable="true"
+                    >
                         <template #body="{ data }">
                             {{ data.title }}
                         </template>
@@ -375,7 +466,12 @@
                     </Column>
 
                     <!-- Description Column -->
-                    <Column field="description" header="Description" style="width: 400px; height: 44px" :sortable="true">
+                    <Column
+                        field="description"
+                        header="Description"
+                        style="width: 400px; height: 44px"
+                        :sortable="true"
+                    >
                         <template #body="{ data }">
                             {{ data.description }}
                         </template>
@@ -391,7 +487,12 @@
                     </Column>
 
                     <!-- Start Time Column -->
-                    <Column field="start_time" header="Start Time" style="width: 180px; height: 44px" :sortable="true">
+                    <Column
+                        field="start_time"
+                        header="Start Time"
+                        style="width: 180px; height: 44px"
+                        :sortable="true"
+                    >
                         <template #body="{ data }">
                             {{ formatDateTime(data.start_time) }}
                         </template>
@@ -409,7 +510,12 @@
                     </Column>
 
                     <!-- End Time Column -->
-                    <Column field="end_time" header="End Time" style="width: 180px; height: 44px" :sortable="true">
+                    <Column
+                        field="end_time"
+                        header="End Time"
+                        style="width: 180px; height: 44px"
+                        :sortable="true"
+                    >
                         <template #body="{ data }">
                             {{ formatDateTime(data.end_time) }}
                         </template>
@@ -428,7 +534,12 @@
                 </template>
 
                 <!-- Common timestamp columns -->
-                <Column field="created_at" header="Created" style="width: 180px; height: 44px" :sortable="true">
+                <Column
+                    field="created_at"
+                    header="Created"
+                    style="width: 180px; height: 44px"
+                    :sortable="true"
+                >
                     <template #body="{ data }">
                         {{ formatDateTime(data.created_at) }}
                     </template>
@@ -445,7 +556,12 @@
                     </template>
                 </Column>
 
-                <Column field="updated_at" header="Updated" style="width: 180px; height: 44px" :sortable="true">
+                <Column
+                    field="updated_at"
+                    header="Updated"
+                    style="width: 180px; height: 44px"
+                    :sortable="true"
+                >
                     <template #body="{ data }">
                         {{ formatDateTime(data.updated_at) }}
                     </template>
@@ -757,22 +873,24 @@ const getTableConfig = (tableName: string): TableConfig => {
 const tableConfig = computed(() => getTableConfig(tableName.value))
 
 // Register custom filter constraint for filter_reasons
-FilterService.register('filterReasonEquals', (value, filter) => {
+FilterService.register("filterReasonEquals", (value, filter) => {
     // If no filter is applied, show all records
     if (!filter) {
         return true
     }
-    
+
     // Handle "Passed" case - match null, empty, or "[]" values
     if (filter === "Passed") {
         return !value || value === "" || value === "[]" || value === null
     }
-    
+
     // For other filter values, parse JSON array and check if filter is included
     try {
-        if (typeof value === 'string' && value.startsWith('[')) {
+        if (typeof value === "string" && value.startsWith("[")) {
             const filterReasons = JSON.parse(value)
-            return Array.isArray(filterReasons) && filterReasons.includes(filter)
+            return (
+                Array.isArray(filterReasons) && filterReasons.includes(filter)
+            )
         }
         // Fallback for non-JSON values
         return value === filter
@@ -803,7 +921,7 @@ const initializeFilters = () => {
             // Use custom filter constraint for filter_reasons
             newFilters[column.field] = {
                 value: null,
-                matchMode: 'filterReasonEquals',
+                matchMode: "filterReasonEquals",
             }
         } else {
             newFilters[column.field] = {
@@ -828,12 +946,20 @@ const formatDateTime = (dateString: string): string => {
 
 // Format filter reasons for display
 const formatFilterReasons = (filterReasons: string | null): string => {
-    if (!filterReasons || filterReasons === "" || filterReasons === "[]" || filterReasons === null) {
+    if (
+        !filterReasons ||
+        filterReasons === "" ||
+        filterReasons === "[]" ||
+        filterReasons === null
+    ) {
         return "Passed"
     }
-    
+
     try {
-        if (typeof filterReasons === 'string' && filterReasons.startsWith('[')) {
+        if (
+            typeof filterReasons === "string" &&
+            filterReasons.startsWith("[")
+        ) {
             const parsed = JSON.parse(filterReasons)
             if (Array.isArray(parsed) && parsed.length > 0) {
                 return parsed.join(", ")
