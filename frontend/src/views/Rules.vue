@@ -309,41 +309,6 @@
                             </Column>
 
                             <Column
-                                field="rule_mode"
-                                header="Mode"
-                                style="min-width: 120px"
-                            >
-                                <template #body="{ data }">
-                                    <Tag
-                                        :value="data.rule_mode"
-                                        :severity="
-                                            data.rule_mode === 'whitelist'
-                                                ? 'success'
-                                                : 'danger'
-                                        "
-                                    />
-                                </template>
-                                <template #editor="{ data, field }">
-                                    <Select
-                                        v-model="data[field]"
-                                        :options="[
-                                            {
-                                                label: 'Whitelist',
-                                                value: 'whitelist',
-                                            },
-                                            {
-                                                label: 'Blacklist',
-                                                value: 'blacklist',
-                                            },
-                                        ]"
-                                        optionLabel="label"
-                                        optionValue="value"
-                                        placeholder="Select mode"
-                                    />
-                                </template>
-                            </Column>
-
-                            <Column
                                 field="assigned_rules"
                                 header="Assigned Rules"
                                 style="min-width: 300px"
@@ -464,6 +429,28 @@
                                         >
                                             Unknown
                                         </div>
+                                    </div>
+                                </template>
+                            </Column>
+
+                            <Column
+                                field="rule_mode"
+                                header="Source Mode"
+                                style="min-width: 120px"
+                            >
+                                <template #body="{ data }">
+                                    <div class="flex items-center gap-2">
+                                        <Tag
+                                            :value="getSourceRuleMode(data.source_name)"
+                                            :severity="
+                                                getSourceRuleMode(data.source_name) === 'whitelist'
+                                                    ? 'success'
+                                                    : 'danger'
+                                            "
+                                        />
+                                        <i class="pi pi-lock text-gray-400 text-xs" 
+                                           v-tooltip="'Mode is inherited from source configuration and cannot be edited here'"
+                                        ></i>
                                     </div>
                                 </template>
                             </Column>
@@ -622,7 +609,7 @@ interface SourceRuleAssignment {
     id: string
     assignment_name: string
     source_name: string
-    rule_mode: "whitelist" | "blacklist"
+    // rule_mode is inherited from sources data, not stored in assignments
     assigned_rules: string[] | string | null
     enabled: boolean
     filter_stats?: {
@@ -691,6 +678,12 @@ const tableOptions = computed(() => [
     { label: "EPG Channels", value: "epg_channels" },
     { label: "Programs", value: "programs" },
 ])
+
+// Atomic function to get rule_mode from sources data
+const getSourceRuleMode = (sourceName: string): string => {
+    const source = sources.value.find(s => s.name === sourceName)
+    return source?.rule_mode || 'blacklist' // Default to blacklist if not found
+}
 
 // Load configuration from API
 let loadingConfiguration = false
@@ -859,11 +852,6 @@ const getColumnOptions = (
 // save functions for rules and assignments
 const saveRules = async (): Promise<void> => {
     try {
-        console.log(
-            "saveRules called with data:",
-            JSON.stringify(rules.value, null, 2)
-        )
-
         const response = await fetch("/api/rules/save", {
             method: "POST",
             headers: {
@@ -1042,7 +1030,7 @@ const addNewAssignment = (): void => {
         id: "", // Will be generated when assignment_name is entered
         assignment_name: "",
         source_name: "",
-        rule_mode: "blacklist",
+        // rule_mode is inherited from sources data, not stored in assignments
         assigned_rules: null,
         enabled: true,
         isNew: true, // Flag to indicate this is a new assignment
