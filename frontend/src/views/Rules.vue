@@ -441,15 +441,24 @@
                                 <template #body="{ data }">
                                     <div class="flex items-center gap-2">
                                         <Tag
-                                            :value="getSourceRuleMode(data.source_name)"
+                                            :value="
+                                                getSourceRuleMode(
+                                                    data.source_name
+                                                )
+                                            "
                                             :severity="
-                                                getSourceRuleMode(data.source_name) === 'whitelist'
+                                                getSourceRuleMode(
+                                                    data.source_name
+                                                ) === 'whitelist'
                                                     ? 'success'
                                                     : 'danger'
                                             "
                                         />
-                                        <i class="pi pi-lock text-gray-400 text-xs" 
-                                           v-tooltip="'Mode is inherited from source configuration and cannot be edited here'"
+                                        <i
+                                            class="pi pi-lock text-gray-400 text-xs"
+                                            v-tooltip="
+                                                'Mode is inherited from source configuration and cannot be edited here'
+                                            "
                                         ></i>
                                     </div>
                                 </template>
@@ -536,11 +545,11 @@
                                             outlined
                                             size="small"
                                             v-tooltip="
-                                                'Unapply all rules from this source'
+                                                'Unapply this assignment'
                                             "
                                             :loading="
-                                                unapplyingSourceRules ===
-                                                data.source_name
+                                                unapplyingSourceRule ===
+                                                `${data.source_name}-${data.id}`
                                             "
                                             :disabled="
                                                 applyingSourceRules !== null ||
@@ -550,7 +559,8 @@
                                                 unapplyingSourceRule !== null
                                             "
                                             @click="
-                                                unapplySourceRules(
+                                                unapplyAssignment(
+                                                    data.id,
                                                     data.source_name
                                                 )
                                             "
@@ -681,8 +691,8 @@ const tableOptions = computed(() => [
 
 // Atomic function to get rule_mode from sources data
 const getSourceRuleMode = (sourceName: string): string => {
-    const source = sources.value.find(s => s.name === sourceName)
-    return source?.rule_mode || 'blacklist' // Default to blacklist if not found
+    const source = sources.value.find((s) => s.name === sourceName)
+    return source?.rule_mode || "blacklist" // Default to blacklist if not found
 }
 
 // Load configuration from API
@@ -1954,6 +1964,77 @@ const unapplySourceRule = async (
                 error instanceof Error
                     ? error.message
                     : `Failed to unapply rule '${ruleName}' from source '${sourceName}'`,
+            life: 5000,
+        })
+    } finally {
+        unapplyingSourceRule.value = null
+    }
+}
+
+// Unapply a specific assignment from relevant tables (atomic assignment control)
+const unapplyAssignment = async (
+    assignmentId: string,
+    sourceName: string
+): Promise<void> => {
+    try {
+        const assignmentKey = `${sourceName}-${assignmentId}`
+        unapplyingSourceRule.value = assignmentKey
+
+        console.log(
+            `Unapplying assignment '${assignmentId}' from relevant tables...`
+        )
+
+        const response = await fetch("/api/assignments/unapply", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify({
+                assignment_id: assignmentId,
+                // No table_name provided - backend will determine relevant tables
+            }),
+        })
+
+        const data = await response.json()
+
+        if (!response.ok) {
+            throw new Error(
+                data.detail ||
+                    `Failed to unapply assignment '${assignmentId}'`
+            )
+        }
+
+        console.log(
+            `Assignment unapplication results for '${assignmentId}':`,
+            {
+                relevant_tables: data.relevant_tables,
+                processed_tables: data.processed_tables,
+                results: data.results,
+                table_results: data.table_results,
+            }
+        )
+
+        toast.add({
+            severity: "success",
+            summary: "Assignment Unapplied",
+            detail: `Assignment '${assignmentId}' unapplied from ${data.processed_tables?.length || 0} relevant tables (${data.results?.restored || 0} records restored)`,
+            life: 5000,
+        })
+
+        // Refresh filter statistics after unapplying
+        await loadAllFilterStats()
+    } catch (error) {
+        console.error(
+            `Error unapplying assignment '${assignmentId}':`,
+            error
+        )
+        toast.add({
+            severity: "error",
+            summary: "Assignment Unapplication Failed",
+            detail:
+                error instanceof Error
+                    ? error.message
+                    : `Failed to unapply assignment '${assignmentId}'`,
             life: 5000,
         })
     } finally {

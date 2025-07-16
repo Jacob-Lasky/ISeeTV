@@ -1531,6 +1531,107 @@ async def apply_assignment(
 
 
 @app.post(
+    "/api/assignments/unapply",
+    response_model=Dict[str, Any],
+    tags=["Rules"],
+    status_code=status.HTTP_200_OK,
+)
+async def unapply_assignment(
+    assignment_id: str = Body(..., description="ID of the assignment to unapply"),
+    table_name: str = Body(None, description="Optional: specific table to unapply from. If not provided, unapplies from all relevant tables."),
+) -> Dict[str, Any]:
+    """Unapply a specific assignment by ID from relevant tables (new multi-assignment architecture)"""
+    try:
+        logger.info(f"[unapply_assignment]: Unapplying assignment '{assignment_id}' from {table_name or 'all relevant tables'}")
+        
+        # Import post_load_engine and get the assignment by ID
+        from rules.post_load_rules import post_load_engine
+        assignment = post_load_engine.ingestion_engine.get_assignment_by_id(assignment_id)
+        if not assignment:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Assignment '{assignment_id}' not found"
+            )
+        
+        # Get all rules for this assignment to determine relevant tables
+        rules, _ = post_load_engine.ingestion_engine.load_rules()
+        relevant_tables = set()
+        
+        for rule_name in assignment.assigned_rules:
+            rule = next((r for r in rules if r.name == rule_name), None)
+            if rule:
+                relevant_tables.update(rule.tables)
+        
+        if not relevant_tables:
+            logger.warning(f"No relevant tables found for assignment '{assignment_id}'")
+            return {
+                "success": True,
+                "message": f"No relevant tables found for assignment '{assignment_id}'",
+                "assignment_id": assignment_id,
+                "source_name": assignment.source_name,
+                "results": {"processed": 0, "restored": 0, "passed": 0},
+            }
+        
+        # If specific table provided, validate it's relevant
+        if table_name:
+            if table_name not in relevant_tables:
+                raise HTTPException(
+                    status_code=status.HTTP_400_BAD_REQUEST,
+                    detail=f"Table '{table_name}' is not relevant to assignment '{assignment_id}'. Relevant tables: {list(relevant_tables)}"
+                )
+            tables_to_process = [table_name]
+        else:
+            tables_to_process = list(relevant_tables)
+        
+        logger.info(f"Processing tables: {tables_to_process} for assignment '{assignment_id}'")
+        
+        # Unapply the assignment from relevant tables
+        total_results = {"processed": 0, "restored": 0, "passed": 0}
+        table_results = {}
+        
+        for table in tables_to_process:
+            result = post_load_engine.unapply_assignment_from_table(
+                assignment_id, table, assignment.source_name
+            )
+            
+            total_results["processed"] += result.get("processed", 0)
+            total_results["restored"] += result.get("restored", 0)
+            total_results["passed"] += result.get("passed", 0)
+            table_results[table] = result
+        
+        logger.info(
+            f"Assignment '{assignment_id}' unapplication completed for {len(tables_to_process)} tables from {assignment.source_name}"
+        )
+
+        # Convert numpy types to Python types for JSON serialization
+        serializable_result = {
+            "processed": int(total_results["processed"]),
+            "restored": int(total_results["restored"]),
+            "passed": int(total_results["passed"])
+        }
+        
+        return {
+            "success": True,
+            "message": f"Assignment '{assignment_id}' unapplied from {len(tables_to_process)} relevant tables for source {assignment.source_name}",
+            "assignment_id": assignment_id,
+            "relevant_tables": list(relevant_tables),
+            "processed_tables": tables_to_process,
+            "source_name": assignment.source_name,
+            "results": serializable_result,
+            "table_results": table_results,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error unapplying assignment: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to unapply assignment: {str(e)}"
+        )
+
+
+@app.post(
     "/api/assignments/save",
     response_model=Dict[str, Any],
     tags=["Rules"],

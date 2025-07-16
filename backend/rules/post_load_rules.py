@@ -385,6 +385,70 @@ class PostLoadRulesEngine:
             "passed": passed_count,
         }
 
+    def unapply_assignment_from_table(
+        self, assignment_id: str, table_name: str, source_name: str
+    ) -> Dict[str, Any]:
+        """Unapply a specific assignment from a table (new multi-assignment architecture)"""
+        log_function(
+            f"Unapplying assignment '{assignment_id}' from {table_name} for source {source_name}"
+        )
+
+        # Get the assignment by ID to validate it exists
+        assignment = self.ingestion_engine.get_assignment_by_id(assignment_id)
+        if not assignment:
+            log_function(
+                f"Assignment '{assignment_id}' not found, skipping"
+            )
+            return {"processed": 0, "restored": 0, "passed": 0}
+
+        # Load records from database
+        records = self._load_records_from_db(table_name, source_name)
+        if not records:
+            log_function(f"No records found in {table_name} for source {source_name}")
+            return {"processed": 0, "restored": 0, "passed": 0}
+
+        log_function(f"Loaded {len(records)} records from {table_name} for {source_name}")
+        
+        # Process filter_reasons for each record (JSON array approach)
+        import json
+        processed_count = len(records)
+        restored_count = 0
+        passed_count = 0
+        
+        for record in records:
+            # Get current filter_reasons (JSON array of assignment IDs)
+            current_filter_reasons = record.get('filter_reasons')
+            if current_filter_reasons:
+                try:
+                    current_filter_reasons = json.loads(current_filter_reasons) if isinstance(current_filter_reasons, str) else current_filter_reasons
+                except (json.JSONDecodeError, TypeError):
+                    current_filter_reasons = []
+            else:
+                current_filter_reasons = []
+            
+            # Remove assignment ID from filter_reasons if present
+            if assignment_id in current_filter_reasons:
+                current_filter_reasons.remove(assignment_id)
+                record['filter_reasons'] = json.dumps(current_filter_reasons) if current_filter_reasons else None
+                restored_count += 1
+                log_function(f"Removed assignment '{assignment_id}' from record {record.get('id', 'unknown')}", level="debug")
+            else:
+                passed_count += 1
+
+        # Update records in database
+        self._update_records_in_db(table_name, records)
+        log_function(f"Updated {len(records)} records in {table_name} after unapplying assignment")
+
+        log_function(
+            f"Assignment '{assignment_id}' unapplied from {table_name}/{source_name}: {processed_count} processed, {restored_count} restored, {passed_count} passed"
+        )
+
+        return {
+            "processed": processed_count,
+            "restored": restored_count,
+            "passed": passed_count,
+        }
+
     def apply_single_rule_to_source(
         self, rule_name: str, table_name: str, source_name: str
     ) -> Dict[str, Any]:
