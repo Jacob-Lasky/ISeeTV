@@ -122,7 +122,7 @@
                         >
                             {{ data[column.field] }}
                         </a>
-                        <span v-else-if="column.field === 'filter_reason'">
+                        <span v-else-if="column.field === 'filter_reasons'">
                             {{ data[column.field] || "Passed" }}
                         </span>
                         <span v-else>
@@ -155,7 +155,7 @@
                         />
                         <!-- Filter reason column filter -->
                         <Select
-                            v-else-if="column.field === 'filter_reason'"
+                            v-else-if="column.field === 'filter_reasons'"
                             v-model="filterModel.value"
                             :options="filterReasonOptions"
                             placeholder="All Filter Reasons"
@@ -213,7 +213,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted } from "vue"
 import { useRoute, useRouter } from "vue-router"
-import { FilterMatchMode } from "@primevue/core/api"
+import { FilterMatchMode, FilterService } from "@primevue/core/api"
 import { useToast } from "primevue/usetoast"
 import { apiGet } from "@/utils/apiUtils"
 import { getFileTypeIcon } from "@/utils/fileUtils"
@@ -301,6 +301,11 @@ const getTableConfig = (tableName: string): TableConfig => {
                         style: "width: 150px; height: 44px",
                     },
                     {
+                        field: "filter_reasons",
+                        header: "Filter Reason",
+                        style: "width: 200px; height: 44px",
+                    },
+                    {
                         field: "channel_id",
                         header: "Channel ID",
                         style: "width: 150px; height: 44px",
@@ -328,11 +333,6 @@ const getTableConfig = (tableName: string): TableConfig => {
                         style: "width: 180px; height: 44px",
                         type: "datetime",
                     },
-                    {
-                        field: "filter_reason",
-                        header: "Filter Reason",
-                        style: "width: 200px; height: 44px",
-                    },
                 ],
             }
         case "m3u_channels":
@@ -350,6 +350,16 @@ const getTableConfig = (tableName: string): TableConfig => {
                     {
                         field: "source",
                         header: "Source",
+                        style: "width: 150px; height: 44px",
+                    },
+                    {
+                        field: "filter_reasons",
+                        header: "Filter Reason",
+                        style: "width: 200px; height: 44px",
+                    },
+                    {
+                        field: "group",
+                        header: "Group",
                         style: "width: 150px; height: 44px",
                     },
                     {
@@ -375,11 +385,6 @@ const getTableConfig = (tableName: string): TableConfig => {
                         type: "url",
                     },
                     {
-                        field: "group",
-                        header: "Group",
-                        style: "width: 150px; height: 44px",
-                    },
-                    {
                         field: "created_at",
                         header: "Created",
                         style: "width: 180px; height: 44px",
@@ -390,11 +395,6 @@ const getTableConfig = (tableName: string): TableConfig => {
                         header: "Updated",
                         style: "width: 180px; height: 44px",
                         type: "datetime",
-                    },
-                    {
-                        field: "filter_reason",
-                        header: "Filter Reason",
-                        style: "width: 200px; height: 44px",
                     },
                 ],
             }
@@ -416,6 +416,11 @@ const getTableConfig = (tableName: string): TableConfig => {
                         style: "width: 150px; height: 44px",
                     },
                     {
+                        field: "filter_reasons",
+                        header: "Filter Reason",
+                        style: "width: 200px; height: 44px",
+                    },
+                    {
                         field: "program_id",
                         header: "Program ID",
                         style: "width: 150px; height: 44px",
@@ -424,6 +429,16 @@ const getTableConfig = (tableName: string): TableConfig => {
                         field: "channel_id",
                         header: "Channel ID",
                         style: "width: 150px; height: 44px",
+                    },
+                    {
+                        field: "title",
+                        header: "Title",
+                        style: "width: 250px; height: 44px",
+                    },
+                    {
+                        field: "description",
+                        header: "Description",
+                        style: "width: 400px; height: 44px",
                     },
                     {
                         field: "start_time",
@@ -438,16 +453,6 @@ const getTableConfig = (tableName: string): TableConfig => {
                         type: "datetime",
                     },
                     {
-                        field: "title",
-                        header: "Title",
-                        style: "width: 250px; height: 44px",
-                    },
-                    {
-                        field: "description",
-                        header: "Description",
-                        style: "width: 400px; height: 44px",
-                    },
-                    {
                         field: "created_at",
                         header: "Created",
                         style: "width: 180px; height: 44px",
@@ -458,11 +463,6 @@ const getTableConfig = (tableName: string): TableConfig => {
                         header: "Updated",
                         style: "width: 180px; height: 44px",
                         type: "datetime",
-                    },
-                    {
-                        field: "filter_reason",
-                        header: "Filter Reason",
-                        style: "width: 200px; height: 44px",
                     },
                 ],
             }
@@ -478,6 +478,22 @@ const getTableConfig = (tableName: string): TableConfig => {
 
 // Computed table configuration
 const tableConfig = computed(() => getTableConfig(tableName.value))
+
+// Register custom filter constraint for filter_reasons
+FilterService.register('filterReasonEquals', (value, filter) => {
+    // If no filter is applied, show all records
+    if (!filter) {
+        return true
+    }
+    
+    // Handle "Passed" case - match null, empty, or "[]" values
+    if (filter === "Passed") {
+        return !value || value === "" || value === "[]" || value === null
+    }
+    
+    // For other filter values, do exact match
+    return value === filter
+})
 
 // Initialize filters when table config changes
 const initializeFilters = () => {
@@ -495,6 +511,12 @@ const initializeFilters = () => {
             newFilters[column.field] = {
                 value: null,
                 matchMode: FilterMatchMode.DATE_IS,
+            }
+        } else if (column.field === "filter_reasons") {
+            // Use custom filter constraint for filter_reasons
+            newFilters[column.field] = {
+                value: null,
+                matchMode: 'filterReasonEquals',
             }
         } else {
             newFilters[column.field] = {
@@ -594,8 +616,8 @@ const loadFilterOptions = async () => {
             }
 
             // Set filter reason options
-            if (filterData.filter_reason) {
-                filterReasonOptions.value = filterData.filter_reason.map(
+            if (filterData.filter_reasons) {
+                filterReasonOptions.value = filterData.filter_reasons.map(
                     (item) => item.value
                 )
                 console.log(

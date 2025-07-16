@@ -82,7 +82,7 @@ def format_table_response(
     else:
         # Fallback to calculating from returned records
         total_records = len(records)
-        passed_records = len([r for r in records if r.get("filter_reason") is None])
+        passed_records = len([r for r in records if r.get("filter_reasons") is None or r.get("filter_reasons") == '[]' or r.get("filter_reasons") == ''])
         filtered_records = total_records - passed_records
         # If no filter_stats provided, create basic stats from records
         if not filter_stats:

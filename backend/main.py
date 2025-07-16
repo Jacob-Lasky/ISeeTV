@@ -808,9 +808,9 @@ async def get_db_summary() -> Dict[str, Any]:
             result = session.execute(text(f"SELECT * FROM {table_name} LIMIT 1"))
             rows = [dict(row._mapping) for row in result]
 
-            # Get filter statistics if filter_reason column exists
+            # Get filter statistics if filter_reasons column exists
             filter_stats = {}
-            if "filter_reason" in columns:
+            if "filter_reasons" in columns:
                 filter_stats = get_table_filter_statistics(session, table_name)
 
             summary.append(
