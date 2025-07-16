@@ -202,12 +202,12 @@ class DownloadTaskManager:
     """
 
     @staticmethod
-    def create_download_task(task_id: str, total_items: int) -> None:
+    def create_download_task(task_id: str, total_items: int, file_type: str = None) -> None:
         """Create a new download task with download-specific fields."""
         download_fields = {
             "bytes_downloaded": 0,
             "total_bytes": 0,
-            "file_type": None,
+            "file_type": file_type,
         }
 
         # Use ISO format for download tasks (legacy compatibility)

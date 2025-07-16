@@ -30,6 +30,17 @@ from download.downloader import (
     background_single_download_task,
 )
 from common.task_manager import DownloadTaskManager
+from common.job_queue import (
+    initialize_job_queue,
+    shutdown_job_queue,
+    enqueue_download_job,
+    enqueue_ingest_job,
+    enqueue_refresh_job,
+    enqueue_bulk_download_job,
+    get_queue_status,
+    get_job_status,
+    cancel_job,
+)
 from common.utils import (
     create_task_id,
     get_progress_response,
@@ -371,25 +382,31 @@ async def download_all_files(
                 message=f"No sources with {file_type} URLs found", task_ids=[]
             )
 
-        # Create task IDs and start downloads
+        # Create task IDs and queue downloads through job queue
         task_ids = []
+        job_ids = []
         for source in file_type_sources:
             # Create unique task ID for each source
             task_id = create_task_id(source.name, file_type, "download")
             task_ids.append(task_id)
 
             # Create download task (1 item per task)
-            DownloadTaskManager.create_download_task(task_id, 1)
+            DownloadTaskManager.create_download_task(task_id, 1, file_type)
 
-            # Start background download task for this source
-            asyncio.create_task(
-                background_single_download_task(
-                    task_id, source.name, file_type, sources_file, download_dir
-                )
+            # Enqueue download job through the global job queue
+            job_id = await enqueue_download_job(
+                source_name=source.name,
+                file_type=file_type,
+                job_function=background_single_download_task,
+                task_id=task_id,
+                download_type=file_type,
+                sources_file=sources_file,
+                download_dir=download_dir
             )
+            job_ids.append(job_id)
 
         return DownloadAllTasksResponse(
-            message=f"{file_type} downloads started for {len(file_type_sources)} sources",
+            message=f"{file_type} downloads queued for {len(file_type_sources)} sources (jobs: {', '.join(job_ids[:3])}{'...' if len(job_ids) > 3 else ''})",
             task_ids=task_ids,
         )
     except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
@@ -410,23 +427,28 @@ async def queue_file_for_download(
     sources_file: str = os.path.join(DATA_PATH, "sources.json"),
     download_dir: str = os.path.join(DATA_PATH, "sources"),
 ) -> DownloadTaskResponse:
-    """Download file of a specific type for a specific source"""
-    log_function(f"Downloading {file_type} file for source {source_name}")
+    """Queue file download for a specific source through the job queue"""
+    log_function(f"Queuing {file_type} file download for source {source_name}")
     try:
         # Create unique task ID for each source
         task_id = create_task_id(source_name, file_type, "download")
 
         # Create download task (1 item per task)
-        DownloadTaskManager.create_download_task(task_id, 1)
+        DownloadTaskManager.create_download_task(task_id, 1, file_type)
 
-        # Start background download task for this source
-        asyncio.create_task(
-            background_single_download_task(
-                task_id, source_name, file_type, sources_file, download_dir
-            )
+        # Enqueue download job through the global job queue
+        job_id = await enqueue_download_job(
+            source_name=source_name,
+            file_type=file_type,
+            job_function=background_single_download_task,
+            task_id=task_id,
+            download_type=file_type,
+            sources_file=sources_file,
+            download_dir=download_dir
         )
+        
         return DownloadTaskResponse(
-            message=f"{file_type} file for {source_name} download started",
+            message=f"{file_type} file for {source_name} download queued (job: {job_id})",
             task_id=task_id,
         )
     except Exception as e:
@@ -603,15 +625,20 @@ async def load_file_to_db(
             task_id, file_type, source_name, total_records, total_steps
         )
 
-        # Start background task
-        asyncio.create_task(
-            background_load_task(task_id, file_type, file_path, source_name)
+        # Enqueue ingest job through the global job queue
+        job_id = await enqueue_ingest_job(
+            source_name=source_name,
+            file_type=file_type,
+            job_function=background_load_task,
+            task_id=task_id,
+            file_path=file_path
         )
 
         return {
             "task_id": task_id,
-            "message": f"Started loading {file_type.upper()} file for {source_name}",
-            "status": "pending",
+            "job_id": job_id,
+            "message": f"Queued loading {file_type.upper()} file for {source_name} (job: {job_id})",
+            "status": "queued",
         }
 
     except HTTPException:
@@ -1895,31 +1922,111 @@ async def unapply_rules(request: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
         )
 
 
+# Job Queue Management API Endpoints
+
+
+@app.get("/api/jobs/queue/status", response_model=Dict[str, Any], tags=["Job Queue"], status_code=status.HTTP_200_OK)
+async def get_job_queue_status() -> Dict[str, Any]:
+    """Get current job queue status and information"""
+    log_function("Getting job queue status")
+    try:
+        status = await get_queue_status()
+        return {
+            "success": True,
+            "data": status
+        }
+    except Exception as e:
+        logger.error(f"Error getting job queue status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get job queue status: {str(e)}"
+        )
+
+
+@app.get("/api/jobs/{job_id}/status", response_model=Dict[str, Any], tags=["Job Queue"], status_code=status.HTTP_200_OK)
+async def get_job_status_by_id(job_id: str) -> Dict[str, Any]:
+    """Get status of a specific job"""
+    log_function(f"Getting status for job {job_id}")
+    try:
+        job_status = await get_job_status(job_id)
+        if not job_status:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Job {job_id} not found"
+            )
+        return {
+            "success": True,
+            "data": job_status
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error getting job status: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get job status: {str(e)}"
+        )
+
+
+@app.post("/api/jobs/{job_id}/cancel", response_model=Dict[str, Any], tags=["Job Queue"], status_code=status.HTTP_200_OK)
+async def cancel_job_by_id(job_id: str) -> Dict[str, Any]:
+    """Cancel a queued job"""
+    log_function(f"Cancelling job {job_id}")
+    try:
+        cancelled = await cancel_job(job_id)
+        if not cancelled:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Job {job_id} cannot be cancelled (not found or already running/completed)"
+            )
+        return {
+            "success": True,
+            "message": f"Job {job_id} cancelled successfully"
+        }
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.error(f"Error cancelling job: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to cancel job: {str(e)}"
+        )
+
+
 # Application event handlers
 
 
 @app.on_event("startup")
 async def startup_event():
-    """Initialize and start the scheduler on application startup"""
-    log_function("Application startup - initializing scheduler")
+    """Initialize job queue and scheduler on application startup"""
+    log_function("Application startup - initializing job queue and scheduler")
     try:
+        # Initialize job queue first
+        await initialize_job_queue()
+        log_function("Job queue initialized successfully")
+        
         # Start the scheduler
         start_scheduler()
         log_function("Scheduler started successfully on application startup")
     except Exception as e:
-        logger.error(f"Failed to start scheduler on startup: {e}")
-        # Don't fail the entire application if scheduler fails to start
+        logger.error(f"Failed to start job queue and scheduler on startup: {e}")
+        # Don't fail the entire application if startup fails
 
 
 @app.on_event("shutdown")
 async def shutdown_event():
-    """Stop the scheduler on application shutdown"""
-    log_function("Application shutdown - stopping scheduler")
+    """Stop the scheduler and job queue on application shutdown"""
+    log_function("Application shutdown - stopping scheduler and job queue")
     try:
+        # Stop scheduler first
         stop_scheduler()
-        log_function("Scheduler stopped successfully on application shutdown")
+        log_function("Scheduler stopped successfully")
+        
+        # Shutdown job queue
+        await shutdown_job_queue()
+        log_function("Job queue shutdown successfully on application shutdown")
     except Exception as e:
-        logger.error(f"Error stopping scheduler on shutdown: {e}")
+        logger.error(f"Error stopping scheduler and job queue on shutdown: {e}")
 
 
 if __name__ == "__main__":

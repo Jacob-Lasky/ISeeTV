@@ -187,10 +187,10 @@
                 </template>
             </Column>
 
-            <!-- File Last Refresh Column -->
+            <!-- File Refresh Status Column -->
             <Column
                 field="fileLastRefresh"
-                header="Last Refresh"
+                header="Refresh Status"
                 style="min-width: 200px"
                 :pt="{
                     headercell: { style: 'width: 200px; min-width: 120px' },
@@ -471,9 +471,9 @@
                                 severity="secondary"
                                 size="small"
                                 text
-                                :disabled="isFileRefreshing(data.fileId)"
-                                :title="`Refresh ${data.fileType.toUpperCase()} file`"
-                                @click="refreshFile(data)"
+                                :disabled="isSourceRefreshing(data.sourceName)"
+                                :title="`Refresh all files for ${data.sourceName}`"
+                                @click="refreshAllFilesForSource(data.sourceName)"
                             />
                             <Button
                                 icon="pi pi-filter"
@@ -1267,6 +1267,88 @@ async function refreshAllEpg() {
     }
 }
 
+// Refresh all files for a specific source
+async function refreshAllFilesForSource(sourceName: string) {
+    console.log(`Refreshing all files for source: ${sourceName}`)
+
+    try {
+        // Defensive check for sourceName
+        if (!sourceName || typeof sourceName !== 'string') {
+            console.warn('Invalid sourceName provided to refreshAllFilesForSource')
+            return
+        }
+
+        // Find all file rows for this source
+        const sourceFiles = sourceFileRows.value.filter(
+            (row) => row && row.sourceName === sourceName && !row._isGroupHeader
+        )
+
+        if (sourceFiles.length === 0) {
+            console.warn(`No files found for source: ${sourceName}`)
+            return
+        }
+
+        // Refresh each file for this source
+        for (const fileRow of sourceFiles) {
+            if (fileRow && fileRow.fileType && fileRow.sourceName) {
+                console.log(`Refreshing ${fileRow.fileType.toUpperCase()} for ${sourceName}`)
+                try {
+                    await refreshFile(fileRow)
+                } catch (fileError) {
+                    console.error(`Failed to refresh ${fileRow.fileType} for ${sourceName}:`, fileError)
+                    // Continue with other files even if one fails
+                }
+            }
+        }
+
+        toast.add({
+            severity: "success",
+            summary: "Source Refresh Started",
+            detail: `Refresh started for all files in source ${sourceName}`,
+            life: 3000,
+        })
+    } catch (error) {
+        console.error(`Failed to refresh all files for source ${sourceName}:`, error)
+        toast.add({
+            severity: "error",
+            summary: "Source Refresh Failed",
+            detail: error instanceof Error ? error.message : `Failed to refresh source ${sourceName}`,
+            life: 5000,
+        })
+    }
+}
+
+// Apply rules to all sources
+async function applyAllRules() {
+    console.log("Applying rules to all sources")
+
+    try {
+        applyingAllRules.value = true
+
+        // Apply rules to each source sequentially
+        for (const source of sources.value) {
+            await applySourceRules(source.sourceName)
+        }
+
+        toast.add({
+            severity: "success",
+            summary: "Rules Applied",
+            detail: "Rules have been applied to all sources",
+            life: 3000,
+        })
+    } catch (error) {
+        console.error("Failed to apply rules to all sources:", error)
+        toast.add({
+            severity: "error",
+            summary: "Apply All Rules Failed",
+            detail: error instanceof Error ? error.message : "Failed to apply rules to all sources",
+            life: 5000,
+        })
+    } finally {
+        applyingAllRules.value = false
+    }
+}
+
 // Progress tracking functions
 function startProgressPolling(taskId: string, fileId: string) {
     // Store the task ID for this file
@@ -1492,6 +1574,34 @@ function isFileRefreshing(fileId: string): boolean {
     }
 
     return false
+}
+
+// Check if any files in a source are currently being refreshed
+function isSourceRefreshing(sourceName: string): boolean {
+    try {
+        // Defensive check for sourceName
+        if (!sourceName || typeof sourceName !== 'string') {
+            return false
+        }
+
+        // Find all file rows for this source
+        const sourceFiles = sourceFileRows.value.filter(
+            (row) => row && row.sourceName === sourceName && !row._isGroupHeader
+        )
+
+        // Check if any file in this source is refreshing
+        return sourceFiles.some((fileRow) => {
+            try {
+                return fileRow && fileRow.fileId && isFileRefreshing(fileRow.fileId)
+            } catch (error) {
+                console.warn('Error checking file refresh status:', error)
+                return false
+            }
+        })
+    } catch (error) {
+        console.warn('Error in isSourceRefreshing:', error)
+        return false
+    }
 }
 
 // Get step-specific progress value or null for indeterminate
