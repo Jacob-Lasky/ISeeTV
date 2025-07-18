@@ -52,22 +52,20 @@ def precompute_filter_values(session: Session, table_name: str) -> None:
                             t.id as table_id,
                             j.value as filter_reasons
                         FROM {table_name} t, json_each(t.filter_reasons) j
-                        WHERE t.filter_reasons IS NOT NULL 
-                            AND t.filter_reasons != ''
-                            AND t.filter_reasons != '[]'
+                        WHERE t.filter_reasons != '[]'
                     )
                     SELECT 
                         filter_reasons as value,
                         COUNT(*) as count
                     FROM expanded_reasons
-                    WHERE filter_reasons IS NOT NULL AND filter_reasons != ''
+                    WHERE filter_reasons IS NOT NULL
                     GROUP BY filter_reasons
                     
                     UNION ALL
                     
                     SELECT 'Passed' as value, COUNT(*) as count
                     FROM {table_name}
-                    WHERE filter_reasons IS NULL OR filter_reasons = '' OR filter_reasons = '[]'
+                    WHERE filter_reasons = '[]'
                     
                     ORDER BY value
                 """
@@ -203,7 +201,7 @@ def get_table_filter_statistics(session: Session, table_name: str) -> Dict[str, 
             SELECT 
                 source,
                 CASE 
-                    WHEN filter_reasons IS NULL OR filter_reasons = '[]' OR filter_reasons = '' THEN 'Passed'
+                    WHEN filter_reasons = '[]' THEN 'Passed'
                     ELSE json_extract(filter_reasons, '$[0]') 
                 END as reason,
                 COUNT(*) as count
@@ -248,8 +246,6 @@ def get_table_filter_statistics_by_source(
                     j.value as assignment_id
                 FROM {table_name} t, json_each(t.filter_reasons) j
                 WHERE t.source = :source
-                    AND t.filter_reasons IS NOT NULL 
-                    AND t.filter_reasons != ''
                     AND t.filter_reasons != '[]'
             )
             SELECT 
@@ -264,7 +260,7 @@ def get_table_filter_statistics_by_source(
             SELECT 'Passed' as reason, COUNT(*) as count
             FROM {table_name}
             WHERE source = :source
-                AND (filter_reasons IS NULL OR filter_reasons = '' OR filter_reasons = '[]')
+                AND filter_reasons = '[]'
             
             ORDER BY count DESC
         """

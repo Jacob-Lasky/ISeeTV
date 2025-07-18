@@ -41,18 +41,18 @@ def _get_rules_filter_condition(source: Optional[str], filter_view: str = "norma
     
     if filter_view == "normal":
         # Normal: Shows intended result based on rule mode
-        # For blacklist mode: show records that passed (filter_reasons is null)
-        # For whitelist mode: show records that matched rules (filter_reasons is not null)
+        # For blacklist mode: show records that passed (filter_reasons is empty JSON array)
+        # For whitelist mode: show records that matched rules (filter_reasons is not empty)
         # Since most current assignments are blacklist, default to blacklist behavior
         # TODO: This could be enhanced to check actual rule_mode per source
-        return "(m.filter_reasons IS NULL)"
+        return "(m.filter_reasons = '[]')"
     
     elif filter_view == "inverse":
         # Inverse: Shows opposite of intended result
-        # For blacklist mode: show records that were filtered out (filter_reasons is not null)
-        # For whitelist mode: show records that didn't match rules (filter_reasons is null)
+        # For blacklist mode: show records that were filtered out (filter_reasons is not empty JSON array)
+        # For whitelist mode: show records that didn't match rules (filter_reasons is empty JSON array)
         # Since most current assignments are blacklist, default to blacklist inverse behavior
-        return "(m.filter_reasons IS NOT NULL)"
+        return "(m.filter_reasons != '[]')"
     else:
         # Default to showing all if unknown filter_view
         log_function(f"Unknown filter_view: {filter_view}, showing all records")
@@ -83,8 +83,8 @@ def get_filter_view_counts(
         # Single query with conditional counting for all filter views
         base_query = """
             SELECT 
-                COUNT(CASE WHEN m.filter_reasons IS NULL THEN 1 END) as normal_count,
-                COUNT(CASE WHEN m.filter_reasons IS NOT NULL THEN 1 END) as inverse_count,
+                COUNT(CASE WHEN m.filter_reasons = '[]' THEN 1 END) as normal_count,
+                COUNT(CASE WHEN m.filter_reasons != '[]' THEN 1 END) as inverse_count,
                 COUNT(*) as all_count
             FROM m3u_channels m
             LEFT JOIN epg_channels e ON m.source = e.source AND m.tvg_id = e.channel_id

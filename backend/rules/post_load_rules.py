@@ -396,11 +396,8 @@ class PostLoadRulesEngine:
                 # Remove assignment ID from filter_reasons if present
                 if assignment_id in current_filter_reasons:
                     current_filter_reasons.remove(assignment_id)
-                record["filter_reasons"] = (
-                    json.dumps(current_filter_reasons)
-                    if current_filter_reasons
-                    else None
-                )
+                # Always use empty array [] for "no filter reasons", never NULL
+                record["filter_reasons"] = json.dumps(current_filter_reasons)
                 passed_count += 1
 
         # Update records in database
@@ -469,11 +466,8 @@ class PostLoadRulesEngine:
             # Remove assignment ID from filter_reasons if present
             if assignment_id in current_filter_reasons:
                 current_filter_reasons.remove(assignment_id)
-                record["filter_reasons"] = (
-                    json.dumps(current_filter_reasons)
-                    if current_filter_reasons
-                    else None
-                )
+                # Always use empty array [] for "no filter reasons", never NULL
+                record["filter_reasons"] = json.dumps(current_filter_reasons)
                 restored_count += 1
                 log_function(
                     f"Removed assignment '{assignment_id}' from record {record.get('id', 'unknown')}",
@@ -572,10 +566,10 @@ class PostLoadRulesEngine:
                 if rule_names:
                     # Unapply specific rules by clearing filter_reasons for records filtered by those rules
                     for rule_name in rule_names:
-                        # Clear filter_reasons for records filtered by this specific rule
+                        # Set filter_reasons to empty JSON array for records filtered by this specific rule
                         result = session.execute(
                             text(
-                                f"UPDATE {table_name} SET filter_reasons = NULL "
+                                f"UPDATE {table_name} SET filter_reasons = '[]' "
                                 f"WHERE source = :source_name AND filter_reasons LIKE :rule_pattern"
                             ),
                             {
@@ -588,10 +582,10 @@ class PostLoadRulesEngine:
                             f"Unapplied rule '{rule_name}' from {affected_rows} records in {table_name}/{source_name}"
                         )
                 else:
-                    # Unapply all rules by clearing all filter_reasons fields
+                    # Unapply all rules by setting all filter_reasons to empty JSON array
                     result = session.execute(
                         text(
-                            f"UPDATE {table_name} SET filter_reasons = NULL "
+                            f"UPDATE {table_name} SET filter_reasons = '[]' "
                             f"WHERE source = :source_name AND filter_reasons IS NOT NULL"
                         ),
                         {"source_name": source_name},
