@@ -99,6 +99,7 @@ async def _bulk_upsert_m3u_channels(
                 "stream_url": channel.stream_url,
                 "logo_url": channel.logo_url,
                 "group": channel.group,
+                "stream_mode": channel.stream_mode,
             }
             for channel in channels
         ]
@@ -112,6 +113,7 @@ async def _bulk_upsert_m3u_channels(
                 "stream_url": stmt.excluded.stream_url,
                 "logo_url": stmt.excluded.logo_url,
                 "group": stmt.excluded.group,
+                "stream_mode": stmt.excluded.stream_mode,
                 "updated_at": stmt.excluded.updated_at,
             },
         )

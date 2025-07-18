@@ -40,6 +40,7 @@ class M3uChannelTable(Base):
     stream_url = Column(String, nullable=False)
     logo_url = Column(String, nullable=True)
     group = Column(String, nullable=True)
+    stream_mode = Column(String, nullable=False, default="live")
     filter_reasons = Column(String, nullable=True)  # JSON array of assignment IDs for multi-rule assignments
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())

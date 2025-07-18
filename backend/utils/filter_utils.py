@@ -23,7 +23,7 @@ def precompute_filter_values(session: Session, table_name: str) -> None:
     # Define filterable columns for each table
     filterable_columns = {
         "epg_channels": ["source", "filter_reasons"],
-        "m3u_channels": ["source", "group", "filter_reasons"],
+        "m3u_channels": ["source", "group", "stream_mode", "filter_reasons"],
         "programs": ["source", "filter_reasons"],
     }
 

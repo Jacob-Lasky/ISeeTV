@@ -104,7 +104,7 @@
                 <Column
                     field="id"
                     header="ID"
-                    style="width: 80px; height: 44px"
+                    style="width: 20px; height: 44px"
                     :sortable="true"
                 >
                     <template #body="{ data }">
@@ -118,36 +118,6 @@
                             class="w-full"
                             @input="filterCallback()"
                         />
-                    </template>
-                </Column>
-
-                <!-- Source Column -->
-                <Column
-                    field="source"
-                    header="Source"
-                    style="width: 150px; height: 44px"
-                    :sortable="true"
-                    :showFilterMenu="false"
-                >
-                    <template #body="{ data }">
-                        <Tag :value="data.source" severity="info" />
-                    </template>
-                    <template #filter="{ filterModel, filterCallback }">
-                        <Select
-                            v-model="filterModel.value"
-                            :options="sourceOptions"
-                            placeholder="All Sources"
-                            class="w-full"
-                            :show-clear="true"
-                            @change="filterCallback()"
-                        >
-                            <template #option="slotProps">
-                                <Tag
-                                    :value="slotProps.option"
-                                    severity="info"
-                                />
-                            </template>
-                        </Select>
                     </template>
                 </Column>
 
@@ -267,6 +237,39 @@
                 </template>
 
                 <template v-else-if="tableName === 'm3u_channels'">
+                    <!-- Stream Mode Column-->
+                    <Column
+                        field="stream_mode"
+                        header="Stream Mode"
+                        style="width: 150px; height: 44px"
+                        :sortable="true"
+                        :showFilterMenu="false"
+                    >
+                        <template #body="{ data }">
+                            <Tag
+                                v-if="data.stream_mode"
+                                :value="data.stream_mode"
+                                severity="secondary"
+                            />
+                        </template>
+                        <template #filter="{ filterModel, filterCallback }">
+                            <Select
+                                v-model="filterModel.value"
+                                :options="streamModeOptions"
+                                placeholder="All Stream Modes"
+                                class="w-full"
+                                :show-clear="true"
+                                @change="filterCallback()"
+                            >
+                                <template #option="slotProps">
+                                    <Tag
+                                        :value="slotProps.option"
+                                        severity="secondary"
+                                    />
+                                </template>
+                            </Select>
+                        </template>
+                    </Column>
                     <!-- Group Column -->
                     <Column
                         field="group"
@@ -653,6 +656,7 @@ const filteredRecords = ref(0)
 const sourceOptions = ref([])
 const groupOptions = ref([])
 const filterReasonOptions = ref([])
+const streamModeOptions = ref([])
 
 // Skeleton data for loading state (20 empty rows)
 const skeletonData = ref(new Array(20).fill({}))
@@ -687,11 +691,6 @@ const getTableConfig = (tableName: string): TableConfig => {
                         header: "ID",
                         style: "width: 80px; height: 44px",
                         type: "id",
-                    },
-                    {
-                        field: "source",
-                        header: "Source",
-                        style: "width: 150px; height: 44px",
                     },
                     {
                         field: "filter_reasons",
@@ -741,11 +740,6 @@ const getTableConfig = (tableName: string): TableConfig => {
                         type: "id",
                     },
                     {
-                        field: "source",
-                        header: "Source",
-                        style: "width: 150px; height: 44px",
-                    },
-                    {
                         field: "filter_reasons",
                         header: "Filter Reason",
                         style: "width: 200px; height: 44px",
@@ -754,6 +748,11 @@ const getTableConfig = (tableName: string): TableConfig => {
                         field: "group",
                         header: "Group",
                         style: "width: 150px; height: 44px",
+                    },
+                    {
+                        field: "stream_mode",
+                        header: "Stream Mode",
+                        style: "width: 120px; height: 44px",
                     },
                     {
                         field: "tvg_id",
@@ -802,11 +801,6 @@ const getTableConfig = (tableName: string): TableConfig => {
                         header: "ID",
                         style: "width: 80px; height: 44px",
                         type: "id",
-                    },
-                    {
-                        field: "source",
-                        header: "Source",
-                        style: "width: 150px; height: 44px",
                     },
                     {
                         field: "filter_reasons",
@@ -1054,6 +1048,16 @@ const loadFilterOptions = async () => {
             if (tableName.value === "m3u_channels" && filterData.group) {
                 groupOptions.value = filterData.group.map((item) => item.value)
                 console.log(`Loaded ${groupOptions.value.length} group options`)
+            }
+
+            // Set stream mode options for M3U channels
+            if (tableName.value === "m3u_channels" && filterData.stream_mode) {
+                streamModeOptions.value = filterData.stream_mode.map(
+                    (item) => item.value
+                )
+                console.log(
+                    `Loaded ${streamModeOptions.value.length} stream mode options`
+                )
             }
 
             // Set filter reason options

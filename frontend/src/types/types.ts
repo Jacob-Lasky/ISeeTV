@@ -165,7 +165,7 @@ export interface StreamChannel {
     stream_url: string
     logo_url?: string | null
     group?: string | null
-
+    stream_mode: string
     // EPG Channel Data (joined)
     epg_id?: number | null
     display_name?: string | null

@@ -143,12 +143,13 @@ class EpgChannel(BaseModel):
 class M3uChannel(BaseModel):
     """Channel model from M3U playlist data"""
 
-    source: str  # where the M3U came from
+    source: str
     tvg_id: str
     name: str
     stream_url: str
     logo_url: Optional[str]
     group: Optional[str]
+    stream_mode: Literal["live", "on_demand"] = "live"
     filter_reasons: Optional[str] = None  # Reason for filtering (blacklist/whitelist)
 
 

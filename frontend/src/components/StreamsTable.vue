@@ -71,6 +71,17 @@
                     </template>
                 </Column>
 
+                <!-- Skeleton Stream Mode Column -->
+                <Column field="stream_mode" header="Stream Mode" style="min-width: 120px">
+                    <template #body>
+                        <Skeleton
+                            height="1.5rem"
+                            width="70%"
+                            borderRadius="12px"
+                        />
+                    </template>
+                </Column>
+
                 <!-- Skeleton Program Count Column -->
                 <Column
                     field="program_count"
@@ -308,6 +319,32 @@
                         v-model="filterModel.value"
                         :options="groupFilterOptions"
                         placeholder="All Groups"
+                        class="w-full"
+                        :show-clear="true"
+                        @change="filterCallback()"
+                    />
+                </template>
+            </Column>
+
+            <!-- Stream Mode Column -->
+            <Column
+                field="stream_mode"
+                header="Stream Mode"
+                :sortable="true"
+                style="min-width: 120px"
+                :filterField="'stream_mode'"
+            >
+                <template #body="{ data }">
+                    <Tag
+                        :value="data.stream_mode"
+                        :severity="data.stream_mode === 'live' ? 'success' : 'info'"
+                    />
+                </template>
+                <template #filter="{ filterModel, filterCallback }">
+                    <Select
+                        v-model="filterModel.value"
+                        :options="streamModeFilterOptions"
+                        placeholder="All Modes"
                         class="w-full"
                         :show-clear="true"
                         @change="filterCallback()"
@@ -584,6 +621,7 @@ const groupOptions = ref<{ label: string; value: string }[]>([])
 // Column filter options (for DataTable column filters)
 const sourceFilterOptions = ref<string[]>([])
 const groupFilterOptions = ref<string[]>([])
+const streamModeFilterOptions = ref<string[]>(["live", "on_demand"])
 const filterStatusOptions = ref<{ label: string; value: string }[]>([
     { label: "Active", value: "null" },
     { label: "Filtered", value: "filtered" },
@@ -597,6 +635,7 @@ const filters = ref({
     tvg_id: { value: null, matchMode: FilterMatchMode.CONTAINS },
     source: { value: null, matchMode: FilterMatchMode.CONTAINS },
     group: { value: null, matchMode: FilterMatchMode.CONTAINS },
+    stream_mode: { value: null, matchMode: FilterMatchMode.CONTAINS },
     filter_reasons: { value: "null", matchMode: FilterMatchMode.EQUALS }, // Default to show only active (non-filtered) records
 })
 const globalFilterFields = ref<string[]>([
@@ -604,6 +643,7 @@ const globalFilterFields = ref<string[]>([
     "tvg_id",
     "source",
     "group",
+    "stream_mode",
     "filter_reasons",
 ])
 

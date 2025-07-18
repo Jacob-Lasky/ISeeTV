@@ -16,6 +16,7 @@ class StreamChannel(BaseModel):
     stream_url: str
     logo_url: Optional[str]
     group: Optional[str]
+    stream_mode: str
     
     # EPG Channel Data (joined)
     epg_id: Optional[int]

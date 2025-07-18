@@ -1528,17 +1528,17 @@ async def apply_assignment(
 
         # Import post_load_engine and check if assignment exists (regardless of enabled status)
         from rules.post_load_rules import post_load_engine
-        
+
         # Load all assignments to check if it exists
         _, assignments = post_load_engine.ingestion_engine.load_rules()
         assignment_exists = any(a.id == assignment_id for a in assignments)
-        
+
         if not assignment_exists:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Assignment '{assignment_id}' not found",
             )
-        
+
         # Now get the assignment (only enabled ones)
         assignment = post_load_engine.ingestion_engine.get_assignment_by_id(
             assignment_id
@@ -1605,11 +1605,11 @@ async def unapply_assignment(
 
         # Import post_load_engine and get the assignment by ID (including disabled ones for unapply)
         from rules.post_load_rules import post_load_engine
-        
+
         # Load all assignments to find the one we want to unapply (including disabled)
         _, assignments = post_load_engine.ingestion_engine.load_rules()
         assignment = next((a for a in assignments if a.id == assignment_id), None)
-        
+
         if not assignment:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
