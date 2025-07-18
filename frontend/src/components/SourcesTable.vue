@@ -473,7 +473,9 @@
                                 text
                                 :disabled="isSourceRefreshing(data.sourceName)"
                                 :title="`Refresh all files for ${data.sourceName}`"
-                                @click="refreshAllFilesForSource(data.sourceName)"
+                                @click="
+                                    refreshAllFilesForSource(data.sourceName)
+                                "
                             />
                             <Button
                                 icon="pi pi-filter"
@@ -1273,8 +1275,10 @@ async function refreshAllFilesForSource(sourceName: string) {
 
     try {
         // Defensive check for sourceName
-        if (!sourceName || typeof sourceName !== 'string') {
-            console.warn('Invalid sourceName provided to refreshAllFilesForSource')
+        if (!sourceName || typeof sourceName !== "string") {
+            console.warn(
+                "Invalid sourceName provided to refreshAllFilesForSource"
+            )
             return
         }
 
@@ -1291,11 +1295,16 @@ async function refreshAllFilesForSource(sourceName: string) {
         // Refresh each file for this source
         for (const fileRow of sourceFiles) {
             if (fileRow && fileRow.fileType && fileRow.sourceName) {
-                console.log(`Refreshing ${fileRow.fileType.toUpperCase()} for ${sourceName}`)
+                console.log(
+                    `Refreshing ${fileRow.fileType.toUpperCase()} for ${sourceName}`
+                )
                 try {
                     await refreshFile(fileRow)
                 } catch (fileError) {
-                    console.error(`Failed to refresh ${fileRow.fileType} for ${sourceName}:`, fileError)
+                    console.error(
+                        `Failed to refresh ${fileRow.fileType} for ${sourceName}:`,
+                        fileError
+                    )
                     // Continue with other files even if one fails
                 }
             }
@@ -1308,11 +1317,17 @@ async function refreshAllFilesForSource(sourceName: string) {
             life: 3000,
         })
     } catch (error) {
-        console.error(`Failed to refresh all files for source ${sourceName}:`, error)
+        console.error(
+            `Failed to refresh all files for source ${sourceName}:`,
+            error
+        )
         toast.add({
             severity: "error",
             summary: "Source Refresh Failed",
-            detail: error instanceof Error ? error.message : `Failed to refresh source ${sourceName}`,
+            detail:
+                error instanceof Error
+                    ? error.message
+                    : `Failed to refresh source ${sourceName}`,
             life: 5000,
         })
     }
@@ -1327,7 +1342,8 @@ async function applyAllRules() {
 
         // Apply rules to each source sequentially
         for (const source of sources.value) {
-            await applySourceRules(source.sourceName)
+            // Use source.name (not sourceName) since sources array contains Source objects
+            await applySourceRules(source.name)
         }
 
         toast.add({
@@ -1341,7 +1357,10 @@ async function applyAllRules() {
         toast.add({
             severity: "error",
             summary: "Apply All Rules Failed",
-            detail: error instanceof Error ? error.message : "Failed to apply rules to all sources",
+            detail:
+                error instanceof Error
+                    ? error.message
+                    : "Failed to apply rules to all sources",
             life: 5000,
         })
     } finally {
@@ -1580,7 +1599,7 @@ function isFileRefreshing(fileId: string): boolean {
 function isSourceRefreshing(sourceName: string): boolean {
     try {
         // Defensive check for sourceName
-        if (!sourceName || typeof sourceName !== 'string') {
+        if (!sourceName || typeof sourceName !== "string") {
             return false
         }
 
@@ -1592,14 +1611,18 @@ function isSourceRefreshing(sourceName: string): boolean {
         // Check if any file in this source is refreshing
         return sourceFiles.some((fileRow) => {
             try {
-                return fileRow && fileRow.fileId && isFileRefreshing(fileRow.fileId)
+                return (
+                    fileRow &&
+                    fileRow.fileId &&
+                    isFileRefreshing(fileRow.fileId)
+                )
             } catch (error) {
-                console.warn('Error checking file refresh status:', error)
+                console.warn("Error checking file refresh status:", error)
                 return false
             }
         })
     } catch (error) {
-        console.warn('Error in isSourceRefreshing:', error)
+        console.warn("Error in isSourceRefreshing:", error)
         return false
     }
 }
@@ -2042,11 +2065,6 @@ async function applySourceRules(sourceName: string): Promise<void> {
                 data.detail || `Failed to apply rules to source ${sourceName}`
             )
         }
-
-        console.log(
-            `Source rules application results for ${sourceName}:`,
-            data.results
-        )
 
         // Calculate totals from the results
         const totals = data.results.tables

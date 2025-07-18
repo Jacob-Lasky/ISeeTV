@@ -1772,11 +1772,6 @@ const applySourceRules = async (sourceName: string): Promise<void> => {
             )
         }
 
-        console.log(
-            `Source rules application results for ${sourceName}:`,
-            data.results
-        )
-
         // Calculate totals from the results
         const totals = data.results.tables
             ? Object.values(data.results.tables).reduce(

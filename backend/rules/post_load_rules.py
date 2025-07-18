@@ -187,8 +187,8 @@ class PostLoadRulesEngine:
 
             results = {
                 "processed": len(records),
-                "filtered": filtered_count,
-                "passed": passed_mask.sum(),
+                "filtered": int(filtered_count),  # Convert numpy.int64 to native int
+                "passed": int(passed_mask.sum()),  # Convert numpy.int64 to native int
                 "updated_records": updated_records,
             }
 
