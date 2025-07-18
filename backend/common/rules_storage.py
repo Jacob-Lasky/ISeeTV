@@ -80,6 +80,15 @@ def save_assignments(assignments: List[Dict[str, Any]]) -> Dict[str, Any]:
             # Filter out unknown fields (like filter_stats)
             cleaned_data = {k: v for k, v in assignment_data.items() if k in valid_fields}
             
+            # Normalize assigned_rules to always be an array (atomic design)
+            if 'assigned_rules' in cleaned_data:
+                if isinstance(cleaned_data['assigned_rules'], str):
+                    cleaned_data['assigned_rules'] = [cleaned_data['assigned_rules']]
+                elif not isinstance(cleaned_data['assigned_rules'], list):
+                    cleaned_data['assigned_rules'] = []
+            else:
+                cleaned_data['assigned_rules'] = []
+            
             # Validate the cleaned data
             SourceRuleAssignment(**cleaned_data)  # This will raise if invalid
             cleaned_assignments.append(cleaned_data)

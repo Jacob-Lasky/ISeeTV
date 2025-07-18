@@ -346,7 +346,6 @@
                                     <InputText
                                         v-model="data[field]"
                                         placeholder="Enter assignment name"
-                                        @input="updateAssignmentId(data)"
                                     />
                                 </template>
                             </Column>
@@ -365,11 +364,7 @@
                                         class="flex flex-wrap gap-1"
                                     >
                                         <Tag
-                                            v-for="rule in Array.isArray(
-                                                data.assigned_rules
-                                            )
-                                                ? data.assigned_rules
-                                                : [data.assigned_rules]"
+                                            v-for="rule in data.assigned_rules"
                                             :key="rule"
                                             :value="rule"
                                             severity="info"
@@ -381,12 +376,14 @@
                                     >
                                 </template>
                                 <template #editor="{ data, field }">
-                                    <Select
+                                    <MultiSelect
                                         v-model="data[field]"
+                                        display="chip"
                                         :options="ruleOptions"
                                         optionLabel="label"
                                         optionValue="value"
                                         placeholder="Select rules"
+                                        filter=""
                                         multiple
                                         showClear
                                     />
@@ -567,7 +564,7 @@
                                             outlined
                                             size="small"
                                             v-tooltip="
-                                                !data.enabled 
+                                                !data.enabled
                                                     ? 'Assignment is disabled - enable it first to apply'
                                                     : 'Apply this assignment'
                                             "
@@ -689,6 +686,24 @@ interface Source {
     rule_mode?: "whitelist" | "blacklist"
 }
 
+// Atomic function to normalize assigned_rules to always be an array
+const normalizeAssignedRules = (assignment: any): any => {
+    if (!assignment.assigned_rules) {
+        return { ...assignment, assigned_rules: [] }
+    }
+
+    if (typeof assignment.assigned_rules === "string") {
+        return { ...assignment, assigned_rules: [assignment.assigned_rules] }
+    }
+
+    if (Array.isArray(assignment.assigned_rules)) {
+        return assignment
+    }
+
+    // Fallback for any other type
+    return { ...assignment, assigned_rules: [] }
+}
+
 // Reactive state for rules and source assignments
 const rules = ref<IngestionRule[]>([])
 const sourceAssignments = ref<SourceRuleAssignment[]>([])
@@ -803,19 +818,26 @@ const loadConfiguration = async (): Promise<void> => {
             // Update assignments and restore filter stats
             sourceAssignments.value = data.source_assignments.map(
                 (assignment) => {
+                    // First normalize assigned_rules to always be an array
+                    const normalizedAssignment =
+                        normalizeAssignedRules(assignment)
+
                     const existingStats = existingFilterStats.get(
-                        assignment.source_name
+                        normalizedAssignment.source_name
                     )
                     if (existingStats) {
                         console.log(
-                            `Restoring filter_stats for ${assignment.source_name}: ${existingStats.rule_filtered_count}`
+                            `Restoring filter_stats for ${normalizedAssignment.source_name}: ${existingStats.rule_filtered_count}`
                         )
-                        return { ...assignment, filter_stats: existingStats }
+                        return {
+                            ...normalizedAssignment,
+                            filter_stats: existingStats,
+                        }
                     } else {
                         console.log(
-                            `No existing filter_stats for ${assignment.source_name}`
+                            `No existing filter_stats for ${normalizedAssignment.source_name}`
                         )
-                        return assignment
+                        return normalizedAssignment
                     }
                 }
             )
@@ -1014,8 +1036,13 @@ const deleteRule = async (index: number): Promise<void> => {
 
     // Remove rule from all source assignments
     sourceAssignments.value.forEach((assignment) => {
-        if (Array.isArray(assignment.assigned_rules) && assignment.assigned_rules.includes(ruleName)) {
-            assignment.assigned_rules = assignment.assigned_rules.filter(rule => rule !== ruleName)
+        if (
+            Array.isArray(assignment.assigned_rules) &&
+            assignment.assigned_rules.includes(ruleName)
+        ) {
+            assignment.assigned_rules = assignment.assigned_rules.filter(
+                (rule) => rule !== ruleName
+            )
         }
     })
 
@@ -1141,17 +1168,27 @@ const onAssignmentEditSave = async (event: any): Promise<void> => {
             return
         }
 
-        // Generate ID if not present or empty
+        // Generate ID if not present or empty, or if name changed
         if (!assignment.id || !assignment.id.trim()) {
             updateAssignmentId(assignment)
+            console.log("Generated ID for assignment:", assignment.id)
         }
 
-        // Ensure assigned_rules is always an array
-        if (typeof assignment.assigned_rules === 'string') {
-            assignment.assigned_rules = [assignment.assigned_rules]
-        } else if (!assignment.assigned_rules) {
-            assignment.assigned_rules = []
+        // Ensure ID was generated successfully
+        if (!assignment.id || !assignment.id.trim()) {
+            toast.add({
+                severity: "error",
+                summary: "ID Generation Error",
+                detail: "Failed to generate assignment ID",
+                life: 3000,
+            })
+            return
         }
+
+        // Use atomic normalization function to ensure assigned_rules is always an array
+        assignment.assigned_rules =
+            normalizeAssignedRules(assignment).assigned_rules
+        console.log("Normalized assigned_rules:", assignment.assigned_rules)
 
         // Remove the isNew flag if present
         delete assignment.isNew
@@ -1225,16 +1262,62 @@ const onAssignmentRowEditSave = async (event: any): Promise<void> => {
         console.log("Original data:", event.data)
         console.log("New data:", event.newData)
 
-        // Update the assignments array with the edited data
+        const assignment = { ...event.newData }
+
+        // Validate required fields
+        if (!assignment.assignment_name || !assignment.assignment_name.trim()) {
+            toast.add({
+                severity: "error",
+                summary: "Validation Error",
+                detail: "Assignment name is required",
+                life: 3000,
+            })
+            return
+        }
+
+        if (!assignment.source_name || !assignment.source_name.trim()) {
+            toast.add({
+                severity: "error",
+                summary: "Validation Error",
+                detail: "Source name is required",
+                life: 3000,
+            })
+            return
+        }
+
+        // Generate ID if not present or empty
+        if (!assignment.id || !assignment.id.trim()) {
+            updateAssignmentId(assignment)
+            console.log("Generated ID for assignment:", assignment.id)
+        }
+
+        // Ensure ID was generated successfully
+        if (!assignment.id || !assignment.id.trim()) {
+            toast.add({
+                severity: "error",
+                summary: "ID Generation Error",
+                detail: "Failed to generate assignment ID",
+                life: 3000,
+            })
+            return
+        }
+
+        // Use atomic normalization function to ensure assigned_rules is always an array
+        assignment.assigned_rules =
+            normalizeAssignedRules(assignment).assigned_rules
+        console.log("Normalized assigned_rules:", assignment.assigned_rules)
+
+        // Remove the isNew flag if present
+        delete assignment.isNew
+
+        // Update the assignments array with the processed data
         const index = event.index
         if (
             index !== undefined &&
             index >= 0 &&
             index < sourceAssignments.value.length
         ) {
-            sourceAssignments.value[index] = { ...event.newData }
-            // Remove the isNew flag if it exists
-            delete sourceAssignments.value[index].isNew
+            sourceAssignments.value[index] = assignment
         }
 
         await saveAssignments()
