@@ -238,44 +238,23 @@ def get_table_filter_statistics_by_source(
             f"Getting filter statistics for table: {table_name} and source: {source}"
         )
 
-        # Query using filter_reasons JSON array field for assignment IDs
-        # We need to extract individual assignment IDs from JSON arrays and count them
+        # Query using filter_reasons field - handle both JSON arrays and plain text
+        # The filter_reasons column contains descriptive text strings, not JSON arrays
         query = text(
             f"""
-            WITH RECURSIVE assignment_counts AS (
-                SELECT 
-                    id,
-                    source,
-                    CASE 
-                        WHEN filter_reasons IS NULL OR filter_reasons = '[]' OR filter_reasons = '' THEN 'Passed'
-                        ELSE json_extract(filter_reasons, '$[0]')
-                    END as assignment_id,
-                    filter_reasons,
-                    0 as idx
-                FROM {table_name}
-                WHERE source = :source
-                
-                UNION ALL
-                
-                SELECT 
-                    id,
-                    source,
-                    json_extract(filter_reasons, '$[' || (idx + 1) || ']') as assignment_id,
-                    filter_reasons,
-                    idx + 1
-                FROM assignment_counts
-                WHERE assignment_id IS NOT NULL 
-                    AND idx + 1 < json_array_length(filter_reasons)
-            )
             SELECT 
                 CASE 
-                    WHEN assignment_id IS NULL OR assignment_id = 'Passed' THEN 'Passed'
-                    ELSE assignment_id
+                    WHEN filter_reasons IS NULL OR filter_reasons = '[]' OR filter_reasons = '' THEN 'Passed'
+                    ELSE filter_reasons
                 END as reason,
-                COUNT(DISTINCT id) as count
-            FROM assignment_counts
-            WHERE assignment_id IS NOT NULL
-            GROUP BY assignment_id
+                COUNT(*) as count
+            FROM {table_name}
+            WHERE source = :source
+            GROUP BY 
+                CASE 
+                    WHEN filter_reasons IS NULL OR filter_reasons = '[]' OR filter_reasons = '' THEN 'Passed'
+                    ELSE filter_reasons
+                END
             ORDER BY count DESC
         """
         )

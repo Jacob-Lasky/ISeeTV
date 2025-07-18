@@ -122,28 +122,28 @@
         <DataTable
             v-else
             v-model:filters="filters"
+            v-model:expandedRows="expandedRows"
             :value="streams"
             :lazy="true"
-            :paginator="true"
-            :rows="pageSize"
+            :loading="loading"
             :totalRecords="totalRecords"
-            :loading="false"
+            :rows="pageSize"
+            :first="(currentPage - 1) * pageSize"
+            :paginator="true"
             :rowsPerPageOptions="[50, 100, 200, 500]"
-            :sortField="sortField"
-            :sortOrder="sortOrder === 'asc' ? 1 : -1"
-            responsiveLayout="scroll"
-            dataKey="m3u_id"
+            :globalFilterFields="globalFilterFields"
+            filterDisplay="row"
             scrollable
             scrollHeight="calc(100vh - 320px)"
-            striped-rows
-            paginatorTemplate="RowsPerPageDropdown FirstPageLink PrevPageLink CurrentPageReport NextPageLink LastPageLink"
-            currentPageReportTemplate="{first} to {last} of {totalRecords}"
-            filterDisplay="row"
-            :globalFilterFields="globalFilterFields"
             class="streams-datatable"
             @page="onPageChange"
             @sort="onSort"
             @filter="onFilter"
+            @rowExpand="onRowExpand"
+            @rowCollapse="onRowCollapse"
+            dataKey="m3u_id"
+            sortField="name"
+            :sortOrder="1"
         >
             <template #header>
                 <div class="flex justify-between align-items-center">
@@ -196,6 +196,9 @@
                     </div>
                 </div>
             </template>
+
+            <!-- Expansion Column -->
+            <Column expander style="width: 5rem" />
 
             <!-- Channel Name Column -->
             <Column
@@ -443,6 +446,80 @@
                     <p>Loading streams...</p>
                 </div>
             </template>
+
+            <!-- Expansion Template for Programs -->
+            <template #expansion="slotProps">
+                <div class="p-4">
+                    <div class="flex justify-between align-items-center mb-3">
+                        <h5 class="m-0">Programs for {{ slotProps.data.name }}</h5>
+                        <Badge 
+                            :value="slotProps.data.program_count" 
+                            severity="info"
+                            class="program-count-badge"
+                        />
+                    </div>
+                    
+                    <!-- Loading state for programs -->
+                    <div v-if="loadingPrograms[slotProps.data.m3u_id]" class="text-center p-4">
+                        <ProgressSpinner style="width: 30px; height: 30px" />
+                        <p class="mt-2 mb-0">Loading programs...</p>
+                    </div>
+                    
+                    <!-- Error state for programs -->
+                    <div v-else-if="programErrors[slotProps.data.m3u_id]" class="text-center p-4">
+                        <i class="pi pi-exclamation-triangle text-orange-500 text-2xl mb-2"></i>
+                        <p class="text-orange-600 mb-2">Failed to load programs</p>
+                        <Button 
+                            label="Retry" 
+                            icon="pi pi-refresh" 
+                            size="small"
+                            @click="loadChannelPrograms(slotProps.data)"
+                        />
+                    </div>
+                    
+                    <!-- Programs DataTable -->
+                    <DataTable 
+                        v-else
+                        :value="channelPrograms[slotProps.data.m3u_id] || []"
+                        scrollable
+                        scrollHeight="300px"
+                        class="programs-datatable"
+                        :emptyMessage="slotProps.data.program_count === 0 ? 'No programs available' : 'Programs not loaded'"
+                    >
+                        <Column field="title" header="Program Title" style="min-width: 200px">
+                            <template #body="{ data }">
+                                <div class="program-title">
+                                    {{ data.title || 'No Title' }}
+                                </div>
+                            </template>
+                        </Column>
+                        
+                        <Column field="start_time" header="Start Time" style="min-width: 150px">
+                            <template #body="{ data }">
+                                <div class="program-time">
+                                    {{ formatDateTime(data.start_time) }}
+                                </div>
+                            </template>
+                        </Column>
+                        
+                        <Column field="end_time" header="End Time" style="min-width: 150px">
+                            <template #body="{ data }">
+                                <div class="program-time">
+                                    {{ formatDateTime(data.end_time) }}
+                                </div>
+                            </template>
+                        </Column>
+                        
+                        <Column field="description" header="Description" style="min-width: 300px">
+                            <template #body="{ data }">
+                                <div class="program-description" :title="data.description">
+                                    {{ data.description || 'No description available' }}
+                                </div>
+                            </template>
+                        </Column>
+                    </DataTable>
+                </div>
+            </template>
         </DataTable>
     </div>
 </template>
@@ -465,7 +542,9 @@ import IconField from "primevue/iconfield"
 import InputIcon from "primevue/inputicon"
 import type {
     StreamChannel,
+    StreamProgram,
     StreamsResponse,
+    StreamProgramsResponse,
     FilterValue,
     FilterViewCounts,
 } from "@/types/types"
@@ -530,6 +609,12 @@ const globalFilterFields = ref<string[]>([
 
 // Skeleton data for loading state (15 empty rows)
 const skeletonData = ref(new Array(15).fill({}))
+
+// Expandable rows state
+const expandedRows = ref<Record<string, boolean>>({})
+const channelPrograms = ref<Record<number, StreamProgram[]>>({})
+const loadingPrograms = ref<Record<number, boolean>>({})
+const programErrors = ref<Record<number, boolean>>({})
 
 // Debounce timer for search
 let searchTimeout: NodeJS.Timeout | null = null
@@ -754,6 +839,68 @@ const onSourceFilterChange = (): void => {
 
 const onGroupFilterChange = (): void => {
     loadStreams(true)
+}
+
+// Expandable rows functions
+const loadChannelPrograms = async (channel: StreamChannel): Promise<void> => {
+    const channelId = channel.m3u_id
+    
+    // Skip if already loading or already loaded
+    if (loadingPrograms.value[channelId] || channelPrograms.value[channelId]) {
+        return
+    }
+    
+    // Skip if tvg_id is empty or null (common in inverse/filtered view)
+    if (!channel.tvg_id || channel.tvg_id.trim() === '') {
+        console.warn(`Channel ${channel.name} has empty tvg_id, cannot load programs`)
+        programErrors.value[channelId] = true
+        channelPrograms.value[channelId] = []
+        return
+    }
+    
+    loadingPrograms.value[channelId] = true
+    programErrors.value[channelId] = false
+    
+    try {
+        const encodedTvgId = encodeURIComponent(channel.tvg_id)
+        const response = await fetch(`/api/streams/${channel.source}/${encodedTvgId}/programs`)
+        
+        if (!response.ok) {
+            throw new Error(`HTTP ${response.status}: ${response.statusText}`)
+        }
+        
+        const result = await response.json()
+        
+        if (result.success && result.data) {
+            channelPrograms.value[channelId] = result.data
+        } else {
+            throw new Error(result.message || 'Failed to load programs')
+        }
+    } catch (error) {
+        console.error('Error loading channel programs:', error)
+        programErrors.value[channelId] = true
+        toast.add({
+            severity: 'error',
+            summary: 'Error',
+            detail: `Failed to load programs for ${channel.name}`,
+            life: 3000
+        })
+    } finally {
+        loadingPrograms.value[channelId] = false
+    }
+}
+
+const onRowExpand = (event: any): void => {
+    const channel = event.data as StreamChannel
+    loadChannelPrograms(channel)
+}
+
+const onRowCollapse = (event: any): void => {
+    // Optional: Clean up data when row is collapsed to save memory
+    // const channelId = event.data.m3u_id
+    // delete channelPrograms.value[channelId]
+    // delete loadingPrograms.value[channelId]
+    // delete programErrors.value[channelId]
 }
 
 const viewPrograms = (stream: StreamChannel): void => {
