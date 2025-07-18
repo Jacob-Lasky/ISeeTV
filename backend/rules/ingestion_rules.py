@@ -51,6 +51,7 @@ class IngestionRule:
     field: str  # Field name to apply regex to
     regex: str  # Regular expression pattern
     enabled: bool = True
+    not_: bool = False  # If True, inverts the regex match (NOT matching the pattern)
 
     def __post_init__(self):
         """Validate rule configuration"""

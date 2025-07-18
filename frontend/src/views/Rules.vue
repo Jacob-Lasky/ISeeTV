@@ -128,6 +128,42 @@
                             </Column>
 
                             <Column
+                                field="not_"
+                                header="Match"
+                                :sortable="true"
+                                style="width: 100px"
+                            >
+                                <template #body="{ data }">
+                                    <Tag
+                                        :value="data.not_ ? 'NOT' : 'Match'"
+                                        :severity="
+                                            data.not_ ? 'danger' : 'success'
+                                        "
+                                    />
+                                </template>
+                                <template #editor="{ data }">
+                                    <Button
+                                        :icon="
+                                            data.not_
+                                                ? 'pi pi-times'
+                                                : 'pi pi-check'
+                                        "
+                                        :class="{
+                                            'p-button-danger': data.not_,
+                                            'p-button-success': !data.not_,
+                                        }"
+                                        size="small"
+                                        @click="data.not_ = !data.not_"
+                                        :title="
+                                            data.not_
+                                                ? 'Click to change to Match'
+                                                : 'Click to change to NOT'
+                                        "
+                                    />
+                                </template>
+                            </Column>
+
+                            <Column
                                 field="regex"
                                 header="Regex Pattern"
                                 style="min-width: 200px"
@@ -602,6 +638,7 @@ import { ref, computed, onMounted, watch } from "vue"
 import { useToast } from "primevue/usetoast"
 import Button from "primevue/button"
 import Card from "primevue/card"
+import Checkbox from "primevue/checkbox"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
 import InputText from "primevue/inputtext"
@@ -620,13 +657,14 @@ interface IngestionRule {
     field: string
     regex: string
     enabled: boolean
+    not_?: boolean // If true, inverts the regex match (NOT matching the pattern)
 }
 
 interface SourceRuleAssignment {
     id: string
     assignment_name: string
     source_name: string
-    // rule_mode is inherited from sources data, not stored in assignments
+    rule_mode: "whitelist" | "blacklist"
     assigned_rules: string[] | string | null
     enabled: boolean
     filter_stats?: {
@@ -950,6 +988,7 @@ const addNewRule = async (): Promise<void> => {
         tables: [defaultTable], // Still array for backend compatibility but will use single selection in UI
         field: "name",
         regex: ".*",
+        not_: false, // Default to normal matching (not inverse)
         enabled: true,
     }
 
@@ -1048,7 +1087,7 @@ const addNewAssignment = (): void => {
         id: "", // Will be generated when assignment_name is entered
         assignment_name: "",
         source_name: "",
-        // rule_mode is inherited from sources data, not stored in assignments
+        rule_mode: "blacklist", // Default to blacklist mode (start with all, filter out)
         assigned_rules: null,
         enabled: true,
         isNew: true, // Flag to indicate this is a new assignment
@@ -1302,8 +1341,10 @@ const applyAssignments = async (): Promise<void> => {
         applyingAllAssignments.value = true
 
         // Get all assignments to apply
-        const assignments = sourceAssignments.value.filter(assignment => assignment.id)
-        
+        const assignments = sourceAssignments.value.filter(
+            (assignment) => assignment.id
+        )
+
         if (assignments.length === 0) {
             toast.add({
                 severity: "warning",
@@ -1322,8 +1363,10 @@ const applyAssignments = async (): Promise<void> => {
         let totalPassed = 0
 
         for (const assignment of assignments) {
-            console.log(`Applying assignment '${assignment.id}' (${assignment.source_name} -> ${assignment.assigned_rules})...`)
-            
+            console.log(
+                `Applying assignment '${assignment.id}' (${assignment.source_name} -> ${assignment.assigned_rules})...`
+            )
+
             for (const table of tables) {
                 try {
                     const response = await fetch("/api/assignments/apply", {
@@ -1341,7 +1384,8 @@ const applyAssignments = async (): Promise<void> => {
 
                     if (!response.ok) {
                         throw new Error(
-                            data.detail || `Failed to apply assignment '${assignment.id}' to ${table}`
+                            data.detail ||
+                                `Failed to apply assignment '${assignment.id}' to ${table}`
                         )
                     }
 
@@ -1360,14 +1404,21 @@ const applyAssignments = async (): Promise<void> => {
                         ...data.results,
                     })
                 } catch (error) {
-                    console.error(`Error applying assignment '${assignment.id}' to ${table}:`, error)
+                    console.error(
+                        `Error applying assignment '${assignment.id}' to ${table}:`,
+                        error
+                    )
                     // Continue with other assignments/tables instead of failing completely
                 }
             }
         }
 
         console.log("Assignment application results:", results)
-        console.log("Totals:", { processed: totalProcessed, filtered: totalFiltered, passed: totalPassed })
+        console.log("Totals:", {
+            processed: totalProcessed,
+            filtered: totalFiltered,
+            passed: totalPassed,
+        })
 
         toast.add({
             severity: "success",

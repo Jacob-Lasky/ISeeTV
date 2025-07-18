@@ -151,6 +151,10 @@ class PostLoadRulesEngine:
                     # Vectorized regex matching
                     field_series = df[rule.field].astype(str)
                     matches = field_series.str.match(rule.regex, na=False)
+                    
+                    # Apply NOT logic if rule.not_ is True
+                    if getattr(rule, 'not_', False):
+                        matches = ~matches
 
                     if source_assignment.rule_mode == "blacklist":
                         # Blacklist: matching records are filtered
@@ -158,7 +162,8 @@ class PostLoadRulesEngine:
                         passed_mask = passed_mask & ~matches
 
                         # Set filter reason for blacklisted records (JSON array)
-                        df.loc[filtered_mask, "filter_reasons"] = json.dumps([rule.name])
+                        filter_reason = f"Blacklisted by rule '{rule.name}': {'NOT ' if getattr(rule, 'not_', False) else ''}matched pattern '{rule.regex}' in field '{rule.field}'"
+                        df.loc[filtered_mask, "filter_reasons"] = filter_reason
 
                     else:
                         # Whitelist: only matching records pass
@@ -166,7 +171,8 @@ class PostLoadRulesEngine:
                         passed_mask = passed_mask & matches
 
                         # Set filter reason for non-whitelisted records (JSON array)
-                        df.loc[filtered_mask, "filter_reasons"] = json.dumps([rule.name])
+                        filter_reason = f"Not whitelisted by rule '{rule.name}': {'NOT ' if getattr(rule, 'not_', False) else ''}matched pattern '{rule.regex}' in field '{rule.field}'"
+                        df.loc[filtered_mask, "filter_reasons"] = filter_reason
 
                     filtered_count += filtered_mask.sum()
 
