@@ -386,7 +386,8 @@
                                         :options="ruleOptions"
                                         optionLabel="label"
                                         optionValue="value"
-                                        placeholder="Select rule"
+                                        placeholder="Select rules"
+                                        multiple
                                         showClear
                                     />
                                 </template>
@@ -670,7 +671,7 @@ interface SourceRuleAssignment {
     assignment_name: string
     source_name: string
     rule_mode: "whitelist" | "blacklist"
-    assigned_rules: string[] | string | null
+    assigned_rules: string[]
     enabled: boolean
     filter_stats?: {
         filter_stats: Record<string, number>
@@ -1013,8 +1014,8 @@ const deleteRule = async (index: number): Promise<void> => {
 
     // Remove rule from all source assignments
     sourceAssignments.value.forEach((assignment) => {
-        if (assignment.assigned_rules === ruleName) {
-            assignment.assigned_rules = null
+        if (Array.isArray(assignment.assigned_rules) && assignment.assigned_rules.includes(ruleName)) {
+            assignment.assigned_rules = assignment.assigned_rules.filter(rule => rule !== ruleName)
         }
     })
 
@@ -1093,7 +1094,7 @@ const addNewAssignment = (): void => {
         assignment_name: "",
         source_name: "",
         rule_mode: "blacklist", // Default to blacklist mode (start with all, filter out)
-        assigned_rules: null,
+        assigned_rules: [],
         enabled: true,
         isNew: true, // Flag to indicate this is a new assignment
     }
@@ -1143,6 +1144,13 @@ const onAssignmentEditSave = async (event: any): Promise<void> => {
         // Generate ID if not present or empty
         if (!assignment.id || !assignment.id.trim()) {
             updateAssignmentId(assignment)
+        }
+
+        // Ensure assigned_rules is always an array
+        if (typeof assignment.assigned_rules === 'string') {
+            assignment.assigned_rules = [assignment.assigned_rules]
+        } else if (!assignment.assigned_rules) {
+            assignment.assigned_rules = []
         }
 
         // Remove the isNew flag if present
