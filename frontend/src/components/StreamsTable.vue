@@ -598,7 +598,7 @@ const loadStreams = async (resetPage = false): Promise<void> => {
 
             // Update filter options if available
             if (data.filters && Object.keys(data.filters).length > 0) {
-                console.log("API response filters:", data.filters)
+                console.log("API response filters:", Object.keys(data.filters).length, "filter types")
                 updateFilterOptions(data.filters)
             } else {
                 console.log(
@@ -614,7 +614,7 @@ const loadStreams = async (resetPage = false): Promise<void> => {
                         if (retryData.success && retryData.filters) {
                             console.log(
                                 "Retry API response filters:",
-                                retryData.filters
+                                Object.keys(retryData.filters).length, "filter types"
                             )
                             updateFilterOptions(retryData.filters)
                         }
@@ -643,7 +643,7 @@ const loadStreams = async (resetPage = false): Promise<void> => {
 }
 
 const updateFilterOptions = (filters: Record<string, FilterValue[]>): void => {
-    console.log("Updating filter options with:", filters)
+    console.log("Updating filter options with", Object.keys(filters).length, "filter types")
 
     if (filters.source) {
         // Update header dropdown options
@@ -654,7 +654,7 @@ const updateFilterOptions = (filters: Record<string, FilterValue[]>): void => {
 
         // Update column filter options
         sourceFilterOptions.value = filters.source.map((f) => f.value)
-        console.log("Updated sourceFilterOptions:", sourceFilterOptions.value)
+        console.log("Updated sourceFilterOptions:", sourceFilterOptions.value.length, "options")
     }
 
     if (filters.group) {
