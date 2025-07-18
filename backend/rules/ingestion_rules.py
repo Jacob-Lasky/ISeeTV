@@ -240,18 +240,23 @@ class IngestionRulesEngine:
         log_function("Getting applicable rules for table and source", level="debug")
         rules, _ = self.load_rules()
 
-        # Use the consolidated assignment logic for consistency
-        source_assignment = self.get_source_assignment(source_name)
-        if not source_assignment:
+        # Get ALL assignments for this source (supports multi-assignment architecture)
+        source_assignments = self.get_source_assignments(source_name)
+        if not source_assignments:
             return []  # No rules assigned to this source
 
-        # Get applicable rules for this source
+        # Collect all assigned rule names from all assignments for this source
+        all_assigned_rule_names = set()
+        for assignment in source_assignments:
+            all_assigned_rule_names.update(assignment.assigned_rules)
+
+        # Get applicable rules for this source and table
         applicable_rules = []
         for rule in rules:
             if (
                 rule.enabled
                 and table_name in rule.tables
-                and rule.name in source_assignment.assigned_rules
+                and rule.name in all_assigned_rule_names
             ):
                 applicable_rules.append(rule)
 
