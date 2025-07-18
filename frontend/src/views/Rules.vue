@@ -565,7 +565,11 @@
                                             severity="success"
                                             outlined
                                             size="small"
-                                            v-tooltip="'Apply this assignment'"
+                                            v-tooltip="
+                                                !data.enabled 
+                                                    ? 'Assignment is disabled - enable it first to apply'
+                                                    : 'Apply this assignment'
+                                            "
                                             @click="
                                                 applyAssignmentToTables(data.id)
                                             "
@@ -573,6 +577,7 @@
                                                 applyingAssignments[data.id]
                                             "
                                             :disabled="
+                                                !data.enabled ||
                                                 applyingSourceRules !== null ||
                                                 unapplyingSourceRules !==
                                                     null ||

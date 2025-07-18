@@ -419,8 +419,9 @@ class PostLoadRulesEngine:
             f"Unapplying assignment '{assignment_id}' from {table_name} for source {source_name}"
         )
 
-        # Get the assignment by ID to validate it exists
-        assignment = self.ingestion_engine.get_assignment_by_id(assignment_id)
+        # Get the assignment by ID to validate it exists (including disabled ones for unapply)
+        _, assignments = self.ingestion_engine.load_rules()
+        assignment = next((a for a in assignments if a.id == assignment_id), None)
         if not assignment:
             log_function(f"Assignment '{assignment_id}' not found, skipping")
             return {"processed": 0, "restored": 0, "passed": 0}
