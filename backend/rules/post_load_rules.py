@@ -133,8 +133,8 @@ class PostLoadRulesEngine:
                 level="debug",
             )
 
-            # Initialize filter reason column
-            df["filter_reasons"] = None
+            # Initialize filter reason column as JSON array
+            df["filter_reasons"] = df.apply(lambda x: json.dumps([]), axis=1)
 
             # Track filtering results
             passed_mask = pd.Series([True] * len(df), index=df.index)
@@ -161,18 +161,26 @@ class PostLoadRulesEngine:
                         filtered_mask = matches & passed_mask
                         passed_mask = passed_mask & ~matches
 
-                        # Set filter reason for blacklisted records (JSON array)
-                        filter_reason = f"Blacklisted by rule '{rule.name}': {'NOT ' if getattr(rule, 'not_', False) else ''}matched pattern '{rule.regex}' in field '{rule.field}'"
-                        df.loc[filtered_mask, "filter_reasons"] = filter_reason
+                        # Set filter reason for blacklisted records (JSON array with assignment ID)
+                        assignment_id = source_assignment.id
+                        for idx in df.index[filtered_mask]:
+                            current_reasons = json.loads(df.loc[idx, "filter_reasons"])
+                            if assignment_id not in current_reasons:
+                                current_reasons.append(assignment_id)
+                            df.loc[idx, "filter_reasons"] = json.dumps(current_reasons)
 
                     else:
                         # Whitelist: only matching records pass
                         filtered_mask = ~matches & passed_mask
                         passed_mask = passed_mask & matches
 
-                        # Set filter reason for non-whitelisted records (JSON array)
-                        filter_reason = f"Not whitelisted by rule '{rule.name}': {'NOT ' if getattr(rule, 'not_', False) else ''}matched pattern '{rule.regex}' in field '{rule.field}'"
-                        df.loc[filtered_mask, "filter_reasons"] = filter_reason
+                        # Set filter reason for non-whitelisted records (JSON array with assignment ID)
+                        assignment_id = source_assignment.id
+                        for idx in df.index[filtered_mask]:
+                            current_reasons = json.loads(df.loc[idx, "filter_reasons"])
+                            if assignment_id not in current_reasons:
+                                current_reasons.append(assignment_id)
+                            df.loc[idx, "filter_reasons"] = json.dumps(current_reasons)
 
                     filtered_count += filtered_mask.sum()
 

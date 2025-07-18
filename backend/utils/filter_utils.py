@@ -238,23 +238,34 @@ def get_table_filter_statistics_by_source(
             f"Getting filter statistics for table: {table_name} and source: {source}"
         )
 
-        # Query using filter_reasons field - handle both JSON arrays and plain text
-        # The filter_reasons column contains descriptive text strings, not JSON arrays
+        # Query using filter_reasons field - handle JSON arrays of assignment IDs
+        # The filter_reasons column now contains JSON arrays like ["alice_sports_content"]
         query = text(
             f"""
+            WITH expanded_reasons AS (
+                SELECT 
+                    t.id as table_id,
+                    j.value as assignment_id
+                FROM {table_name} t, json_each(t.filter_reasons) j
+                WHERE t.source = :source
+                    AND t.filter_reasons IS NOT NULL 
+                    AND t.filter_reasons != ''
+                    AND t.filter_reasons != '[]'
+            )
             SELECT 
-                CASE 
-                    WHEN filter_reasons IS NULL OR filter_reasons = '[]' OR filter_reasons = '' THEN 'Passed'
-                    ELSE filter_reasons
-                END as reason,
+                assignment_id as reason,
                 COUNT(*) as count
+            FROM expanded_reasons
+            WHERE assignment_id IS NOT NULL AND assignment_id != ''
+            GROUP BY assignment_id
+            
+            UNION ALL
+            
+            SELECT 'Passed' as reason, COUNT(*) as count
             FROM {table_name}
             WHERE source = :source
-            GROUP BY 
-                CASE 
-                    WHEN filter_reasons IS NULL OR filter_reasons = '[]' OR filter_reasons = '' THEN 'Passed'
-                    ELSE filter_reasons
-                END
+                AND (filter_reasons IS NULL OR filter_reasons = '' OR filter_reasons = '[]')
+            
             ORDER BY count DESC
         """
         )

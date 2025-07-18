@@ -829,11 +829,33 @@ const initializeFilters = (): void => {
     // This function is kept for potential future use
 }
 
-// Handle DataTable filter events
+// Handle DataTable filter events (server-side filtering)
 const onFilter = (event: any): void => {
-    // The DataTable handles client-side filtering automatically
-    // We can add custom logic here if needed
     console.log("Filter event:", event)
+    
+    // Extract filter values from PrimeVue event
+    const filters = event.filters || {}
+    
+    // Update global filter
+    const globalFilterValue = filters.global?.value || null
+    if (globalFilterValue !== globalFilter.value) {
+        globalFilter.value = globalFilterValue
+    }
+    
+    // Update source filter
+    const sourceFilterValue = filters.source?.value || null
+    if (sourceFilterValue !== selectedSource.value) {
+        selectedSource.value = sourceFilterValue
+    }
+    
+    // Update group filter
+    const groupFilterValue = filters.group?.value || null
+    if (groupFilterValue !== selectedGroup.value) {
+        selectedGroup.value = groupFilterValue
+    }
+    
+    // Trigger backend API call with updated filters
+    loadStreams(true)
 }
 
 const formatDateTime = (dateString: string): string => {

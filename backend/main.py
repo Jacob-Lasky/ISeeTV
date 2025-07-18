@@ -79,6 +79,7 @@ from rules.ingestion_rules import (
     IngestionRule,
     SourceRuleAssignment,
     INGESTION_RULES_LOGS,
+    IngestionRulesEngine,
 )
 from common.rules_storage import (
     load_rules,
@@ -870,13 +871,28 @@ async def get_table_filtered_counts_by_rule(
                 session, table_name, source
             )
 
-            # Extract the count for the specific rule
-            # filter_stats structure: {"filter_stats": {"MKV Filter": 217434, "Passed": 63989}, "passed": 63989, ...}
+            # Extract the count for the specific assignment/rule
+            # filter_stats structure: {"filter_stats": {"Blacklisted by rule 'alice_sports_content': matched pattern...": 9908, "Passed": 258901}, "passed": 258901, ...}
             filter_stats_dict = filter_stats.get("filter_stats", {})
 
-            # Check if the rule has been run (exists in filter_stats)
-            has_been_run = rule in filter_stats_dict
-            rule_count = filter_stats_dict.get(rule, 0) if has_been_run else None
+            # Search for filter reasons that contain the assignment/rule ID
+            # The assignment ID is embedded in descriptive text like "Blacklisted by rule 'alice_sports_content': matched pattern..."
+            rule_count = None
+            has_been_run = False
+
+            for reason, count in filter_stats_dict.items():
+                if reason != "Passed" and rule in reason:
+                    rule_count = count
+                    has_been_run = True
+                    break
+
+            # If no match found, check if there are any non-"Passed" entries (rule has been run but no matches)
+            if not has_been_run and any(
+                reason != "Passed" for reason in filter_stats_dict.keys()
+            ):
+                # Rule may have been run but produced no filtered results
+                rule_count = 0
+                has_been_run = True
 
             return {
                 "success": True,
@@ -960,6 +976,84 @@ async def get_table_columns(table_name: str) -> Dict[str, Any]:
 
     except Exception as e:
         logger.error(f"Error getting columns for table {table_name}: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
+
+
+@app.get(
+    "/api/tables/{table_name}/filter_counts_by_assignment/{source}",
+    response_model=Dict[str, Any],
+    tags=["Database"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_table_filter_counts_by_assignment(
+    table_name: str, source: str
+) -> Dict[str, Any]:
+    """Get filter statistics organized by assignment for a specific table and source"""
+    try:
+        with SessionLocal() as session:
+            filter_stats = get_table_filter_statistics_by_source(
+                session, table_name, source
+            )
+
+            # Get all assignments for this source
+            ingestion_engine = IngestionRulesEngine()
+            source_assignments = ingestion_engine.get_source_assignments(source)
+
+            if not source_assignments:
+                return {
+                    "success": True,
+                    "data": {
+                        "assignments": {},
+                        "total": filter_stats.get("total", 0),
+                        "passed": filter_stats.get("passed", 0),
+                        "all_not_passed": filter_stats.get("all_not_passed", 0),
+                    },
+                    "table_name": table_name,
+                    "source": source,
+                }
+
+            # Extract filter statistics and organize by assignment
+            filter_stats_dict = filter_stats.get("filter_stats", {})
+            assignment_counts = {}
+
+            for assignment in source_assignments:
+                assignment_id = assignment.id
+                assignment_name = assignment.assignment_name
+                assigned_rules = assignment.assigned_rules
+
+                # With new JSON array format, assignment IDs are returned directly as keys in filter statistics
+                total_filtered_count = filter_stats_dict.get(assignment_id, 0)
+                has_been_run = assignment_id in filter_stats_dict or any(
+                    reason != "Passed" for reason in filter_stats_dict.keys()
+                )
+                matched_rules = assigned_rules.copy() if has_been_run else []
+
+                assignment_counts[assignment_id] = {
+                    "assignment_id": assignment_id,
+                    "filtered_count": total_filtered_count,
+                    "has_been_run": has_been_run,
+                    "assigned_rules": assigned_rules,
+                    "matched_rules": matched_rules,
+                }
+
+            return {
+                "success": True,
+                "data": {
+                    "assignments": assignment_counts,
+                    "total": filter_stats.get("total", 0),
+                    "passed": filter_stats.get("passed", 0),
+                    "all_not_passed": filter_stats.get("all_not_passed", 0),
+                },
+                "table_name": table_name,
+                "source": source,
+            }
+
+    except Exception as e:
+        logger.error(
+            f"Error getting filter counts by assignment for table {table_name}, source {source}: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )

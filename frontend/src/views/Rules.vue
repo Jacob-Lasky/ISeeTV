@@ -1938,10 +1938,7 @@ const applyAssignmentToTables = async (assignmentId: string): Promise<void> => {
         console.log(
             `Refreshing filter statistics for assignment '${assignmentId}'...`
         )
-        await fetchFilterStatsForAssignment(
-            assignmentId,
-            assignment.source_name
-        )
+        await fetchFilterStatsForSource(assignment.source_name)
 
         toast.add({
             severity: "success",
@@ -2308,32 +2305,26 @@ const getTableSeverity = (table: string): string => {
     return severityMap[table] || "secondary"
 }
 
-// Fetch filter statistics for a specific assignment
-const fetchFilterStatsForAssignment = async (
-    assignmentId: string,
-    sourceName: string
-): Promise<void> => {
-    if (!assignmentId || !sourceName) return
+// Fetch filter statistics for all assignments of a specific source
+const fetchFilterStatsForSource = async (sourceName: string): Promise<void> => {
+    if (!sourceName) return
+
+    // Get the first rule to determine the table (all rules should apply to same table type)
+    const sourceAssignmentsForSource = sourceAssignments.value.filter(
+        (a) => a.source_name === sourceName
+    )
 
     try {
-        const key = `${sourceName}-${assignmentId}`
-        loadingFilterStats.value[key] = true
-
-        // Find the assignment to get the correct tables
-        const assignment = sourceAssignments.value.find(
-            (a) => a.id === assignmentId && a.source_name === sourceName
-        )
-        if (!assignment) {
-            console.error(
-                `Assignment '${assignmentId}' not found for source '${sourceName}'`
-            )
+        if (sourceAssignmentsForSource.length === 0) {
+            console.log(`No assignments found for source '${sourceName}'`)
             return
         }
 
         // Get the first rule to determine the table
-        const firstRuleName = Array.isArray(assignment.assigned_rules)
-            ? assignment.assigned_rules[0]
-            : assignment.assigned_rules
+        const firstAssignment = sourceAssignmentsForSource[0]
+        const firstRuleName = Array.isArray(firstAssignment.assigned_rules)
+            ? firstAssignment.assigned_rules[0]
+            : firstAssignment.assigned_rules
         const rule = rules.value.find((r) => r.name === firstRuleName)
         if (!rule || !rule.tables || rule.tables.length === 0) {
             console.error(
@@ -2345,54 +2336,68 @@ const fetchFilterStatsForAssignment = async (
         // Use the first table configured for this rule
         const tableName = rule.tables[0]
         console.log(
-            `Fetching filter stats for assignment '${assignmentId}' from table '${tableName}'`
+            `Fetching filter stats for source '${sourceName}' from table '${tableName}'`
         )
 
-        // Fetch filter stats using the assignment ID (not individual rule names)
+        // Set loading state for all assignments of this source
+        sourceAssignmentsForSource.forEach((assignment) => {
+            const key = `${sourceName}-${assignment.id}`
+            loadingFilterStats.value[key] = true
+        })
+
+        // Fetch filter stats organized by assignment using the new endpoint
         const response = await fetch(
-            `/api/tables/${tableName}/filtered_counts/${sourceName}/${assignmentId}`
+            `/api/tables/${tableName}/filter_counts_by_assignment/${sourceName}`
         )
         const data = await response.json()
 
         if (data.success) {
             console.log(
-                `API SUCCESS for ${sourceName}-${assignmentId}: filtered_count=${data.data.filtered_count}`
+                `API SUCCESS for source '${sourceName}': assignments=${Object.keys(data.data.assignments).length}`
             )
-            filterStats.value[key] = data.data
-
-            // Update the assignment with filter stats
-            const newFilterStats = {
-                filter_stats: { [assignmentId]: data.data.filtered_count },
-                passed: data.data.passed,
-                all_not_passed: data.data.all_not_passed,
-                total: data.data.total,
-                rule_filtered_count: data.data.filtered_count,
-                has_been_run: data.data.has_been_run,
-            }
-            console.log(
-                `Setting filter_stats for ${sourceName}-${assignmentId}: rule_filtered_count=${newFilterStats.rule_filtered_count}, has_been_run=${newFilterStats.has_been_run}`
-            )
-            assignment.filter_stats = newFilterStats
-            console.log(
-                `Assignment updated. Current filter_stats.rule_filtered_count: ${assignment.filter_stats.rule_filtered_count}`
-            )
+            
+            // Update each assignment with its filter stats
+            sourceAssignmentsForSource.forEach((assignment) => {
+                const assignmentData = data.data.assignments[assignment.id]
+                if (assignmentData) {
+                    const newFilterStats = {
+                        filter_stats: { [assignment.id]: assignmentData.filtered_count },
+                        passed: data.data.passed,
+                        all_not_passed: data.data.all_not_passed,
+                        total: data.data.total,
+                        rule_filtered_count: assignmentData.filtered_count,
+                        has_been_run: assignmentData.has_been_run,
+                    }
+                    console.log(
+                        `Setting filter_stats for ${sourceName}-${assignment.id}: rule_filtered_count=${newFilterStats.rule_filtered_count}, has_been_run=${newFilterStats.has_been_run}`
+                    )
+                    assignment.filter_stats = newFilterStats
+                } else {
+                    console.log(
+                        `No filter data found for assignment ${assignment.id} in source ${sourceName}`
+                    )
+                }
+            })
         } else {
             console.log(
-                `API FAILED for ${sourceName}-${assignmentId}: ${JSON.stringify(data)}`
+                `API FAILED for source '${sourceName}': ${JSON.stringify(data)}`
             )
         }
     } catch (error) {
         console.error(
-            `Error fetching filter stats for ${sourceName} with assignment ${assignmentId}:`,
+            `Error fetching filter stats for source ${sourceName}:`,
             error
         )
     } finally {
-        const key = `${sourceName}-${assignmentId}`
-        loadingFilterStats.value[key] = false
+        // Clear loading state for all assignments of this source
+        sourceAssignmentsForSource.forEach((assignment) => {
+            const key = `${sourceName}-${assignment.id}`
+            loadingFilterStats.value[key] = false
+        })
     }
 }
 
-// Load filter statistics for specific assignments
+// Load filter statistics for specific assignments (now source-based)
 const loadFilterStatsForAssignments = async (
     assignments: any[]
 ): Promise<void> => {
@@ -2409,17 +2414,17 @@ const loadFilterStatsForAssignments = async (
         `Found ${validAssignments.length} valid assignments to load stats for`
     )
 
-    const promises = validAssignments.map((assignment) => {
-        console.log(
-            `Will fetch stats for assignment: ${assignment.id} (${assignment.source_name})`
-        )
-        return fetchFilterStatsForAssignment(
-            assignment.id,
-            assignment.source_name
-        )
+    // Group assignments by source name to minimize API calls
+    const sourceNames = [...new Set(validAssignments.map(a => a.source_name))]
+    console.log(`Will fetch stats for ${sourceNames.length} unique sources: ${sourceNames.join(', ')}`)
+
+    // Fetch filter stats for each unique source (one API call per source)
+    const promises = sourceNames.map((sourceName) => {
+        console.log(`Fetching stats for source: ${sourceName}`)
+        return fetchFilterStatsForSource(sourceName)
     })
 
-    console.log(`Starting ${promises.length} parallel API calls...`)
+    console.log(`Starting ${promises.length} API calls (one per source)...`)
     await Promise.all(promises)
     console.log(
         `All API calls completed. Assignments with filter_stats: ${sourceAssignments.value.filter((a) => a.filter_stats).length}`
