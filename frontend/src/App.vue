@@ -110,18 +110,18 @@ const menuItems = [
         },
     },
     {
-        label: "Streams",
-        icon: "pi pi-list",
-        command: () => {
-            router.push("/streams")
-            drawerVisible.value = false
-        },
-    },
-    {
         label: "Rules",
         icon: "pi pi-filter",
         command: () => {
             router.push("/rules")
+            drawerVisible.value = false
+        },
+    },
+    {
+        label: "Streams",
+        icon: "pi pi-list",
+        command: () => {
+            router.push("/streams")
             drawerVisible.value = false
         },
     },

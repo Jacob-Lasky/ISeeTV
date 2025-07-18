@@ -9,8 +9,152 @@ from utils.filter_utils import precompute_filter_values, get_all_filter_values
 import logging
 from common.utils import log_function
 from datetime import datetime
+from rules.ingestion_rules import IngestionRulesEngine
 
 logger = logging.getLogger(__name__)
+
+
+def _get_rules_filter_condition(source: Optional[str], filter_view: str = "normal") -> Optional[str]:
+    """
+    Atomic function to generate SQL WHERE condition for rules-based filtering.
+    
+    Uses the filter_reasons field populated by the post-load rules system to
+    determine which records should be included based on filter view mode.
+    
+    For Normal/Inverse logic:
+    - Normal: Shows intended result (excludes blacklisted for blacklist mode, shows only whitelisted for whitelist mode)
+    - Inverse: Shows opposite (shows blacklisted for blacklist mode, excludes whitelisted for whitelist mode)
+    - All: Shows everything regardless of rules
+    
+    Args:
+        source: Source name to filter by (if None, applies to all sources)
+        filter_view: Filter view mode ("normal", "inverse", "all")
+        
+    Returns:
+        SQL WHERE condition string or None if no filtering needed
+    """
+    if filter_view == "all":
+        # Show all rows, ignoring filter status
+        return None
+    
+    log_function(f"Applying rules filtering for filter_view: {filter_view}")
+    
+    if filter_view == "normal":
+        # Normal: Shows intended result based on rule mode
+        # For blacklist mode: show records that passed (filter_reasons is null)
+        # For whitelist mode: show records that matched rules (filter_reasons is not null)
+        # Since most current assignments are blacklist, default to blacklist behavior
+        # TODO: This could be enhanced to check actual rule_mode per source
+        return "(m.filter_reasons IS NULL)"
+    
+    elif filter_view == "inverse":
+        # Inverse: Shows opposite of intended result
+        # For blacklist mode: show records that were filtered out (filter_reasons is not null)
+        # For whitelist mode: show records that didn't match rules (filter_reasons is null)
+        # Since most current assignments are blacklist, default to blacklist inverse behavior
+        return "(m.filter_reasons IS NOT NULL)"
+    else:
+        # Default to showing all if unknown filter_view
+        log_function(f"Unknown filter_view: {filter_view}, showing all records")
+        return None
+
+
+def get_filter_view_counts(
+    session: Session,
+    source: Optional[str] = None,
+    group: Optional[str] = None,
+    global_filter: Optional[str] = None,
+    column_filters: Optional[Dict[str, str]] = None,
+) -> Dict[str, int]:
+    """
+    Atomic function to get counts for each filter view mode using a single optimized query.
+    
+    Args:
+        session: SQLAlchemy session
+        source: Filter by source name
+        group: Filter by channel group
+        global_filter: Global search term
+        column_filters: Column-specific filters
+        
+    Returns:
+        Dictionary with counts for normal, inverse, and all views
+    """
+    try:
+        # Single query with conditional counting for all filter views
+        base_query = """
+            SELECT 
+                COUNT(CASE WHEN m.filter_reasons IS NULL THEN 1 END) as normal_count,
+                COUNT(CASE WHEN m.filter_reasons IS NOT NULL THEN 1 END) as inverse_count,
+                COUNT(*) as all_count
+            FROM m3u_channels m
+            LEFT JOIN epg_channels e ON m.source = e.source AND m.tvg_id = e.channel_id
+            LEFT JOIN (
+                SELECT 
+                    source,
+                    channel_id,
+                    COUNT(*) as program_count,
+                    MIN(CASE WHEN start_time > datetime('now') THEN start_time END) as next_program_start,
+                    MIN(CASE WHEN start_time > datetime('now') THEN title END) as next_program_title
+                FROM programs 
+                GROUP BY source, channel_id
+            ) p ON m.source = p.source AND m.tvg_id = p.channel_id
+        """
+        
+        where_conditions = []
+        params = {}
+        
+        # Apply basic filters (same as main query)
+        if source:
+            where_conditions.append("m.source = :source")
+            params["source"] = source
+        if group:
+            where_conditions.append("m.`group` = :group")
+            params["group"] = group
+        if global_filter:
+            where_conditions.append(
+                "(m.name LIKE :global_filter OR m.tvg_id LIKE :global_filter OR "
+                "COALESCE(e.display_name, '') LIKE :global_filter OR "
+                "COALESCE(m.`group`, '') LIKE :global_filter)"
+            )
+            params["global_filter"] = f"%{global_filter}%"
+        
+        # Apply column filters
+        if column_filters:
+            for column, value in column_filters.items():
+                if value and column in ["name", "tvg_id", "group", "source"]:
+                    if column == "name":
+                        where_conditions.append("m.name LIKE :name_filter")
+                        params["name_filter"] = f"%{value}%"
+                    elif column == "tvg_id":
+                        where_conditions.append("m.tvg_id LIKE :tvg_id_filter")
+                        params["tvg_id_filter"] = f"%{value}%"
+                    elif column == "group":
+                        where_conditions.append("m.`group` = :group_filter")
+                        params["group_filter"] = value
+                    elif column == "source":
+                        where_conditions.append("m.source = :source_filter")
+                        params["source_filter"] = value
+        
+        # Add WHERE clause if conditions exist
+        if where_conditions:
+            base_query += " WHERE " + " AND ".join(where_conditions)
+        
+        # Execute single count query
+        result = session.execute(text(base_query), params)
+        row = result.fetchone()
+        
+        counts = {
+            "normal": row.normal_count or 0,
+            "inverse": row.inverse_count or 0,
+            "all": row.all_count or 0
+        }
+        
+        log_function(f"Filter view counts: {counts}")
+        return counts
+        
+    except Exception as e:
+        logger.error(f"Error getting filter view counts: {e}")
+        return {"normal": 0, "inverse": 0, "all": 0}
 
 
 def get_streams_query(
@@ -23,10 +167,20 @@ def get_streams_query(
     sort_order: str = "asc",
     global_filter: Optional[str] = None,
     column_filters: Optional[Dict[str, str]] = None,
+    apply_rules: bool = True,
+    filter_view: str = "normal",
 ) -> Tuple[List[StreamChannel], int]:
     """
-    Atomic function to execute streams query with joins and filtering.
-
+    Atomic function to get streams with joined M3U, EPG, and program data.
+    
+    Performs a complex LEFT JOIN query to combine:
+    - m3u_channels (primary table with stream URLs)
+    - epg_channels (display names and icons)
+    - programs (aggregated counts and next program info)
+    
+    Optionally applies rules-based filtering using the filter_reasons field
+    populated by the post-load rules system.
+    
     Args:
         session: SQLAlchemy session
         source: Filter by source name
@@ -37,6 +191,8 @@ def get_streams_query(
         sort_order: Sort order (asc/desc)
         global_filter: Global search term
         column_filters: Column-specific filters
+        apply_rules: Whether to apply ingestion rules filtering
+        filter_view: Filter view mode ("normal", "inverse", "all")
 
     Returns:
         Tuple of (stream_channels, total_count)
@@ -62,6 +218,7 @@ def get_streams_query(
             e.icon_url,
             m.created_at,
             m.updated_at,
+            m.filter_reasons,
             COALESCE(p.program_count, 0) as program_count,
             p.next_program_title,
             p.next_program_start
@@ -122,6 +279,12 @@ def get_streams_query(
                     elif column == "source":
                         where_conditions.append("m.source = :source_filter")
                         params["source_filter"] = value
+
+        # Apply rules-based filtering if enabled
+        if apply_rules:
+            rules_condition = _get_rules_filter_condition(source, filter_view)
+            if rules_condition:
+                where_conditions.append(rules_condition)
 
         # Add WHERE clause if conditions exist
         if where_conditions:

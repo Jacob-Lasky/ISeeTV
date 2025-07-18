@@ -146,17 +146,54 @@
             @filter="onFilter"
         >
             <template #header>
-                <div class="flex justify-end">
-                    <IconField>
-                        <InputIcon>
-                            <i class="pi pi-search" />
-                        </InputIcon>
-                        <InputText
-                            v-model="filters['global'].value"
-                            placeholder="Search all columns..."
-                            class="w-80"
-                        />
-                    </IconField>
+                <div class="flex justify-between align-items-center">
+                    <!-- Filter Visibility Toggle -->
+                    <div class="filter-visibility-toggle">
+                        <div class="toggle-label">Filter View:</div>
+                        <div class="toggle-buttons">
+                            <Button
+                                :class="{
+                                    'p-button-primary': filterView === 'normal',
+                                    'p-button-outlined':
+                                        filterView !== 'normal',
+                                }"
+                                :label="`Normal (${filterViewCounts.normal || 0})`"
+                                @click="setFilterView('normal')"
+                            />
+                            <Button
+                                :class="{
+                                    'p-button-primary':
+                                        filterView === 'inverse',
+                                    'p-button-outlined':
+                                        filterView !== 'inverse',
+                                }"
+                                :label="`Inverse (${filterViewCounts.inverse || 0})`"
+                                @click="setFilterView('inverse')"
+                            />
+                            <Button
+                                :class="{
+                                    'p-button-primary': filterView === 'all',
+                                    'p-button-outlined': filterView !== 'all',
+                                }"
+                                :label="`All (${filterViewCounts.all || 0})`"
+                                @click="setFilterView('all')"
+                            />
+                        </div>
+                    </div>
+
+                    <!-- Search and Filters -->
+                    <div class="flex align-items-center gap-2">
+                        <IconField>
+                            <InputIcon>
+                                <i class="pi pi-search" />
+                            </InputIcon>
+                            <InputText
+                                v-model="filters['global'].value"
+                                placeholder="Search all columns..."
+                                class="w-80"
+                            />
+                        </IconField>
+                    </div>
                 </div>
             </template>
 
@@ -277,35 +314,35 @@
 
             <!-- Filter Reason Column -->
             <Column
-                field="filter_reason"
+                field="filter_reasons"
                 header="Filter Status"
                 :sortable="true"
                 style="min-width: 200px"
-                :filterField="'filter_reason'"
+                :filterField="'filter_reasons'"
             >
                 <template #body="{ data }">
-                    <div v-if="data.filter_reason" class="filter-reason">
+                    <div v-if="data.filter_reasons" class="filter-reason">
                         <Tag
                             :value="
-                                data.filter_reason.includes('Blacklisted')
+                                data.filter_reasons.includes('Blacklisted')
                                     ? 'Filtered'
                                     : 'Not Whitelisted'
                             "
                             :severity="
-                                data.filter_reason.includes('Blacklisted')
+                                data.filter_reasons.includes('Blacklisted')
                                     ? 'danger'
                                     : 'warn'
                             "
                         />
                         <div
                             class="filter-detail"
-                            v-tooltip="data.filter_reason"
+                            v-tooltip="data.filter_reasons"
                         >
                             {{
-                                data.filter_reason.length > 50
-                                    ? data.filter_reason.substring(0, 50) +
+                                data.filter_reasons.length > 50
+                                    ? data.filter_reasons.substring(0, 50) +
                                       "..."
-                                    : data.filter_reason
+                                    : data.filter_reasons
                             }}
                         </div>
                     </div>
@@ -426,7 +463,12 @@ import ProgressSpinner from "primevue/progressspinner"
 import Skeleton from "primevue/skeleton"
 import IconField from "primevue/iconfield"
 import InputIcon from "primevue/inputicon"
-import type { StreamChannel, StreamsResponse, FilterValue } from "@/types/types"
+import type {
+    StreamChannel,
+    StreamsResponse,
+    FilterValue,
+    FilterViewCounts,
+} from "@/types/types"
 
 // Composables
 const router = useRouter()
@@ -443,6 +485,18 @@ const sortOrder = ref<"asc" | "desc">("asc")
 const globalFilter = ref("")
 const selectedSource = ref<string | null>(null)
 const selectedGroup = ref<string | null>(null)
+
+// Filter view toggle state
+const filterView = ref<"normal" | "inverse" | "all">("normal")
+const filterViewCounts = ref<{
+    normal: number
+    inverse: number
+    all: number
+}>({
+    normal: 0,
+    inverse: 0,
+    all: 0,
+})
 
 // Filter options (for header dropdowns)
 const sourceOptions = ref<{ label: string; value: string }[]>([])
@@ -464,14 +518,14 @@ const filters = ref({
     tvg_id: { value: null, matchMode: FilterMatchMode.CONTAINS },
     source: { value: null, matchMode: FilterMatchMode.CONTAINS },
     group: { value: null, matchMode: FilterMatchMode.CONTAINS },
-    filter_reason: { value: "null", matchMode: FilterMatchMode.EQUALS }, // Default to show only active (non-filtered) records
+    filter_reasons: { value: "null", matchMode: FilterMatchMode.EQUALS }, // Default to show only active (non-filtered) records
 })
 const globalFilterFields = ref<string[]>([
     "name",
     "tvg_id",
     "source",
     "group",
-    "filter_reason",
+    "filter_reasons",
 ])
 
 // Skeleton data for loading state (15 empty rows)
@@ -489,11 +543,13 @@ const hasPrev = computed(() => currentPage.value > 1)
 
 // Atomic functions
 const buildApiUrl = (): string => {
-    const params = new URLSearchParams()
-    params.append("page", currentPage.value.toString())
-    params.append("page_size", pageSize.value.toString())
-    params.append("sort_field", sortField.value)
-    params.append("sort_order", sortOrder.value)
+    const params = new URLSearchParams({
+        page: currentPage.value.toString(),
+        page_size: pageSize.value.toString(),
+        sort_field: sortField.value,
+        sort_order: sortOrder.value,
+        filter_view: filterView.value,
+    })
 
     if (globalFilter.value) {
         params.append("global_filter", globalFilter.value)
@@ -530,6 +586,15 @@ const loadStreams = async (resetPage = false): Promise<void> => {
             streams.value = data.data
             totalRecords.value = data.total
             currentPage.value = data.page
+
+            // Update filter view counts if available
+            if (data.filter_view_counts) {
+                filterViewCounts.value = {
+                    normal: data.filter_view_counts.normal || 0,
+                    inverse: data.filter_view_counts.inverse || 0,
+                    all: data.filter_view_counts.all || 0,
+                }
+            }
 
             // Update filter options if available
             if (data.filters && Object.keys(data.filters).length > 0) {
@@ -601,7 +666,11 @@ const updateFilterOptions = (filters: Record<string, FilterValue[]>): void => {
 
         // Update column filter options
         groupFilterOptions.value = filters.group.map((f) => f.value)
-        console.log("Updated groupFilterOptions:", groupFilterOptions.value)
+        console.log(
+            "Updated groupFilterOptions:",
+            groupFilterOptions.value.length,
+            "options"
+        )
     } else {
         console.log("No group filters found in API response")
     }
@@ -704,6 +773,12 @@ const openStream = (stream: StreamChannel): void => {
     }
 }
 
+// Filter view toggle function
+const setFilterView = (view: "normal" | "inverse" | "all"): void => {
+    filterView.value = view
+    loadStreams(true) // Reset to first page when changing filter view
+}
+
 // Lifecycle
 onMounted(() => {
     loadStreams()
@@ -766,6 +841,50 @@ watch(() => {}, cleanup)
 
 .search-input {
     min-width: 200px;
+}
+
+/* Filter Visibility Toggle Styles */
+.filter-visibility-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.toggle-label {
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: var(--text-color);
+    white-space: nowrap;
+}
+
+.toggle-buttons {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.toggle-buttons .p-button {
+    font-size: 0.875rem;
+    padding: 0.375rem 0.75rem;
+    border-radius: 4px;
+    transition: all 0.2s ease;
+}
+
+.toggle-buttons .p-button.p-button-outlined {
+    background: var(--surface-ground);
+    border-color: var(--surface-border);
+    color: var(--text-color-secondary);
+}
+
+.toggle-buttons .p-button.p-button-outlined:hover {
+    background: var(--surface-hover);
+    border-color: var(--primary-color);
+    color: var(--primary-color);
+}
+
+.toggle-buttons .p-button.p-button-primary {
+    background: var(--primary-color);
+    border-color: var(--primary-color);
+    color: var(--primary-color-text);
 }
 
 .streams-datatable {

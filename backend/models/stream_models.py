@@ -70,6 +70,7 @@ class StreamsResponse(BaseModel):
     has_next: bool
     has_prev: bool
     filters: Dict[str, List[Dict[str, Any]]] = {}
+    filter_view_counts: Dict[str, int] = {}
 
 
 class StreamProgramsResponse(BaseModel):

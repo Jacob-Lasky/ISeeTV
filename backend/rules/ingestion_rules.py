@@ -293,6 +293,21 @@ class IngestionRulesEngine:
         """Legacy method for backwards compatibility - returns first assignment for source"""
         assignments = self.get_source_assignments(source_name)
         return assignments[0] if assignments else None
+    
+    def get_all_source_assignments(self) -> List[SourceRuleAssignment]:
+        """Get all enabled source assignments across all sources"""
+        log_function("Getting all source assignments", level="debug")
+        _, assignments = self.load_rules()
+        
+        # Return all enabled assignments
+        enabled_assignments = [assignment for assignment in assignments if assignment.enabled]
+        
+        log_function(
+            f"Found {len(enabled_assignments)} enabled assignments: {[a.id for a in enabled_assignments]}",
+            level="debug"
+        )
+        
+        return enabled_assignments
 
     def apply_rules_to_records_batch(
         self,

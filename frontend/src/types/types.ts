@@ -217,6 +217,15 @@ export interface FilterValue {
 }
 
 /**
+ * Filter view counts for normal/inverse/all views
+ */
+export interface FilterViewCounts {
+    normal: number
+    inverse: number
+    all: number
+}
+
+/**
  * Streams API response with pagination
  */
 export interface StreamsResponse {
@@ -229,6 +238,7 @@ export interface StreamsResponse {
     has_next: boolean
     has_prev: boolean
     filters: Record<string, FilterValue[]>
+    filter_view_counts?: FilterViewCounts
 }
 
 /**

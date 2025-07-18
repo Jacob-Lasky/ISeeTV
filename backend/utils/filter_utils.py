@@ -50,18 +50,18 @@ def precompute_filter_values(session: Session, table_name: str) -> None:
                     WITH expanded_reasons AS (
                         SELECT 
                             t.id as table_id,
-                            j.value as filter_reason
+                            j.value as filter_reasons
                         FROM {table_name} t, json_each(t.filter_reasons) j
                         WHERE t.filter_reasons IS NOT NULL 
                             AND t.filter_reasons != ''
                             AND t.filter_reasons != '[]'
                     )
                     SELECT 
-                        filter_reason as value,
+                        filter_reasons as value,
                         COUNT(*) as count
                     FROM expanded_reasons
-                    WHERE filter_reason IS NOT NULL AND filter_reason != ''
-                    GROUP BY filter_reason
+                    WHERE filter_reasons IS NOT NULL AND filter_reasons != ''
+                    GROUP BY filter_reasons
                     
                     UNION ALL
                     
@@ -90,7 +90,9 @@ def precompute_filter_values(session: Session, table_name: str) -> None:
             # Insert filter values
             filter_values = []
             for row in result:
-                if row.value and row.count > 0:  # Only add non-empty values with positive counts
+                if (
+                    row.value and row.count > 0
+                ):  # Only add non-empty values with positive counts
                     filter_values.append(
                         FilterValueTable(
                             table_name=table_name,
@@ -275,15 +277,15 @@ def get_table_filter_statistics_by_source(
             WHERE assignment_id IS NOT NULL
             GROUP BY assignment_id
             ORDER BY count DESC
-        """)
-        
+        """
+        )
 
         result = session.execute(query, {"source": source})
         filter_stats = defaultdict(dict)
         all_not_passed = 0
         passed = 0
         total = 0
-        
+
         for row in result:
             reason = row.reason
             count = row.count

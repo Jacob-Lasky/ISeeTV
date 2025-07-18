@@ -86,7 +86,9 @@ class Source(BaseModel):
     subscription_expires: Optional[str]
     source_timezone: Optional[str]
     enabled: bool
-    rule_mode: Literal["whitelist", "blacklist"] = "blacklist"  # Default to blacklist (start with all channels)
+    rule_mode: Literal["whitelist", "blacklist"] = (
+        "blacklist"  # Default to blacklist (start with all channels)
+    )
     file_metadata: Dict[str, FileMetadata] = {}
 
     def get_file_metadata(
@@ -135,7 +137,7 @@ class EpgChannel(BaseModel):
     channel_id: str
     display_name: str
     icon_url: Optional[str]
-    filter_reason: Optional[str] = None  # Reason for filtering (blacklist/whitelist)
+    filter_reasons: Optional[str] = None  # Reason for filtering (blacklist/whitelist)
 
 
 class M3uChannel(BaseModel):
@@ -147,7 +149,7 @@ class M3uChannel(BaseModel):
     stream_url: str
     logo_url: Optional[str]
     group: Optional[str]
-    filter_reason: Optional[str] = None  # Reason for filtering (blacklist/whitelist)
+    filter_reasons: Optional[str] = None  # Reason for filtering (blacklist/whitelist)
 
 
 class Channel(BaseModel):
@@ -172,7 +174,7 @@ class Program(BaseModel):
     end_time: dt.datetime
     title: Optional[str]
     description: Optional[str]
-    filter_reason: Optional[str] = None  # Reason for filtering (blacklist/whitelist)
+    filter_reasons: Optional[str] = None  # Reason for filtering (blacklist/whitelist)
 
 
 class TableData(BaseModel):

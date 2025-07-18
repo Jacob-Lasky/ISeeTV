@@ -64,6 +64,7 @@ from utils.stream_utils import (
     get_stream_programs_query,
     precompute_streams_filter_values,
     get_streams_filter_values,
+    get_filter_view_counts,
 )
 from common.db import init_db, engine, SessionLocal
 from common.utils import log_function
@@ -78,7 +79,6 @@ from rules.ingestion_rules import (
     IngestionRule,
     SourceRuleAssignment,
     INGESTION_RULES_LOGS,
-    
 )
 from common.rules_storage import (
     load_rules,
@@ -401,7 +401,7 @@ async def download_all_files(
                 task_id=task_id,
                 download_type=file_type,
                 sources_file=sources_file,
-                download_dir=download_dir
+                download_dir=download_dir,
             )
             job_ids.append(job_id)
 
@@ -444,9 +444,9 @@ async def queue_file_for_download(
             task_id=task_id,
             download_type=file_type,
             sources_file=sources_file,
-            download_dir=download_dir
+            download_dir=download_dir,
         )
-        
+
         return DownloadTaskResponse(
             message=f"{file_type} file for {source_name} download queued (job: {job_id})",
             task_id=task_id,
@@ -631,7 +631,7 @@ async def load_file_to_db(
             file_type=file_type,
             job_function=background_load_task,
             task_id=task_id,
-            file_path=file_path
+            file_path=file_path,
         )
 
         return {
@@ -860,22 +860,24 @@ async def get_table_filtered_counts(table_name: str, source: str) -> Dict[str, A
     tags=["Database"],
     status_code=status.HTTP_200_OK,
 )
-async def get_table_filtered_counts_by_rule(table_name: str, source: str, rule: str) -> Dict[str, Any]:
+async def get_table_filtered_counts_by_rule(
+    table_name: str, source: str, rule: str
+) -> Dict[str, Any]:
     """Get filter statistics for a specific rule on a specific table and source"""
     try:
         with SessionLocal() as session:
             filter_stats = get_table_filter_statistics_by_source(
                 session, table_name, source
             )
-            
+
             # Extract the count for the specific rule
             # filter_stats structure: {"filter_stats": {"MKV Filter": 217434, "Passed": 63989}, "passed": 63989, ...}
             filter_stats_dict = filter_stats.get("filter_stats", {})
-            
+
             # Check if the rule has been run (exists in filter_stats)
             has_been_run = rule in filter_stats_dict
             rule_count = filter_stats_dict.get(rule, 0) if has_been_run else None
-            
+
             return {
                 "success": True,
                 "data": {
@@ -884,12 +886,14 @@ async def get_table_filtered_counts_by_rule(table_name: str, source: str, rule: 
                     "has_been_run": has_been_run,
                     "total": filter_stats.get("total", 0),
                     "passed": filter_stats.get("passed", 0),
-                    "all_not_passed": filter_stats.get("all_not_passed", 0)
+                    "all_not_passed": filter_stats.get("all_not_passed", 0),
                 },
             }
 
     except Exception as e:
-        logger.error(f"Error getting filter statistics for rule {rule} on table {table_name}: {e}")
+        logger.error(
+            f"Error getting filter statistics for rule {rule} on table {table_name}: {e}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
@@ -979,6 +983,8 @@ async def get_streams(
     sort_order: str = "asc",
     global_filter: Optional[str] = None,
     column_filters: Optional[str] = None,
+    apply_rules: bool = True,
+    filter_view: str = "matched",
 ) -> StreamsResponse:
     """Get joined streams view with M3U channels, EPG data, and program counts.
 
@@ -996,6 +1002,8 @@ async def get_streams(
         sort_order: Sort order (asc/desc)
         global_filter: Global search across name, tvg_id, display_name, group
         column_filters: JSON string of column-specific filters
+        apply_rules: Whether to apply ingestion rules filtering (default: True)
+        filter_view: Filter view mode ("matched", "unmatched", "all") for rules filtering
 
     Returns:
         StreamsResponse with paginated stream data and filter options
@@ -1031,10 +1039,21 @@ async def get_streams(
                 sort_order=sort_order,
                 global_filter=global_filter,
                 column_filters=parsed_column_filters,
+                apply_rules=apply_rules,
+                filter_view=filter_view,
             )
 
             # Get filter values
             filter_values = get_streams_filter_values(session)
+
+            # Get filter view counts
+            filter_view_counts = get_filter_view_counts(
+                session=session,
+                source=source,
+                group=group,
+                global_filter=global_filter,
+                column_filters=parsed_column_filters,
+            )
 
             # Calculate pagination metadata
             total_pages = (total_count + page_size - 1) // page_size
@@ -1051,6 +1070,7 @@ async def get_streams(
                 has_next=has_next,
                 has_prev=has_prev,
                 filters=filter_values,
+                filter_view_counts=filter_view_counts,
             )
 
     except Exception as e:
@@ -1450,9 +1470,7 @@ async def get_rules() -> Dict[str, Any]:
     tags=["Rules"],
     status_code=status.HTTP_200_OK,
 )
-async def save_rules_only(
-    rules_data: List[Dict[str, Any]]
-) -> Dict[str, Any]:
+async def save_rules_only(rules_data: List[Dict[str, Any]]) -> Dict[str, Any]:
     """Save only ingestion rules to rules.json file"""
     log_function("Saving ingestion rules only")
     try:
@@ -1472,6 +1490,26 @@ async def save_rules_only(
         )
 
 
+@app.get(
+    "/api/assignments",
+    response_model=Dict[str, Any],
+    tags=["Rules"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_assignments() -> Dict[str, Any]:
+    """Get all source rule assignments"""
+    log_function("Getting source rule assignments")
+    try:
+        assignments = load_assignments()
+        return {"success": True, "data": assignments}
+    except Exception as e:
+        logger.error(f"Error getting assignments: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get assignments: {str(e)}",
+        )
+
+
 @app.post(
     "/api/assignments/apply",
     response_model=Dict[str, Any],
@@ -1484,22 +1522,27 @@ async def apply_assignment(
 ) -> Dict[str, Any]:
     """Apply a specific assignment by ID to a table (new multi-assignment architecture)"""
     try:
-        logger.info(f"[apply_assignment]: Applying assignment '{assignment_id}' to {table_name}")
-        
+        logger.info(
+            f"[apply_assignment]: Applying assignment '{assignment_id}' to {table_name}"
+        )
+
         # Import post_load_engine and get the assignment by ID
         from rules.post_load_rules import post_load_engine
-        assignment = post_load_engine.ingestion_engine.get_assignment_by_id(assignment_id)
+
+        assignment = post_load_engine.ingestion_engine.get_assignment_by_id(
+            assignment_id
+        )
         if not assignment:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Assignment '{assignment_id}' not found"
+                detail=f"Assignment '{assignment_id}' not found",
             )
-        
+
         # Apply the assignment to the specified table
         result = post_load_engine.apply_assignment_to_table(
             assignment_id, table_name, assignment.source_name
         )
-        
+
         logger.info(
             f"Assignment '{assignment_id}' application completed for {table_name} from {assignment.source_name}"
         )
@@ -1508,9 +1551,9 @@ async def apply_assignment(
         serializable_result = {
             "processed": int(result.get("processed", 0)),
             "filtered": int(result.get("filtered", 0)),
-            "passed": int(result.get("passed", 0))
+            "passed": int(result.get("passed", 0)),
         }
-        
+
         return {
             "success": True,
             "message": f"Assignment '{assignment_id}' applied to {table_name} for source {assignment.source_name}",
@@ -1526,7 +1569,7 @@ async def apply_assignment(
         logger.error(f"Error applying assignment: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to apply assignment: {str(e)}"
+            detail=f"Failed to apply assignment: {str(e)}",
         )
 
 
@@ -1538,30 +1581,38 @@ async def apply_assignment(
 )
 async def unapply_assignment(
     assignment_id: str = Body(..., description="ID of the assignment to unapply"),
-    table_name: str = Body(None, description="Optional: specific table to unapply from. If not provided, unapplies from all relevant tables."),
+    table_name: str = Body(
+        None,
+        description="Optional: specific table to unapply from. If not provided, unapplies from all relevant tables.",
+    ),
 ) -> Dict[str, Any]:
     """Unapply a specific assignment by ID from relevant tables (new multi-assignment architecture)"""
     try:
-        logger.info(f"[unapply_assignment]: Unapplying assignment '{assignment_id}' from {table_name or 'all relevant tables'}")
-        
+        logger.info(
+            f"[unapply_assignment]: Unapplying assignment '{assignment_id}' from {table_name or 'all relevant tables'}"
+        )
+
         # Import post_load_engine and get the assignment by ID
         from rules.post_load_rules import post_load_engine
-        assignment = post_load_engine.ingestion_engine.get_assignment_by_id(assignment_id)
+
+        assignment = post_load_engine.ingestion_engine.get_assignment_by_id(
+            assignment_id
+        )
         if not assignment:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Assignment '{assignment_id}' not found"
+                detail=f"Assignment '{assignment_id}' not found",
             )
-        
+
         # Get all rules for this assignment to determine relevant tables
         rules, _ = post_load_engine.ingestion_engine.load_rules()
         relevant_tables = set()
-        
+
         for rule_name in assignment.assigned_rules:
             rule = next((r for r in rules if r.name == rule_name), None)
             if rule:
                 relevant_tables.update(rule.tables)
-        
+
         if not relevant_tables:
             logger.warning(f"No relevant tables found for assignment '{assignment_id}'")
             return {
@@ -1571,34 +1622,36 @@ async def unapply_assignment(
                 "source_name": assignment.source_name,
                 "results": {"processed": 0, "restored": 0, "passed": 0},
             }
-        
+
         # If specific table provided, validate it's relevant
         if table_name:
             if table_name not in relevant_tables:
                 raise HTTPException(
                     status_code=status.HTTP_400_BAD_REQUEST,
-                    detail=f"Table '{table_name}' is not relevant to assignment '{assignment_id}'. Relevant tables: {list(relevant_tables)}"
+                    detail=f"Table '{table_name}' is not relevant to assignment '{assignment_id}'. Relevant tables: {list(relevant_tables)}",
                 )
             tables_to_process = [table_name]
         else:
             tables_to_process = list(relevant_tables)
-        
-        logger.info(f"Processing tables: {tables_to_process} for assignment '{assignment_id}'")
-        
+
+        logger.info(
+            f"Processing tables: {tables_to_process} for assignment '{assignment_id}'"
+        )
+
         # Unapply the assignment from relevant tables
         total_results = {"processed": 0, "restored": 0, "passed": 0}
         table_results = {}
-        
+
         for table in tables_to_process:
             result = post_load_engine.unapply_assignment_from_table(
                 assignment_id, table, assignment.source_name
             )
-            
+
             total_results["processed"] += result.get("processed", 0)
             total_results["restored"] += result.get("restored", 0)
             total_results["passed"] += result.get("passed", 0)
             table_results[table] = result
-        
+
         logger.info(
             f"Assignment '{assignment_id}' unapplication completed for {len(tables_to_process)} tables from {assignment.source_name}"
         )
@@ -1607,9 +1660,9 @@ async def unapply_assignment(
         serializable_result = {
             "processed": int(total_results["processed"]),
             "restored": int(total_results["restored"]),
-            "passed": int(total_results["passed"])
+            "passed": int(total_results["passed"]),
         }
-        
+
         return {
             "success": True,
             "message": f"Assignment '{assignment_id}' unapplied from {len(tables_to_process)} relevant tables for source {assignment.source_name}",
@@ -1627,7 +1680,7 @@ async def unapply_assignment(
         logger.error(f"Error unapplying assignment: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to unapply assignment: {str(e)}"
+            detail=f"Failed to unapply assignment: {str(e)}",
         )
 
 
@@ -1905,9 +1958,9 @@ async def apply_single_rule(request: Dict[str, Any] = Body(...)) -> Dict[str, An
         serializable_result = {
             "processed": int(result.get("processed", 0)),
             "filtered": int(result.get("filtered", 0)),
-            "passed": int(result.get("passed", 0))
+            "passed": int(result.get("passed", 0)),
         }
-        
+
         return {
             "success": True,
             "message": f"Rule '{rule_name}' applied to {table_name} for source {source_name}",
@@ -2054,25 +2107,32 @@ async def unapply_rules(request: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
 # Job Queue Management API Endpoints
 
 
-@app.get("/api/jobs/queue/status", response_model=Dict[str, Any], tags=["Job Queue"], status_code=status.HTTP_200_OK)
+@app.get(
+    "/api/jobs/queue/status",
+    response_model=Dict[str, Any],
+    tags=["Job Queue"],
+    status_code=status.HTTP_200_OK,
+)
 async def get_job_queue_status() -> Dict[str, Any]:
     """Get current job queue status and information"""
     log_function("Getting job queue status")
     try:
         status = await get_queue_status()
-        return {
-            "success": True,
-            "data": status
-        }
+        return {"success": True, "data": status}
     except Exception as e:
         logger.error(f"Error getting job queue status: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get job queue status: {str(e)}"
+            detail=f"Failed to get job queue status: {str(e)}",
         )
 
 
-@app.get("/api/jobs/{job_id}/status", response_model=Dict[str, Any], tags=["Job Queue"], status_code=status.HTTP_200_OK)
+@app.get(
+    "/api/jobs/{job_id}/status",
+    response_model=Dict[str, Any],
+    tags=["Job Queue"],
+    status_code=status.HTTP_200_OK,
+)
 async def get_job_status_by_id(job_id: str) -> Dict[str, Any]:
     """Get status of a specific job"""
     log_function(f"Getting status for job {job_id}")
@@ -2080,24 +2140,25 @@ async def get_job_status_by_id(job_id: str) -> Dict[str, Any]:
         job_status = await get_job_status(job_id)
         if not job_status:
             raise HTTPException(
-                status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Job {job_id} not found"
+                status_code=status.HTTP_404_NOT_FOUND, detail=f"Job {job_id} not found"
             )
-        return {
-            "success": True,
-            "data": job_status
-        }
+        return {"success": True, "data": job_status}
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error getting job status: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get job status: {str(e)}"
+            detail=f"Failed to get job status: {str(e)}",
         )
 
 
-@app.post("/api/jobs/{job_id}/cancel", response_model=Dict[str, Any], tags=["Job Queue"], status_code=status.HTTP_200_OK)
+@app.post(
+    "/api/jobs/{job_id}/cancel",
+    response_model=Dict[str, Any],
+    tags=["Job Queue"],
+    status_code=status.HTTP_200_OK,
+)
 async def cancel_job_by_id(job_id: str) -> Dict[str, Any]:
     """Cancel a queued job"""
     log_function(f"Cancelling job {job_id}")
@@ -2106,19 +2167,16 @@ async def cancel_job_by_id(job_id: str) -> Dict[str, Any]:
         if not cancelled:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail=f"Job {job_id} cannot be cancelled (not found or already running/completed)"
+                detail=f"Job {job_id} cannot be cancelled (not found or already running/completed)",
             )
-        return {
-            "success": True,
-            "message": f"Job {job_id} cancelled successfully"
-        }
+        return {"success": True, "message": f"Job {job_id} cancelled successfully"}
     except HTTPException:
         raise
     except Exception as e:
         logger.error(f"Error cancelling job: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to cancel job: {str(e)}"
+            detail=f"Failed to cancel job: {str(e)}",
         )
 
 
@@ -2133,7 +2191,7 @@ async def startup_event():
         # Initialize job queue first
         await initialize_job_queue()
         log_function("Job queue initialized successfully")
-        
+
         # Start the scheduler
         start_scheduler()
         log_function("Scheduler started successfully on application startup")
@@ -2150,7 +2208,7 @@ async def shutdown_event():
         # Stop scheduler first
         stop_scheduler()
         log_function("Scheduler stopped successfully")
-        
+
         # Shutdown job queue
         await shutdown_job_queue()
         log_function("Job queue shutdown successfully on application shutdown")

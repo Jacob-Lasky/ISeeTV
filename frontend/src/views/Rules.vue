@@ -268,6 +268,13 @@
                                             severity="success"
                                             @click="addNewAssignment"
                                         />
+                                        <Button
+                                            icon="pi pi-play"
+                                            label="Apply Assignments"
+                                            severity="primary"
+                                            :loading="applyingAllAssignments"
+                                            @click="applyAssignments"
+                                        />
                                     </div>
                                 </div>
                             </template>
@@ -648,6 +655,7 @@ const loading = ref(false)
 const hasChanges = ref(false)
 const validating = ref(false)
 const applyingRules = ref(false)
+const applyingAllAssignments = ref(false)
 const applyingRule = ref<string | null>(null)
 const unapplyingRule = ref<string | null>(null)
 const applyingSourceRules = ref<string | null>(null)
@@ -1285,6 +1293,104 @@ const applyRules = async (): Promise<void> => {
         })
     } finally {
         applyingRules.value = false
+    }
+}
+
+// Apply assignments to database records
+const applyAssignments = async (): Promise<void> => {
+    try {
+        applyingAllAssignments.value = true
+
+        // Get all assignments to apply
+        const assignments = sourceAssignments.value.filter(assignment => assignment.id)
+        
+        if (assignments.length === 0) {
+            toast.add({
+                severity: "warning",
+                summary: "No Assignments Found",
+                detail: "No assignments available to apply",
+                life: 3000,
+            })
+            return
+        }
+
+        // Apply assignments to all tables
+        const tables = ["m3u_channels", "epg_channels", "programs"]
+        const results = []
+        let totalProcessed = 0
+        let totalFiltered = 0
+        let totalPassed = 0
+
+        for (const assignment of assignments) {
+            console.log(`Applying assignment '${assignment.id}' (${assignment.source_name} -> ${assignment.assigned_rules})...`)
+            
+            for (const table of tables) {
+                try {
+                    const response = await fetch("/api/assignments/apply", {
+                        method: "POST",
+                        headers: {
+                            "Content-Type": "application/json",
+                        },
+                        body: JSON.stringify({
+                            assignment_id: assignment.id,
+                            table_name: table,
+                        }),
+                    })
+
+                    const data = await response.json()
+
+                    if (!response.ok) {
+                        throw new Error(
+                            data.detail || `Failed to apply assignment '${assignment.id}' to ${table}`
+                        )
+                    }
+
+                    // Accumulate results
+                    if (data.results) {
+                        totalProcessed += data.results.processed || 0
+                        totalFiltered += data.results.filtered || 0
+                        totalPassed += data.results.passed || 0
+                    }
+
+                    results.push({
+                        assignment_id: assignment.id,
+                        table: table,
+                        source_name: assignment.source_name,
+                        rule_name: assignment.assigned_rules,
+                        ...data.results,
+                    })
+                } catch (error) {
+                    console.error(`Error applying assignment '${assignment.id}' to ${table}:`, error)
+                    // Continue with other assignments/tables instead of failing completely
+                }
+            }
+        }
+
+        console.log("Assignment application results:", results)
+        console.log("Totals:", { processed: totalProcessed, filtered: totalFiltered, passed: totalPassed })
+
+        toast.add({
+            severity: "success",
+            summary: "Assignments Applied Successfully",
+            detail: `Applied ${assignments.length} assignments across ${tables.length} tables. Processed ${totalProcessed} records: ${totalPassed} passed, ${totalFiltered} filtered`,
+            life: 5000,
+        })
+
+        // Refresh filter statistics after applying assignments
+        await loadAllFilterStats()
+    } catch (error) {
+        console.error("Error applying assignments:", error)
+        toast.add({
+            severity: "error",
+            summary: "Assignment Application Failed",
+            detail:
+                error instanceof Error
+                    ? error.message
+                    : "Failed to apply assignments",
+            life: 5000,
+        })
+    } finally {
+        applyingAllAssignments.value = false
     }
 }
 
@@ -1999,20 +2105,16 @@ const unapplyAssignment = async (
 
         if (!response.ok) {
             throw new Error(
-                data.detail ||
-                    `Failed to unapply assignment '${assignmentId}'`
+                data.detail || `Failed to unapply assignment '${assignmentId}'`
             )
         }
 
-        console.log(
-            `Assignment unapplication results for '${assignmentId}':`,
-            {
-                relevant_tables: data.relevant_tables,
-                processed_tables: data.processed_tables,
-                results: data.results,
-                table_results: data.table_results,
-            }
-        )
+        console.log(`Assignment unapplication results for '${assignmentId}':`, {
+            relevant_tables: data.relevant_tables,
+            processed_tables: data.processed_tables,
+            results: data.results,
+            table_results: data.table_results,
+        })
 
         toast.add({
             severity: "success",
@@ -2024,10 +2126,7 @@ const unapplyAssignment = async (
         // Refresh filter statistics after unapplying
         await loadAllFilterStats()
     } catch (error) {
-        console.error(
-            `Error unapplying assignment '${assignmentId}':`,
-            error
-        )
+        console.error(`Error unapplying assignment '${assignmentId}':`, error)
         toast.add({
             severity: "error",
             summary: "Assignment Unapplication Failed",
