@@ -5,11 +5,11 @@ import terminal from "vite-plugin-terminal"
 
 export default defineConfig(({ mode }) => ({
     plugins: [
-        vue(), 
+        vue(),
         terminal({
-            console: 'terminal',
-            output: ['terminal', 'console']
-        })
+            console: "terminal",
+            output: ["terminal", "console"],
+        }),
     ],
     resolve: {
         alias: {

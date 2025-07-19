@@ -72,7 +72,11 @@
                 </Column>
 
                 <!-- Skeleton Stream Mode Column -->
-                <Column field="stream_mode" header="Stream Mode" style="min-width: 120px">
+                <Column
+                    field="stream_mode"
+                    header="Stream Mode"
+                    style="min-width: 120px"
+                >
                     <template #body>
                         <Skeleton
                             height="1.5rem"
@@ -337,7 +341,9 @@
                 <template #body="{ data }">
                     <Tag
                         :value="data.stream_mode"
-                        :severity="data.stream_mode === 'live' ? 'success' : 'info'"
+                        :severity="
+                            data.stream_mode === 'live' ? 'success' : 'info'
+                        "
                     />
                 </template>
                 <template #filter="{ filterModel, filterCallback }">
@@ -488,69 +494,107 @@
             <template #expansion="slotProps">
                 <div class="p-4">
                     <div class="flex justify-between align-items-center mb-3">
-                        <h5 class="m-0">Programs for {{ slotProps.data.name }}</h5>
-                        <Badge 
-                            :value="slotProps.data.program_count" 
+                        <h5 class="m-0">
+                            Programs for {{ slotProps.data.name }}
+                        </h5>
+                        <Badge
+                            :value="slotProps.data.program_count"
                             severity="info"
                             class="program-count-badge"
                         />
                     </div>
-                    
+
                     <!-- Loading state for programs -->
-                    <div v-if="loadingPrograms[slotProps.data.m3u_id]" class="text-center p-4">
+                    <div
+                        v-if="loadingPrograms[slotProps.data.m3u_id]"
+                        class="text-center p-4"
+                    >
                         <ProgressSpinner style="width: 30px; height: 30px" />
                         <p class="mt-2 mb-0">Loading programs...</p>
                     </div>
-                    
+
                     <!-- Error state for programs -->
-                    <div v-else-if="programErrors[slotProps.data.m3u_id]" class="text-center p-4">
-                        <i class="pi pi-exclamation-triangle text-orange-500 text-2xl mb-2"></i>
-                        <p class="text-orange-600 mb-2">Failed to load programs</p>
-                        <Button 
-                            label="Retry" 
-                            icon="pi pi-refresh" 
+                    <div
+                        v-else-if="programErrors[slotProps.data.m3u_id]"
+                        class="text-center p-4"
+                    >
+                        <i
+                            class="pi pi-exclamation-triangle text-orange-500 text-2xl mb-2"
+                        ></i>
+                        <p class="text-orange-600 mb-2">
+                            Failed to load programs
+                        </p>
+                        <Button
+                            label="Retry"
+                            icon="pi pi-refresh"
                             size="small"
                             @click="loadChannelPrograms(slotProps.data)"
                         />
                     </div>
-                    
+
                     <!-- Programs DataTable -->
-                    <DataTable 
+                    <DataTable
                         v-else
                         :value="channelPrograms[slotProps.data.m3u_id] || []"
                         scrollable
                         scrollHeight="300px"
                         class="programs-datatable"
-                        :emptyMessage="slotProps.data.program_count === 0 ? 'No programs available' : 'Programs not loaded'"
+                        :emptyMessage="
+                            slotProps.data.program_count === 0
+                                ? 'No programs available'
+                                : 'Programs not loaded'
+                        "
                     >
-                        <Column field="title" header="Program Title" style="min-width: 200px">
+                        <Column
+                            field="title"
+                            header="Program Title"
+                            style="min-width: 200px"
+                        >
                             <template #body="{ data }">
                                 <div class="program-title">
-                                    {{ data.title || 'No Title' }}
+                                    {{ data.title || "No Title" }}
                                 </div>
                             </template>
                         </Column>
-                        
-                        <Column field="start_time" header="Start Time" style="min-width: 150px">
+
+                        <Column
+                            field="start_time"
+                            header="Start Time"
+                            style="min-width: 150px"
+                        >
                             <template #body="{ data }">
                                 <div class="program-time">
                                     {{ formatDateTime(data.start_time) }}
                                 </div>
                             </template>
                         </Column>
-                        
-                        <Column field="end_time" header="End Time" style="min-width: 150px">
+
+                        <Column
+                            field="end_time"
+                            header="End Time"
+                            style="min-width: 150px"
+                        >
                             <template #body="{ data }">
                                 <div class="program-time">
                                     {{ formatDateTime(data.end_time) }}
                                 </div>
                             </template>
                         </Column>
-                        
-                        <Column field="description" header="Description" style="min-width: 300px">
+
+                        <Column
+                            field="description"
+                            header="Description"
+                            style="min-width: 300px"
+                        >
                             <template #body="{ data }">
-                                <div class="program-description" :title="data.description">
-                                    {{ data.description || 'No description available' }}
+                                <div
+                                    class="program-description"
+                                    :title="data.description"
+                                >
+                                    {{
+                                        data.description ||
+                                        "No description available"
+                                    }}
                                 </div>
                             </template>
                         </Column>
@@ -723,7 +767,11 @@ const loadStreams = async (resetPage = false): Promise<void> => {
 
             // Update filter options if available
             if (data.filters && Object.keys(data.filters).length > 0) {
-                console.log("API response filters:", Object.keys(data.filters).length, "filter types")
+                console.log(
+                    "API response filters:",
+                    Object.keys(data.filters).length,
+                    "filter types"
+                )
                 updateFilterOptions(data.filters)
             } else {
                 console.log(
@@ -739,7 +787,8 @@ const loadStreams = async (resetPage = false): Promise<void> => {
                         if (retryData.success && retryData.filters) {
                             console.log(
                                 "Retry API response filters:",
-                                Object.keys(retryData.filters).length, "filter types"
+                                Object.keys(retryData.filters).length,
+                                "filter types"
                             )
                             updateFilterOptions(retryData.filters)
                         }
@@ -768,7 +817,11 @@ const loadStreams = async (resetPage = false): Promise<void> => {
 }
 
 const updateFilterOptions = (filters: Record<string, FilterValue[]>): void => {
-    console.log("Updating filter options with", Object.keys(filters).length, "filter types")
+    console.log(
+        "Updating filter options with",
+        Object.keys(filters).length,
+        "filter types"
+    )
 
     if (filters.source) {
         // Update header dropdown options
@@ -779,7 +832,11 @@ const updateFilterOptions = (filters: Record<string, FilterValue[]>): void => {
 
         // Update column filter options
         sourceFilterOptions.value = filters.source.map((f) => f.value)
-        console.log("Updated sourceFilterOptions:", sourceFilterOptions.value.length, "options")
+        console.log(
+            "Updated sourceFilterOptions:",
+            sourceFilterOptions.value.length,
+            "options"
+        )
     }
 
     if (filters.group) {
@@ -832,28 +889,28 @@ const initializeFilters = (): void => {
 // Handle DataTable filter events (server-side filtering)
 const onFilter = (event: any): void => {
     console.log("Filter event:", event)
-    
+
     // Extract filter values from PrimeVue event
     const filters = event.filters || {}
-    
+
     // Update global filter
     const globalFilterValue = filters.global?.value || null
     if (globalFilterValue !== globalFilter.value) {
         globalFilter.value = globalFilterValue
     }
-    
+
     // Update source filter
     const sourceFilterValue = filters.source?.value || null
     if (sourceFilterValue !== selectedSource.value) {
         selectedSource.value = sourceFilterValue
     }
-    
+
     // Update group filter
     const groupFilterValue = filters.group?.value || null
     if (groupFilterValue !== selectedGroup.value) {
         selectedGroup.value = groupFilterValue
     }
-    
+
     // Trigger backend API call with updated filters
     loadStreams(true)
 }
@@ -906,46 +963,50 @@ const onGroupFilterChange = (): void => {
 // Expandable rows functions
 const loadChannelPrograms = async (channel: StreamChannel): Promise<void> => {
     const channelId = channel.m3u_id
-    
+
     // Skip if already loading or already loaded
     if (loadingPrograms.value[channelId] || channelPrograms.value[channelId]) {
         return
     }
-    
+
     // Skip if tvg_id is empty or null (common in inverse/filtered view)
-    if (!channel.tvg_id || channel.tvg_id.trim() === '') {
-        console.warn(`Channel ${channel.name} has empty tvg_id, cannot load programs`)
+    if (!channel.tvg_id || channel.tvg_id.trim() === "") {
+        console.warn(
+            `Channel ${channel.name} has empty tvg_id, cannot load programs`
+        )
         programErrors.value[channelId] = true
         channelPrograms.value[channelId] = []
         return
     }
-    
+
     loadingPrograms.value[channelId] = true
     programErrors.value[channelId] = false
-    
+
     try {
         const encodedTvgId = encodeURIComponent(channel.tvg_id)
-        const response = await fetch(`/api/streams/${channel.source}/${encodedTvgId}/programs`)
-        
+        const response = await fetch(
+            `/api/streams/${channel.source}/${encodedTvgId}/programs`
+        )
+
         if (!response.ok) {
             throw new Error(`HTTP ${response.status}: ${response.statusText}`)
         }
-        
+
         const result = await response.json()
-        
+
         if (result.success && result.data) {
             channelPrograms.value[channelId] = result.data
         } else {
-            throw new Error(result.message || 'Failed to load programs')
+            throw new Error(result.message || "Failed to load programs")
         }
     } catch (error) {
-        console.error('Error loading channel programs:', error)
+        console.error("Error loading channel programs:", error)
         programErrors.value[channelId] = true
         toast.add({
-            severity: 'error',
-            summary: 'Error',
+            severity: "error",
+            summary: "Error",
             detail: `Failed to load programs for ${channel.name}`,
-            life: 3000
+            life: 3000,
         })
     } finally {
         loadingPrograms.value[channelId] = false

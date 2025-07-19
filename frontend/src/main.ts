@@ -36,7 +36,7 @@ app.use(ConfirmationService)
 app.use(ToastService)
 
 // Register tooltip directive
-app.directive('tooltip', Tooltip)
+app.directive("tooltip", Tooltip)
 
 app.mount("#app")
 

@@ -2355,13 +2355,15 @@ const fetchFilterStatsForSource = async (sourceName: string): Promise<void> => {
             console.log(
                 `API SUCCESS for source '${sourceName}': assignments=${Object.keys(data.data.assignments).length}`
             )
-            
+
             // Update each assignment with its filter stats
             sourceAssignmentsForSource.forEach((assignment) => {
                 const assignmentData = data.data.assignments[assignment.id]
                 if (assignmentData) {
                     const newFilterStats = {
-                        filter_stats: { [assignment.id]: assignmentData.filtered_count },
+                        filter_stats: {
+                            [assignment.id]: assignmentData.filtered_count,
+                        },
                         passed: data.data.passed,
                         all_not_passed: data.data.all_not_passed,
                         total: data.data.total,
@@ -2415,8 +2417,10 @@ const loadFilterStatsForAssignments = async (
     )
 
     // Group assignments by source name to minimize API calls
-    const sourceNames = [...new Set(validAssignments.map(a => a.source_name))]
-    console.log(`Will fetch stats for ${sourceNames.length} unique sources: ${sourceNames.join(', ')}`)
+    const sourceNames = [...new Set(validAssignments.map((a) => a.source_name))]
+    console.log(
+        `Will fetch stats for ${sourceNames.length} unique sources: ${sourceNames.join(", ")}`
+    )
 
     // Fetch filter stats for each unique source (one API call per source)
     const promises = sourceNames.map((sourceName) => {
