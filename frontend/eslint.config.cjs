@@ -44,7 +44,7 @@ const config = [
             ...tsRecommended.rules,
             ...prettierRecommended.rules,
             "prettier/prettier": "error",
-            
+
             // TypeScript type safety rules - surface type errors as lint errors
             "@typescript-eslint/no-unsafe-member-access": "error",
             "@typescript-eslint/no-unsafe-assignment": "warn",
@@ -56,7 +56,7 @@ const config = [
             "@typescript-eslint/no-unnecessary-type-assertion": "error",
             "@typescript-eslint/prefer-as-const": "error",
             "@typescript-eslint/no-non-null-assertion": "error",
-            
+
             // Catch type assignment errors
             "@typescript-eslint/no-misused-new": "error",
             "@typescript-eslint/no-this-alias": "error",
