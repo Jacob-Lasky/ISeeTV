@@ -1,5 +1,4 @@
-"""
-Job queue callback wrappers for scheduler integration.
+"""Job queue callback wrappers for scheduler integration.
 
 This module provides atomic callback functions that integrate the scheduler
 with the global job queue system to ensure single-job execution.
@@ -16,8 +15,7 @@ logger = logging.getLogger(__name__)
 async def refresh_job_callback_wrapper(
     source_name: str, file_type: Literal["m3u", "epg"]
 ) -> None:
-    """
-    Wrapper function to trigger refresh (download + ingest) via job queue.
+    """Wrapper function to trigger refresh (download + ingest) via job queue.
 
     This function integrates scheduled refresh jobs with the global job queue
     to ensure only one job runs at a time across the entire system.
@@ -25,22 +23,24 @@ async def refresh_job_callback_wrapper(
     Args:
         source_name: Name of the source
         file_type: Type of file to refresh
+
     """
     log_function(f"Scheduler triggering refresh job for {source_name} {file_type}")
 
     try:
         # Import here to avoid circular imports
-        from common.job_queue import enqueue_refresh_job
-        from common.utils import create_task_id
-        from common.task_manager import DownloadTaskManager, IngestTaskManager
-        from common.constants import DATA_PATH
-        from models.models import Source
-        import os
         import json
+        import os
+
+        from common.constants import DATA_PATH
+        from common.job_queue import enqueue_refresh_job
+        from common.task_manager import DownloadTaskManager, IngestTaskManager
+        from common.utils import create_task_id
+        from models.models import Source
 
         # Load sources configuration
         sources_file = os.path.join(DATA_PATH, "sources.json")
-        with open(sources_file, "r") as f:
+        with open(sources_file) as f:
             sources = [Source(**source) for source in json.load(f)]
 
         # Find the source
@@ -108,8 +108,7 @@ async def _execute_refresh_job(
     file_type: Literal["m3u", "epg"],
     sources_file: str,
 ) -> None:
-    """
-    Execute the actual refresh job (download + ingest).
+    """Execute the actual refresh job (download + ingest).
 
     This function is called by the job queue worker to execute the refresh job.
 
@@ -119,17 +118,19 @@ async def _execute_refresh_job(
         source_name: Name of the source
         file_type: Type of file to refresh
         sources_file: Path to sources configuration file
+
     """
     log_function(f"Executing refresh job for {source_name} {file_type}")
 
     try:
         # Import here to avoid circular imports
+        import json
+        import os
+
+        from common.constants import DATA_PATH
         from download.downloader import background_single_download_task
         from main import background_load_task
-        from common.constants import DATA_PATH
         from models.models import Source
-        import os
-        import json
 
         download_dir = os.path.join(DATA_PATH, "sources")
 
@@ -141,7 +142,7 @@ async def _execute_refresh_job(
         log_function(f"Download completed for {source_name} {file_type}")
 
         # Step 2: Load sources to get file path
-        with open(sources_file, "r") as f:
+        with open(sources_file) as f:
             sources = [Source(**source) for source in json.load(f)]
 
         source = next(

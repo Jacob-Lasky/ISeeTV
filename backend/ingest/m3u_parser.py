@@ -1,11 +1,12 @@
-from typing import List, Optional
-from models.models import M3uChannel
-from common.utils import log_function
-from collections import defaultdict
 import logging
 import re
+from collections import defaultdict
+
 from fastapi import HTTPException, status
-from common.task_manager import TaskManager, IngestTaskManager
+
+from common.task_manager import IngestTaskManager
+from common.utils import log_function
+from models.models import M3uChannel
 
 """
 M3U are usually text-based with a structure similar to:
@@ -145,8 +146,8 @@ def parse_extinf_line(line: str) -> tuple[dict, str]:
 
 
 def validate_m3u_channel(
-    attrs: dict, channel_name: str, stream_url: Optional[str]
-) -> Optional[M3uChannel]:
+    attrs: dict, channel_name: str, stream_url: str | None
+) -> M3uChannel | None:
     """Validate and create M3uChannel from parsed data"""
     # Warn if no stream URL
     if not stream_url or not stream_url.strip():
@@ -179,8 +180,8 @@ def validate_m3u_channel(
 
 
 def parse_m3u(
-    m3u_file: str, source: str = "m3u", task_id: Optional[str] = None
-) -> List[M3uChannel]:
+    m3u_file: str, source: str = "m3u", task_id: str | None = None
+) -> list[M3uChannel]:
     """Parse an M3U file and return a list of M3uChannel objects"""
     log_function(f"Parsing M3U file: {m3u_file}")
 
@@ -192,7 +193,7 @@ def parse_m3u(
     current_channel_name = None
 
     try:
-        with open(m3u_file, "r", encoding="utf-8") as f:
+        with open(m3u_file, encoding="utf-8") as f:
             for line_num, line in enumerate(f, 1):
                 line = line.strip()
 

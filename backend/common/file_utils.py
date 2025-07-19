@@ -5,11 +5,11 @@ through temporary file writes and atomic moves.
 """
 
 import json
+import logging
 import os
 import tempfile
-from typing import Any, Dict, List
 from pathlib import Path
-import logging
+from typing import Any
 
 from common.utils import log_function
 
@@ -29,6 +29,7 @@ def atomic_write_json(file_path: str, data: Any) -> None:
     Raises:
         OSError: If file operations fail
         json.JSONEncodeError: If data cannot be serialized to JSON
+
     """
     log_function(f"Atomically writing JSON to {file_path}")
 
@@ -69,6 +70,7 @@ def atomic_read_json(file_path: str, default: Any = None) -> Any:
 
     Returns:
         Parsed JSON data or default value
+
     """
     log_function(f"Reading JSON from {file_path}")
 
@@ -77,7 +79,7 @@ def atomic_read_json(file_path: str, default: Any = None) -> Any:
             log_function(f"File {file_path} does not exist, returning default")
             return default
 
-        with open(file_path, "r", encoding="utf-8") as f:
+        with open(file_path, encoding="utf-8") as f:
             data = json.load(f)
             log_function(f"Successfully read JSON from {file_path}")
             return data
@@ -93,6 +95,7 @@ def ensure_file_exists(file_path: str, default_content: Any = None) -> None:
     Args:
         file_path: Path to file to ensure exists
         default_content: Default content to write if file doesn't exist
+
     """
     if not os.path.exists(file_path):
         log_function(f"Creating file {file_path} with default content")

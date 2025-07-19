@@ -1,25 +1,25 @@
-"""
-File generation utilities for M3U and EPG formats.
+"""File generation utilities for M3U and EPG formats.
 Following atomic design principles with pure functions for file generation.
 """
 
-from typing import List, Dict, Any, Optional
-from datetime import datetime
 import json
 import xml.etree.ElementTree as ET
+from datetime import datetime
+from typing import Any
 from xml.dom import minidom
+
+from sqlalchemy import text
+
 from common.db import SessionLocal
 from common.utils import log_function
-from sqlalchemy import text
 
 
 def apply_unified_channel_filtering(
-    m3u_channels: List[Dict[str, Any]],
-    epg_channels: List[Dict[str, Any]],
-    programs: List[Dict[str, Any]],
-) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """
-    Apply unified filtering across M3U and EPG data to ensure cross-consistency.
+    m3u_channels: list[dict[str, Any]],
+    epg_channels: list[dict[str, Any]],
+    programs: list[dict[str, Any]],
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Apply unified filtering across M3U and EPG data to ensure cross-consistency.
     If a channel is blacklisted in either M3U or EPG, it's excluded from both outputs.
 
     Args:
@@ -29,6 +29,7 @@ def apply_unified_channel_filtering(
 
     Returns:
         Tuple of (filtered_m3u_channels, filtered_epg_channels, filtered_programs)
+
     """
     log_function("Applying unified channel filtering...")
 
@@ -87,15 +88,15 @@ def apply_unified_channel_filtering(
     return final_m3u_channels, final_epg_channels, final_programs
 
 
-def filter_passed_channels(channels: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
-    """
-    Filter channels to only include those that passed all rules (empty filter_reasons).
+def filter_passed_channels(channels: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    """Filter channels to only include those that passed all rules (empty filter_reasons).
 
     Args:
         channels: List of channel dictionaries with filter_reasons field
 
     Returns:
         List of channels that passed all filters
+
     """
     log_function("Filtering passed channels...")
     passed_channels = []
@@ -120,15 +121,15 @@ def filter_passed_channels(channels: List[Dict[str, Any]]) -> List[Dict[str, Any
     return passed_channels
 
 
-def generate_m3u_content(channels: List[Dict[str, Any]]) -> str:
-    """
-    Generate M3U playlist content from filtered channel data.
+def generate_m3u_content(channels: list[dict[str, Any]]) -> str:
+    """Generate M3U playlist content from filtered channel data.
 
     Args:
         channels: List of channel dictionaries (already filtered)
 
     Returns:
         M3U playlist content as string
+
     """
     log_function("Generating M3U content...")
     lines = ["#EXTM3U"]
@@ -168,10 +169,9 @@ def generate_m3u_content(channels: List[Dict[str, Any]]) -> str:
 
 
 def generate_epg_content(
-    channels: List[Dict[str, Any]], programs: List[Dict[str, Any]]
+    channels: list[dict[str, Any]], programs: list[dict[str, Any]]
 ) -> str:
-    """
-    Generate EPG XML content from filtered channel and program data.
+    """Generate EPG XML content from filtered channel and program data.
 
     Args:
         channels: List of EPG channel dictionaries (already filtered)
@@ -179,6 +179,7 @@ def generate_epg_content(
 
     Returns:
         EPG XML content as string
+
     """
     log_function("Generating EPG content...")
 
@@ -274,14 +275,14 @@ def generate_epg_content(
 
 
 def _format_epg_datetime(dt_str: str) -> str:
-    """
-    Format datetime string for EPG format (YYYYMMDDHHMMSS +0000).
+    """Format datetime string for EPG format (YYYYMMDDHHMMSS +0000).
 
     Args:
         dt_str: Datetime string in ISO format
 
     Returns:
         EPG formatted datetime string
+
     """
     log_function("Formatting EPG datetime...", level="debug")
     try:
@@ -299,14 +300,14 @@ def _format_epg_datetime(dt_str: str) -> str:
 
 
 def _datetime_to_timestamp(dt_str: str) -> int:
-    """
-    Convert datetime string to Unix timestamp.
+    """Convert datetime string to Unix timestamp.
 
     Args:
         dt_str: Datetime string in ISO format
 
     Returns:
         Unix timestamp as integer
+
     """
     log_function("Converting datetime to timestamp...", level="debug")
     try:
@@ -321,16 +322,16 @@ def _datetime_to_timestamp(dt_str: str) -> int:
 
 
 def get_filtered_channels_and_programs(
-    source: Optional[str] = None,
-) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
-    """
-    Get filtered M3U channels, EPG channels, and programs from database.
+    source: str | None = None,
+) -> tuple[list[dict[str, Any]], list[dict[str, Any]], list[dict[str, Any]]]:
+    """Get filtered M3U channels, EPG channels, and programs from database.
 
     Args:
         source: Optional source filter
 
     Returns:
         Tuple of (m3u_channels, epg_channels, programs) that passed filters
+
     """
     log_function("Getting filtered channels and programs...")
     with SessionLocal() as session:

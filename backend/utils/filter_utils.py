@@ -1,12 +1,14 @@
 """Utility functions for precomputing and managing filter values."""
 
-from typing import Dict, List, Any
-from sqlalchemy.orm import Session
-from sqlalchemy import text
-from models.db_models import FilterValueTable
 import logging
-from common.utils import log_function
 from collections import defaultdict
+from typing import Any
+
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from common.utils import log_function
+from models.db_models import FilterValueTable
 
 logger = logging.getLogger(__name__)
 
@@ -121,7 +123,7 @@ def precompute_filter_values(session: Session, table_name: str) -> None:
 
 def get_filter_values(
     session: Session, table_name: str, column_name: str
-) -> List[Dict[str, Any]]:
+) -> list[dict[str, Any]]:
     """Get precomputed filter values for a specific table and column.
 
     Args:
@@ -152,7 +154,7 @@ def get_filter_values(
 
 def get_all_filter_values(
     session: Session, table_name: str
-) -> Dict[str, List[Dict[str, Any]]]:
+) -> dict[str, list[dict[str, Any]]]:
     """Get all precomputed filter values for a table.
 
     Args:
@@ -183,7 +185,7 @@ def get_all_filter_values(
         return {}
 
 
-def get_table_filter_statistics(session: Session, table_name: str) -> Dict[str, int]:
+def get_table_filter_statistics(session: Session, table_name: str) -> dict[str, int]:
     """Get filter statistics for an entire table.
 
     Args:
@@ -192,6 +194,7 @@ def get_table_filter_statistics(session: Session, table_name: str) -> Dict[str, 
 
     Returns:
         Dictionary mapping filter reason to count
+
     """
     try:
         log_function(f"Getting filter statistics for table: {table_name}")
@@ -230,7 +233,7 @@ def get_table_filter_statistics(session: Session, table_name: str) -> Dict[str, 
 
 def get_table_filter_statistics_by_source(
     session: Session, table_name: str, source: str
-) -> Dict[str, int]:
+) -> dict[str, int]:
     try:
         log_function(
             f"Getting filter statistics for table: {table_name} and source: {source}"

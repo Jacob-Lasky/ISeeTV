@@ -1,24 +1,23 @@
 """Utility functions for streams view with atomic join logic."""
 
-from typing import Dict, List, Any, Optional, Tuple
-from sqlalchemy.orm import Session
-from sqlalchemy import text, func
-from models.db_models import M3uChannelTable, EpgChannelTable, ProgramTable
-from models.stream_models import StreamChannel, StreamProgram
-from utils.filter_utils import precompute_filter_values, get_all_filter_values
 import logging
-from common.utils import log_function
 from datetime import datetime
-from rules.ingestion_rules import IngestionRulesEngine
+from typing import Any
+
+from sqlalchemy import text
+from sqlalchemy.orm import Session
+
+from common.utils import log_function
+from models.stream_models import StreamChannel, StreamProgram
+from utils.filter_utils import get_all_filter_values
 
 logger = logging.getLogger(__name__)
 
 
 def _get_rules_filter_condition(
-    source: Optional[str], filter_view: str = "normal"
-) -> Optional[str]:
-    """
-    Atomic function to generate SQL WHERE condition for rules-based filtering.
+    source: str | None, filter_view: str = "normal"
+) -> str | None:
+    """Atomic function to generate SQL WHERE condition for rules-based filtering.
 
     Uses the filter_reasons field populated by the post-load rules system to
     determine which records should be included based on filter view mode.
@@ -34,6 +33,7 @@ def _get_rules_filter_condition(
 
     Returns:
         SQL WHERE condition string or None if no filtering needed
+
     """
     if filter_view == "all":
         # Show all rows, ignoring filter status
@@ -63,13 +63,12 @@ def _get_rules_filter_condition(
 
 def get_filter_view_counts(
     session: Session,
-    source: Optional[str] = None,
-    group: Optional[str] = None,
-    global_filter: Optional[str] = None,
-    column_filters: Optional[Dict[str, str]] = None,
-) -> Dict[str, int]:
-    """
-    Atomic function to get counts for each filter view mode using a single optimized query.
+    source: str | None = None,
+    group: str | None = None,
+    global_filter: str | None = None,
+    column_filters: dict[str, str] | None = None,
+) -> dict[str, int]:
+    """Atomic function to get counts for each filter view mode using a single optimized query.
 
     Args:
         session: SQLAlchemy session
@@ -80,6 +79,7 @@ def get_filter_view_counts(
 
     Returns:
         Dictionary with counts for normal, inverse, and all views
+
     """
     try:
         # Single query with conditional counting for all filter views
@@ -161,19 +161,18 @@ def get_filter_view_counts(
 
 def get_streams_query(
     session: Session,
-    source: Optional[str] = None,
-    group: Optional[str] = None,
+    source: str | None = None,
+    group: str | None = None,
     page: int = 1,
     page_size: int = 100,
     sort_field: str = "name",
     sort_order: str = "asc",
-    global_filter: Optional[str] = None,
-    column_filters: Optional[Dict[str, str]] = None,
+    global_filter: str | None = None,
+    column_filters: dict[str, str] | None = None,
     apply_rules: bool = True,
     filter_view: str = "normal",
-) -> Tuple[List[StreamChannel], int]:
-    """
-    Atomic function to get streams with joined M3U, EPG, and program data.
+) -> tuple[list[StreamChannel], int]:
+    """Atomic function to get streams with joined M3U, EPG, and program data.
 
     Performs a complex LEFT JOIN query to combine:
     - m3u_channels (primary table with stream URLs)
@@ -198,6 +197,7 @@ def get_streams_query(
 
     Returns:
         Tuple of (stream_channels, total_count)
+
     """
     log_function(
         f"Executing streams query: page={page}, size={page_size}, source={source}, group={group}"
@@ -334,7 +334,7 @@ def get_streams_query(
 
         # Add pagination
         offset = (page - 1) * page_size
-        base_query += f" LIMIT :limit OFFSET :offset"
+        base_query += " LIMIT :limit OFFSET :offset"
         params["limit"] = page_size
         params["offset"] = offset
 
@@ -395,11 +395,10 @@ def get_stream_programs_query(
     page_size: int = 100,
     sort_field: str = "start_time",
     sort_order: str = "asc",
-    global_filter: Optional[str] = None,
-    column_filters: Optional[Dict[str, str]] = None,
-) -> Tuple[List[StreamProgram], int]:
-    """
-    Atomic function to get programs for a specific channel with context.
+    global_filter: str | None = None,
+    column_filters: dict[str, str] | None = None,
+) -> tuple[list[StreamProgram], int]:
+    """Atomic function to get programs for a specific channel with context.
 
     Args:
         session: SQLAlchemy session
@@ -414,6 +413,7 @@ def get_stream_programs_query(
 
     Returns:
         Tuple of (stream_programs, total_count)
+
     """
     log_function(
         f"Executing stream programs query: channel_id={channel_id}, source={source}"
@@ -503,7 +503,7 @@ def get_stream_programs_query(
 
         # Add pagination
         offset = (page - 1) * page_size
-        base_query += f" LIMIT :limit OFFSET :offset"
+        base_query += " LIMIT :limit OFFSET :offset"
         params["limit"] = page_size
         params["offset"] = offset
 
@@ -560,11 +560,11 @@ def get_stream_programs_query(
 
 
 def precompute_streams_filter_values(session: Session) -> None:
-    """
-    Precompute filter values for the streams view.
+    """Precompute filter values for the streams view.
 
     Args:
         session: SQLAlchemy session
+
     """
     log_function("Precomputing filter values for streams view")
 
@@ -640,15 +640,15 @@ def precompute_streams_filter_values(session: Session) -> None:
         raise
 
 
-def get_streams_filter_values(session: Session) -> Dict[str, List[Dict[str, Any]]]:
-    """
-    Get precomputed filter values for streams view.
+def get_streams_filter_values(session: Session) -> dict[str, list[dict[str, Any]]]:
+    """Get precomputed filter values for streams view.
 
     Args:
         session: SQLAlchemy session
 
     Returns:
         Dictionary mapping column names to filter values
+
     """
     try:
         return get_all_filter_values(session, "streams")

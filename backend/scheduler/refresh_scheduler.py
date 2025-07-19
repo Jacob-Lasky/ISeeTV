@@ -1,34 +1,32 @@
-"""
-APScheduler + asyncio refresh scheduling system for ISeeTV sources.
+"""APScheduler + asyncio refresh scheduling system for ISeeTV sources.
 
 This module provides atomic, modular scheduling functionality that integrates
 with existing download and ingest flows in main.py.
 """
 
 import asyncio
-import logging
 import json
+import logging
 import os
+from collections.abc import Callable
 from datetime import datetime, timedelta
-from typing import Dict, List, Optional, Literal, Callable, Any
+from typing import Any, Literal
 from zoneinfo import ZoneInfo
 
+from apscheduler.events import EVENT_JOB_ERROR, EVENT_JOB_EXECUTED, JobExecutionEvent
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
 from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
-from apscheduler.job import Job
-from apscheduler.events import EVENT_JOB_EXECUTED, EVENT_JOB_ERROR, JobExecutionEvent
 
-from models.models import Source
-from common.utils import log_function
 from common.constants import DATA_PATH
+from common.utils import log_function
+from models.models import Source
 
 logger = logging.getLogger(__name__)
 
 
 class RefreshScheduler:
-    """
-    Atomic scheduler for Source refresh operations.
+    """Atomic scheduler for Source refresh operations.
 
     Follows atomic design principles:
     - Single responsibility: manages scheduled refreshes only
@@ -42,19 +40,19 @@ class RefreshScheduler:
         ingest_callback: Callable[[str, Literal["m3u", "epg"]], Any],
         sources_file: str = os.path.join(DATA_PATH, "sources.json"),
     ):
-        """
-        Initialize the refresh scheduler.
+        """Initialize the refresh scheduler.
 
         Args:
             download_callback: Async function to trigger downloads (e.g., queue_file_for_download)
             ingest_callback: Async function to trigger ingestion (e.g., load_file_to_db)
             sources_file: Path to sources configuration file
+
         """
         self.scheduler = AsyncIOScheduler()
         self.download_callback = download_callback
         self.ingest_callback = ingest_callback
         self.sources_file = sources_file
-        self._job_registry: Dict[str, List[str]] = {}  # source_name -> [job_ids]
+        self._job_registry: dict[str, list[str]] = {}  # source_name -> [job_ids]
 
         # Configure scheduler event listeners
         self.scheduler.add_listener(self._on_job_executed, EVENT_JOB_EXECUTED)
@@ -72,15 +70,15 @@ class RefreshScheduler:
         log_function("Shutting down RefreshScheduler")
         self.scheduler.shutdown(wait=wait)
 
-    def load_sources(self) -> List[Source]:
-        """
-        Load sources from configuration file.
+    def load_sources(self) -> list[Source]:
+        """Load sources from configuration file.
 
         Returns:
             List of Source objects
+
         """
         try:
-            with open(self.sources_file, "r") as f:
+            with open(self.sources_file) as f:
                 sources_data = json.load(f)
             return [Source(**source) for source in sources_data]
         except (FileNotFoundError, json.JSONDecodeError, ValueError) as e:
@@ -88,8 +86,7 @@ class RefreshScheduler:
             return []
 
     def schedule_all_sources(self) -> None:
-        """
-        Schedule refresh jobs for all enabled sources.
+        """Schedule refresh jobs for all enabled sources.
 
         This is the main entry point for setting up all scheduled refreshes.
         """
@@ -103,11 +100,11 @@ class RefreshScheduler:
                 log_function(f"Skipping disabled source: {source.name}")
 
     def schedule_source_refresh(self, source: Source) -> None:
-        """
-        Schedule refresh jobs for a single source.
+        """Schedule refresh jobs for a single source.
 
         Args:
             source: Source object to schedule
+
         """
         log_function(f"Scheduling refresh for source: {source.name}")
 
@@ -139,9 +136,8 @@ class RefreshScheduler:
 
     def _schedule_file_refresh(
         self, source: Source, file_type: Literal["m3u", "epg"]
-    ) -> Optional[str]:
-        """
-        Schedule refresh for a specific file type of a source.
+    ) -> str | None:
+        """Schedule refresh for a specific file type of a source.
 
         Args:
             source: Source object
@@ -149,6 +145,7 @@ class RefreshScheduler:
 
         Returns:
             Job ID if scheduled successfully, None otherwise
+
         """
         try:
             # Calculate next refresh datetime
@@ -182,15 +179,15 @@ class RefreshScheduler:
             logger.error(f"Error scheduling {file_type} refresh for {source.name}: {e}")
             return None
 
-    def _calculate_next_refresh(self, source: Source) -> Optional[datetime]:
-        """
-        Calculate the next refresh datetime for a source.
+    def _calculate_next_refresh(self, source: Source) -> datetime | None:
+        """Calculate the next refresh datetime for a source.
 
         Args:
             source: Source object
 
         Returns:
             Next refresh datetime or None if invalid configuration
+
         """
         if not source.refresh_time or not source.refresh_every_hours:
             return None
@@ -226,14 +223,14 @@ class RefreshScheduler:
             return None
 
     def _create_cron_trigger(self, source: Source):
-        """
-        Create a trigger for recurring refresh.
+        """Create a trigger for recurring refresh.
 
         Args:
             source: Source object
 
         Returns:
             Trigger for the source's refresh schedule (CronTrigger or IntervalTrigger)
+
         """
         hour, minute = map(int, source.refresh_time.split(":"))
         tz = (
@@ -265,14 +262,14 @@ class RefreshScheduler:
     async def _refresh_file_job(
         self, source_name: str, file_type: Literal["m3u", "epg"]
     ) -> None:
-        """
-        Execute refresh job for a specific file.
+        """Execute refresh job for a specific file.
 
         This is the atomic job function that orchestrates download + ingest.
 
         Args:
             source_name: Name of the source
             file_type: Type of file to refresh
+
         """
         log_function(f"Executing refresh job for {source_name} {file_type}")
 
@@ -296,11 +293,11 @@ class RefreshScheduler:
             raise
 
     def remove_source_jobs(self, source_name: str) -> None:
-        """
-        Remove all scheduled jobs for a source.
+        """Remove all scheduled jobs for a source.
 
         Args:
             source_name: Name of the source
+
         """
         if source_name in self._job_registry:
             for job_id in self._job_registry[source_name]:
@@ -313,21 +310,21 @@ class RefreshScheduler:
             del self._job_registry[source_name]
 
     def update_source_schedule(self, source: Source) -> None:
-        """
-        Update the schedule for a specific source.
+        """Update the schedule for a specific source.
 
         Args:
             source: Updated source object
+
         """
         log_function(f"Updating schedule for source: {source.name}")
         self.schedule_source_refresh(source)
 
-    def get_scheduled_jobs(self) -> List[Dict[str, Any]]:
-        """
-        Get information about all scheduled jobs.
+    def get_scheduled_jobs(self) -> list[dict[str, Any]]:
+        """Get information about all scheduled jobs.
 
         Returns:
             List of job information dictionaries
+
         """
         jobs = []
         for job in self.scheduler.get_jobs():
@@ -356,8 +353,7 @@ class RefreshScheduler:
 
 
 def parse_refresh_time(refresh_time: str) -> tuple[int, int]:
-    """
-    Parse refresh time string into hour and minute.
+    """Parse refresh time string into hour and minute.
 
     Args:
         refresh_time: Time string in HH:MM format
@@ -367,6 +363,7 @@ def parse_refresh_time(refresh_time: str) -> tuple[int, int]:
 
     Raises:
         ValueError: If time format is invalid
+
     """
     try:
         hour, minute = map(int, refresh_time.split(":"))
@@ -381,10 +378,9 @@ def calculate_next_occurrence(
     base_time: datetime,
     refresh_time: str,
     interval_hours: int,
-    timezone: Optional[str] = None,
+    timezone: str | None = None,
 ) -> datetime:
-    """
-    Calculate the next occurrence of a refresh time.
+    """Calculate the next occurrence of a refresh time.
 
     Args:
         base_time: Base datetime to calculate from
@@ -394,6 +390,7 @@ def calculate_next_occurrence(
 
     Returns:
         Next occurrence datetime
+
     """
     hour, minute = parse_refresh_time(refresh_time)
     tz = ZoneInfo(timezone) if timezone else base_time.tzinfo
@@ -412,15 +409,15 @@ def calculate_next_occurrence(
     return target_time
 
 
-def validate_source_refresh_config(source: Source) -> List[str]:
-    """
-    Validate source refresh configuration.
+def validate_source_refresh_config(source: Source) -> list[str]:
+    """Validate source refresh configuration.
 
     Args:
         source: Source object to validate
 
     Returns:
         List of validation error messages (empty if valid)
+
     """
     errors = []
 

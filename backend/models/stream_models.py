@@ -1,8 +1,9 @@
 """Stream models for joined view of channels and programs."""
 
-from typing import Optional, List, Dict, Any
-from pydantic import BaseModel
 from datetime import datetime
+from typing import Any
+
+from pydantic import BaseModel
 
 
 class StreamChannel(BaseModel):
@@ -14,14 +15,14 @@ class StreamChannel(BaseModel):
     tvg_id: str  # This is the canonical channel_id
     name: str
     stream_url: str
-    logo_url: Optional[str]
-    group: Optional[str]
+    logo_url: str | None
+    group: str | None
     stream_mode: str
 
     # EPG Channel Data (joined)
-    epg_id: Optional[int]
-    display_name: Optional[str]
-    icon_url: Optional[str]
+    epg_id: int | None
+    display_name: str | None
+    icon_url: str | None
 
     # Metadata
     created_at: datetime
@@ -29,8 +30,8 @@ class StreamChannel(BaseModel):
 
     # Program counts (aggregated)
     program_count: int = 0
-    next_program_title: Optional[str] = None
-    next_program_start: Optional[datetime] = None
+    next_program_title: str | None = None
+    next_program_start: datetime | None = None
 
 
 class StreamProgram(BaseModel):
@@ -43,16 +44,16 @@ class StreamProgram(BaseModel):
     channel_id: str
     start_time: datetime
     end_time: datetime
-    title: Optional[str]
-    description: Optional[str]
+    title: str | None
+    description: str | None
 
     # Channel Context (joined)
-    channel_name: Optional[str]
-    channel_display_name: Optional[str]
-    channel_group: Optional[str]
-    stream_url: Optional[str]
-    logo_url: Optional[str]
-    icon_url: Optional[str]
+    channel_name: str | None
+    channel_display_name: str | None
+    channel_group: str | None
+    stream_url: str | None
+    logo_url: str | None
+    icon_url: str | None
 
     # Metadata
     created_at: datetime
@@ -63,26 +64,26 @@ class StreamsResponse(BaseModel):
     """Response model for streams API endpoint."""
 
     success: bool
-    data: List[StreamChannel]
+    data: list[StreamChannel]
     total: int
     page: int
     page_size: int
     total_pages: int
     has_next: bool
     has_prev: bool
-    filters: Dict[str, List[Dict[str, Any]]] = {}
-    filter_view_counts: Dict[str, int] = {}
+    filters: dict[str, list[dict[str, Any]]] = {}
+    filter_view_counts: dict[str, int] = {}
 
 
 class StreamProgramsResponse(BaseModel):
     """Response model for stream programs API endpoint."""
 
     success: bool
-    data: List[StreamProgram]
+    data: list[StreamProgram]
     total: int
     page: int
     page_size: int
     total_pages: int
     has_next: bool
     has_prev: bool
-    filters: Dict[str, List[Dict[str, Any]]] = {}
+    filters: dict[str, list[dict[str, Any]]] = {}

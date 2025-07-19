@@ -1,100 +1,96 @@
-from fastapi import FastAPI
-from fastapi.middleware.cors import CORSMiddleware
-from pydantic import ValidationError
-from typing import Dict, List, Literal, Any, Sequence, Optional
-from sqlalchemy import inspect, text, Row
-import uvicorn
-import json
-from fastapi import HTTPException, status, Body
-from fastapi.responses import RedirectResponse, StreamingResponse, Response
-import httpx
-from fastapi.responses import StreamingResponse
 import asyncio
+import json
 import logging
 import os
-from models.models import (
-    DownloadProgress,
-    IngestProgress,
-    Message,
-    Source,
-    GlobalSettings,
-    DownloadTaskResponse,
-    DownloadAllTasksResponse,
-    TableResponse,
+from typing import Any, Literal
+
+import httpx
+import uvicorn
+from fastapi import Body, FastAPI, HTTPException, status
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import RedirectResponse, Response, StreamingResponse
+from pydantic import ValidationError
+from sqlalchemy import inspect, text
+
+from common.constants import DATA_PATH
+from common.db import SessionLocal, engine, init_db
+from common.job_queue import (
+    cancel_job,
+    enqueue_download_job,
+    enqueue_ingest_job,
+    get_job_status,
+    get_queue_status,
+    initialize_job_queue,
+    shutdown_job_queue,
 )
-from models.stream_models import (
-    StreamsResponse,
-    StreamProgramsResponse,
+from common.rules_storage import (
+    load_assignments,
+    load_rules,
+    save_assignments,
+    save_rules,
+)
+from common.state import cancel_task
+from common.task_manager import DownloadTaskManager, IngestTaskManager, TaskManager
+from common.utils import (
+    create_task_id,
+    format_download_progress_response,
+    format_ingest_progress_response,
+    format_table_response,
+    get_all_progress_response,
+    get_progress_response,
+    log_function,
 )
 from download.downloader import (
     background_single_download_task,
 )
-from common.task_manager import DownloadTaskManager
-from common.job_queue import (
-    initialize_job_queue,
-    shutdown_job_queue,
-    enqueue_download_job,
-    enqueue_ingest_job,
-    enqueue_refresh_job,
-    enqueue_bulk_download_job,
-    get_queue_status,
-    get_job_status,
-    cancel_job,
-)
-from common.utils import (
-    create_task_id,
-    get_progress_response,
-    get_all_progress_response,
-    format_download_progress_response,
-    format_ingest_progress_response,
-    format_table_response,
-)
-from common.constants import DATA_PATH
 from ingest.epg_loader import load_epg_file_async
 from ingest.m3u_loader import load_m3u_file_async
-from common.task_manager import TaskManager, IngestTaskManager
-from utils.filter_utils import (
-    precompute_filter_values,
-    get_all_filter_values,
-    get_table_filter_statistics,
-    get_table_filter_statistics_by_source,
+from models.models import (
+    DownloadAllTasksResponse,
+    DownloadProgress,
+    DownloadTaskResponse,
+    GlobalSettings,
+    IngestProgress,
+    Message,
+    Source,
+    TableResponse,
 )
-from utils.stream_utils import (
-    get_streams_query,
-    get_stream_programs_query,
-    precompute_streams_filter_values,
-    get_streams_filter_values,
-    get_filter_view_counts,
+from models.stream_models import (
+    StreamProgramsResponse,
+    StreamsResponse,
 )
-from utils.file_generators import (
-    get_filtered_channels_and_programs,
-    filter_passed_channels,
-    apply_unified_channel_filtering,
-    generate_m3u_content,
-    generate_epg_content,
+from rules.ingestion_rules import (
+    INGESTION_RULES_LOGS,
+    IngestionRule,
+    IngestionRulesEngine,
+    SourceRuleAssignment,
+    get_ingestion_rules_status,
 )
-from common.db import init_db, engine, SessionLocal
-from common.utils import log_function
 from scheduler.scheduler_integration import (
     get_scheduler_manager,
     initialize_scheduler,
     start_scheduler,
     stop_scheduler,
 )
-from rules.ingestion_rules import (
-    get_ingestion_rules_status,
-    IngestionRule,
-    SourceRuleAssignment,
-    INGESTION_RULES_LOGS,
-    IngestionRulesEngine,
+from utils.file_generators import (
+    apply_unified_channel_filtering,
+    generate_epg_content,
+    generate_m3u_content,
+    get_filtered_channels_and_programs,
 )
-from common.rules_storage import (
-    load_rules,
-    load_assignments,
-    save_rules,
-    save_assignments,
+from utils.filter_utils import (
+    get_all_filter_values,
+    get_table_filter_statistics,
+    get_table_filter_statistics_by_source,
+    precompute_filter_values,
 )
-from common.state import cancel_task
+from utils.stream_utils import (
+    get_filter_view_counts,
+    get_stream_programs_query,
+    get_streams_filter_values,
+    get_streams_query,
+    precompute_streams_filter_values,
+)
 
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
@@ -215,7 +211,7 @@ async def get_settings(
     """Return settings from the provided file"""
     log_function(level="debug")
     try:
-        with open(settings_file, "r") as f:
+        with open(settings_file) as f:
             return GlobalSettings(**json.load(f))
     except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
         raise HTTPException(
@@ -247,17 +243,17 @@ async def set_settings(
 
 @app.get(
     "/api/sources",
-    response_model=List[Source],
+    response_model=list[Source],
     tags=["Sources"],
     status_code=status.HTTP_200_OK,
 )
 async def get_sources(
     sources_file: str = os.path.join(DATA_PATH, "sources.json"),
-) -> List[Source]:
+) -> list[Source]:
     """Return sources from the provided file"""
     log_function(level="debug")
     try:
-        with open(sources_file, "r") as f:
+        with open(sources_file) as f:
             return [Source(**source) for source in json.load(f)]
     except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
         raise HTTPException(
@@ -272,7 +268,7 @@ async def get_sources(
     status_code=status.HTTP_201_CREATED,
 )
 async def set_sources(
-    sources: List[Source], sources_file: str = os.path.join(DATA_PATH, "sources.json")
+    sources: list[Source], sources_file: str = os.path.join(DATA_PATH, "sources.json")
 ) -> Message:
     """Set sources in the provided file"""
     log_function(level="debug")
@@ -300,11 +296,11 @@ async def get_ingest_progress_by_id(task_id: str) -> IngestProgress:
 
 @app.get(
     "/api/ingest/progress",
-    response_model=Dict[str, Dict],
+    response_model=dict[str, dict],
     tags=["Ingest"],
     status_code=status.HTTP_200_OK,
 )
-async def get_ingest_progress() -> Dict[str, Dict]:
+async def get_ingest_progress() -> dict[str, dict]:
     """Get all ingest progress"""
     log_function("Getting ingest progress", level="debug")
     progress_data = get_all_progress_response("ingest")
@@ -325,11 +321,11 @@ async def get_download_progress_by_id(task_id: str) -> DownloadProgress:
 
 @app.get(
     "/api/download/progress",
-    response_model=Dict[str, DownloadProgress],
+    response_model=dict[str, DownloadProgress],
     tags=["Download"],
     status_code=status.HTTP_200_OK,
 )
-async def get_all_download_progress() -> Dict[str, DownloadProgress]:
+async def get_all_download_progress() -> dict[str, DownloadProgress]:
     """Get all download progress tasks"""
     log_function(level="debug")
     progress_data = get_all_progress_response("download")
@@ -374,7 +370,7 @@ async def download_all_files(
     """Start background download of all files of a specific type - one task per source"""
     log_function(f"Downloading all {file_type} files")
     try:
-        with open(sources_file, "r") as f:
+        with open(sources_file) as f:
             sources = [Source(**source) for source in json.load(f)]
 
         # Filter sources with file_type URLs in file_metadata
@@ -486,7 +482,7 @@ async def download_file_stream(
             )
 
         # Load sources to get the file URL
-        with open(sources_file, "r") as f:
+        with open(sources_file) as f:
             sources_data = json.load(f)
 
         # Find the source
@@ -571,7 +567,7 @@ async def download_file_stream(
 
 @app.post(
     "/api/load/{file_type}/{source_name}",
-    response_model=Dict[str, str],
+    response_model=dict[str, str],
     tags=["Database"],
     status_code=status.HTTP_202_ACCEPTED,
 )
@@ -579,12 +575,12 @@ async def load_file_to_db(
     file_type: Literal["m3u", "epg"],
     source_name: str,
     sources_file: str = os.path.join(DATA_PATH, "sources.json"),
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """Start async database loading task for parsed file data"""
     log_function(f"Loading {file_type} file to database for {source_name}")
     try:
         # Load sources configuration
-        with open(sources_file, "r") as f:
+        with open(sources_file) as f:
             sources = [Source(**source) for source in json.load(f)]
 
         # Find the source
@@ -730,7 +726,7 @@ async def background_load_task(
     tags=["Database"],
     status_code=status.HTTP_200_OK,
 )
-async def get_db_table_head(table: str) -> Dict[str, Any]:
+async def get_db_table_head(table: str) -> dict[str, Any]:
     """Return the first 10 rows of a table"""
     try:
         with SessionLocal() as session:
@@ -753,8 +749,8 @@ async def get_db_table_head(table: str) -> Dict[str, Any]:
 )
 async def get_table_data(
     table_name: str,
-    source: Optional[str] = None,
-) -> Dict[str, Any]:
+    source: str | None = None,
+) -> dict[str, Any]:
     """Return paginated table data with optional source filtering"""
     # Validate table name to prevent SQL injection
     valid_tables = ["epg_channels", "m3u_channels", "programs"]
@@ -793,11 +789,11 @@ async def get_table_data(
 
 @app.get(
     "/api/db/summary",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Database"],
     status_code=status.HTTP_200_OK,
 )
-async def get_db_summary() -> Dict[str, Any]:
+async def get_db_summary() -> dict[str, Any]:
     """Return a summary of the database"""
     inspector = inspect(engine)
     summary = []
@@ -838,11 +834,11 @@ async def get_db_summary() -> Dict[str, Any]:
 
 @app.get(
     "/api/tables/{table_name}/filtered_counts/{source}",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Database"],
     status_code=status.HTTP_200_OK,
 )
-async def get_table_filtered_counts(table_name: str, source: str) -> Dict[str, Any]:
+async def get_table_filtered_counts(table_name: str, source: str) -> dict[str, Any]:
     """Get filter statistics for an entire table"""
     try:
         with SessionLocal() as session:
@@ -864,13 +860,13 @@ async def get_table_filtered_counts(table_name: str, source: str) -> Dict[str, A
 
 @app.get(
     "/api/tables/{table_name}/filtered_counts/{source}/{rule}",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Database"],
     status_code=status.HTTP_200_OK,
 )
 async def get_table_filtered_counts_by_rule(
     table_name: str, source: str, rule: str
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Get filter statistics for a specific rule on a specific table and source"""
     try:
         with SessionLocal() as session:
@@ -924,11 +920,11 @@ async def get_table_filtered_counts_by_rule(
 
 @app.get(
     "/api/tables/{table_name}/filters",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Database"],
     status_code=status.HTTP_200_OK,
 )
-async def get_table_filter_values(table_name: str) -> Dict[str, Any]:
+async def get_table_filter_values(table_name: str) -> dict[str, Any]:
     """Get precomputed filter values for a table's filterable columns"""
     # Validate table name to prevent SQL injection
     valid_tables = ["epg_channels", "m3u_channels", "programs"]
@@ -957,11 +953,11 @@ async def get_table_filter_values(table_name: str) -> Dict[str, Any]:
 
 @app.get(
     "/api/tables/{table_name}/columns",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Database"],
     status_code=status.HTTP_200_OK,
 )
-async def get_table_columns(table_name: str) -> Dict[str, Any]:
+async def get_table_columns(table_name: str) -> dict[str, Any]:
     """Get column names for a specific table"""
     # Validate table name to prevent SQL injection
     valid_tables = ["epg_channels", "m3u_channels", "programs"]
@@ -990,13 +986,13 @@ async def get_table_columns(table_name: str) -> Dict[str, Any]:
 
 @app.get(
     "/api/tables/{table_name}/filter_counts_by_assignment/{source}",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Database"],
     status_code=status.HTTP_200_OK,
 )
 async def get_table_filter_counts_by_assignment(
     table_name: str, source: str
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Get filter statistics organized by assignment for a specific table and source"""
     try:
         with SessionLocal() as session:
@@ -1076,14 +1072,14 @@ async def get_table_filter_counts_by_assignment(
     status_code=status.HTTP_200_OK,
 )
 async def get_streams(
-    source: Optional[str] = None,
-    group: Optional[str] = None,
+    source: str | None = None,
+    group: str | None = None,
     page: int = 1,
     page_size: int = 100,
     sort_field: str = "name",
     sort_order: str = "asc",
-    global_filter: Optional[str] = None,
-    column_filters: Optional[str] = None,
+    global_filter: str | None = None,
+    column_filters: str | None = None,
     apply_rules: bool = True,
     filter_view: str = "matched",
 ) -> StreamsResponse:
@@ -1108,6 +1104,7 @@ async def get_streams(
 
     Returns:
         StreamsResponse with paginated stream data and filter options
+
     """
     log_function(
         f"Getting streams: page={page}, size={page_size}, source={source}, group={group}"
@@ -1195,8 +1192,8 @@ async def get_stream_programs(
     page_size: int = 100,
     sort_field: str = "start_time",
     sort_order: str = "asc",
-    global_filter: Optional[str] = None,
-    column_filters: Optional[str] = None,
+    global_filter: str | None = None,
+    column_filters: str | None = None,
 ) -> StreamProgramsResponse:
     """Get programs for a specific stream channel with context.
 
@@ -1212,6 +1209,7 @@ async def get_stream_programs(
 
     Returns:
         StreamProgramsResponse with paginated program data
+
     """
     log_function(
         f"Getting programs for stream: source={source}, channel_id={channel_id}"
@@ -1273,15 +1271,16 @@ async def get_stream_programs(
 
 @app.get(
     "/api/streams/filters",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Streams"],
     status_code=status.HTTP_200_OK,
 )
-async def get_streams_filters() -> Dict[str, Any]:
+async def get_streams_filters() -> dict[str, Any]:
     """Get precomputed filter values for streams view.
 
     Returns:
         Dictionary with filter values for source and group columns
+
     """
     log_function("Getting streams filter values")
 
@@ -1305,17 +1304,18 @@ async def get_streams_filters() -> Dict[str, Any]:
 
 @app.post(
     "/api/streams/precompute-filters",
-    response_model=Dict[str, str],
+    response_model=dict[str, str],
     tags=["Streams"],
     status_code=status.HTTP_200_OK,
 )
-async def precompute_streams_filters() -> Dict[str, str]:
+async def precompute_streams_filters() -> dict[str, str]:
     """Precompute filter values for streams view.
 
     This is typically called after data ingestion to update filter options.
 
     Returns:
         Success message
+
     """
     log_function("Precomputing streams filter values")
 
@@ -1341,11 +1341,11 @@ async def precompute_streams_filters() -> Dict[str, str]:
 
 @app.get(
     "/api/scheduler/status",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Scheduler"],
     status_code=status.HTTP_200_OK,
 )
-async def get_scheduler_status() -> Dict[str, Any]:
+async def get_scheduler_status() -> dict[str, Any]:
     """Get current scheduler status and job information"""
     log_function("Getting scheduler status")
     scheduler_manager = get_scheduler_manager()
@@ -1354,11 +1354,11 @@ async def get_scheduler_status() -> Dict[str, Any]:
 
 @app.post(
     "/api/scheduler/start",
-    response_model=Dict[str, str],
+    response_model=dict[str, str],
     tags=["Scheduler"],
     status_code=status.HTTP_200_OK,
 )
-async def start_scheduler_endpoint() -> Dict[str, str]:
+async def start_scheduler_endpoint() -> dict[str, str]:
     """Start the refresh scheduler"""
     log_function("Starting scheduler via API")
     try:
@@ -1374,11 +1374,11 @@ async def start_scheduler_endpoint() -> Dict[str, str]:
 
 @app.post(
     "/api/scheduler/stop",
-    response_model=Dict[str, str],
+    response_model=dict[str, str],
     tags=["Scheduler"],
     status_code=status.HTTP_200_OK,
 )
-async def stop_scheduler_endpoint() -> Dict[str, str]:
+async def stop_scheduler_endpoint() -> dict[str, str]:
     """Stop the refresh scheduler"""
     log_function("Stopping scheduler via API")
     try:
@@ -1394,11 +1394,11 @@ async def stop_scheduler_endpoint() -> Dict[str, str]:
 
 @app.post(
     "/api/scheduler/restart",
-    response_model=Dict[str, str],
+    response_model=dict[str, str],
     tags=["Scheduler"],
     status_code=status.HTTP_200_OK,
 )
-async def restart_scheduler_endpoint() -> Dict[str, str]:
+async def restart_scheduler_endpoint() -> dict[str, str]:
     """Restart the refresh scheduler"""
     log_function("Restarting scheduler via API")
     try:
@@ -1415,20 +1415,20 @@ async def restart_scheduler_endpoint() -> Dict[str, str]:
 
 @app.post(
     "/api/scheduler/update/{source_name}",
-    response_model=Dict[str, str],
+    response_model=dict[str, str],
     tags=["Scheduler"],
     status_code=status.HTTP_200_OK,
 )
 async def update_source_schedule(
     source_name: str,
     sources_file: str = os.path.join(DATA_PATH, "sources.json"),
-) -> Dict[str, str]:
+) -> dict[str, str]:
     """Update schedule for a specific source"""
     log_function(f"Updating schedule for source: {source_name}")
     try:
         scheduler_manager = get_scheduler_manager()
         # Load sources configuration
-        with open(sources_file, "r") as f:
+        with open(sources_file) as f:
             sources = [Source(**source) for source in json.load(f)]
 
         # Find the source
@@ -1460,11 +1460,11 @@ async def update_source_schedule(
 
 @app.delete(
     "/api/scheduler/delete/{source_name}",
-    response_model=Dict[str, str],
+    response_model=dict[str, str],
     tags=["Scheduler"],
     status_code=status.HTTP_200_OK,
 )
-async def delete_source_schedule(source_name: str) -> Dict[str, str]:
+async def delete_source_schedule(source_name: str) -> dict[str, str]:
     """Delete/remove schedule for a specific source"""
     log_function(f"Deleting schedule for source: {source_name}")
     try:
@@ -1487,18 +1487,18 @@ async def delete_source_schedule(source_name: str) -> Dict[str, str]:
 
 @app.get(
     "/api/scheduler/validate",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Scheduler"],
     status_code=status.HTTP_200_OK,
 )
 async def validate_scheduler_config(
     sources_file: str = os.path.join(DATA_PATH, "sources.json"),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Validate scheduler configuration for all sources"""
     log_function("Validating scheduler configuration")
     try:
         # Load sources configuration
-        with open(sources_file, "r") as f:
+        with open(sources_file) as f:
             sources = [Source(**source) for source in json.load(f)]
 
         # Validate and get results
@@ -1522,11 +1522,11 @@ async def validate_scheduler_config(
 
 @app.get(
     "/api/rules/status",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Rules"],
     status_code=status.HTTP_200_OK,
 )
-async def get_rules_status() -> Dict[str, Any]:
+async def get_rules_status() -> dict[str, Any]:
     """Get current status of ingestion rules system"""
     log_function("Getting ingestion rules status")
     try:
@@ -1542,11 +1542,11 @@ async def get_rules_status() -> Dict[str, Any]:
 
 @app.get(
     "/api/rules",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Rules"],
     status_code=status.HTTP_200_OK,
 )
-async def get_rules() -> Dict[str, Any]:
+async def get_rules() -> dict[str, Any]:
     """Get all ingestion rules and source assignments"""
     log_function("Getting ingestion rules and source assignments")
     try:
@@ -1567,11 +1567,11 @@ async def get_rules() -> Dict[str, Any]:
 
 @app.post(
     "/api/rules/save",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Rules"],
     status_code=status.HTTP_200_OK,
 )
-async def save_rules_only(rules_data: List[Dict[str, Any]]) -> Dict[str, Any]:
+async def save_rules_only(rules_data: list[dict[str, Any]]) -> dict[str, Any]:
     """Save only ingestion rules to rules.json file"""
     log_function("Saving ingestion rules only")
     try:
@@ -1580,7 +1580,7 @@ async def save_rules_only(rules_data: List[Dict[str, Any]]) -> Dict[str, Any]:
         if not result["success"]:
             return result
 
-        log_function(f"Successfully saved rules")
+        log_function("Successfully saved rules")
         return result
 
     except Exception as e:
@@ -1593,11 +1593,11 @@ async def save_rules_only(rules_data: List[Dict[str, Any]]) -> Dict[str, Any]:
 
 @app.get(
     "/api/assignments",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Rules"],
     status_code=status.HTTP_200_OK,
 )
-async def get_assignments() -> Dict[str, Any]:
+async def get_assignments() -> dict[str, Any]:
     """Get all source rule assignments"""
     log_function("Getting source rule assignments")
     try:
@@ -1613,14 +1613,14 @@ async def get_assignments() -> Dict[str, Any]:
 
 @app.post(
     "/api/assignments/apply",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Rules"],
     status_code=status.HTTP_200_OK,
 )
 async def apply_assignment(
     assignment_id: str = Body(..., description="ID of the assignment to apply"),
     table_name: str = Body(..., description="Name of the table to apply assignment to"),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Apply a specific assignment by ID to a table (new multi-assignment architecture)"""
     try:
         logger.info(
@@ -1687,7 +1687,7 @@ async def apply_assignment(
 
 @app.post(
     "/api/assignments/unapply",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Rules"],
     status_code=status.HTTP_200_OK,
 )
@@ -1697,7 +1697,7 @@ async def unapply_assignment(
         None,
         description="Optional: specific table to unapply from. If not provided, unapplies from all relevant tables.",
     ),
-) -> Dict[str, Any]:
+) -> dict[str, Any]:
     """Unapply a specific assignment by ID from relevant tables (new multi-assignment architecture)"""
     try:
         logger.info(
@@ -1799,13 +1799,13 @@ async def unapply_assignment(
 
 @app.post(
     "/api/assignments/save",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Rules"],
     status_code=status.HTTP_200_OK,
 )
 async def save_assignments_only(
-    assignments_data: List[Dict[str, Any]],
-) -> Dict[str, Any]:
+    assignments_data: list[dict[str, Any]],
+) -> dict[str, Any]:
     """Save only source rule assignments to assignments.json file"""
     log_function("Saving source rule assignments only")
     try:
@@ -1814,7 +1814,7 @@ async def save_assignments_only(
         if not result["success"]:
             return result
 
-        log_function(f"Successfully saved assignments")
+        log_function("Successfully saved assignments")
         return result
 
     except Exception as e:
@@ -1827,11 +1827,11 @@ async def save_assignments_only(
 
 @app.post(
     "/api/rules/validate",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Rules"],
     status_code=status.HTTP_200_OK,
 )
-async def validate_rules(config_data: Dict[str, Any]) -> Dict[str, Any]:
+async def validate_rules(config_data: dict[str, Any]) -> dict[str, Any]:
     """Validate ingestion rules configuration without saving"""
     log_function("Validating ingestion rules configuration")
     try:
@@ -1884,11 +1884,11 @@ async def validate_rules(config_data: Dict[str, Any]) -> Dict[str, Any]:
 
 @app.get(
     "/api/rules/logs",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Rules"],
     status_code=status.HTTP_200_OK,
 )
-async def get_rules_logs() -> Dict[str, Any]:
+async def get_rules_logs() -> dict[str, Any]:
     """Get list of ingestion rules log files"""
     log_function("Getting ingestion rules log files")
     try:
@@ -1924,11 +1924,11 @@ async def get_rules_logs() -> Dict[str, Any]:
 
 @app.get(
     "/api/rules/logs/{filename}",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Rules"],
     status_code=status.HTTP_200_OK,
 )
-async def get_rules_log_content(filename: str) -> Dict[str, Any]:
+async def get_rules_log_content(filename: str) -> dict[str, Any]:
     """Get content of a specific ingestion rules log file"""
     log_function(f"Getting content of rules log file: {filename}")
     try:
@@ -1946,7 +1946,7 @@ async def get_rules_log_content(filename: str) -> Dict[str, Any]:
                 detail=f"Log file '{filename}' not found",
             )
 
-        with open(filepath, "r", encoding="utf-8") as f:
+        with open(filepath, encoding="utf-8") as f:
             log_data = json.load(f)
 
         return {"success": True, "filename": filename, "data": log_data}
@@ -1963,11 +1963,11 @@ async def get_rules_log_content(filename: str) -> Dict[str, Any]:
 
 @app.post(
     "/api/rules/apply",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Rules"],
     summary="Apply rule assignments to database records",
 )
-async def apply_rule_assignments(request: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+async def apply_rule_assignments(request: dict[str, Any] = Body(...)) -> dict[str, Any]:
     """Apply rule assignments to database records for specified table and source"""
     log_function("Applying rule assignments to database records")
 
@@ -2024,11 +2024,11 @@ async def apply_rule_assignments(request: Dict[str, Any] = Body(...)) -> Dict[st
 
 @app.post(
     "/api/rules/apply/single",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Rules"],
     summary="Apply a single rule to a specific source and table",
 )
-async def apply_single_rule(request: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+async def apply_single_rule(request: dict[str, Any] = Body(...)) -> dict[str, Any]:
     """Apply a single rule to a specific table and source"""
     log_function("Applying single rule to database records")
 
@@ -2095,11 +2095,11 @@ async def apply_single_rule(request: Dict[str, Any] = Body(...)) -> Dict[str, An
 
 @app.post(
     "/api/rules/apply/source",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Rules"],
     summary="Apply all rules to a specific source",
 )
-async def apply_rules_to_source(request: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+async def apply_rules_to_source(request: dict[str, Any] = Body(...)) -> dict[str, Any]:
     """Apply all assigned rules to a specific source across all tables"""
     log_function("Applying all rules to source")
 
@@ -2155,11 +2155,11 @@ async def apply_rules_to_source(request: Dict[str, Any] = Body(...)) -> Dict[str
 
 @app.post(
     "/api/rules/unapply",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Rules"],
     summary="Unapply (remove) rules from database records",
 )
-async def unapply_rules(request: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+async def unapply_rules(request: dict[str, Any] = Body(...)) -> dict[str, Any]:
     """Unapply (remove) rules from database records for specified table and source"""
     log_function("Unapplying rules from database records")
 
@@ -2222,11 +2222,11 @@ async def unapply_rules(request: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
 
 @app.get(
     "/api/jobs/queue/status",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Job Queue"],
     status_code=status.HTTP_200_OK,
 )
-async def get_job_queue_status() -> Dict[str, Any]:
+async def get_job_queue_status() -> dict[str, Any]:
     """Get current job queue status and information"""
     log_function("Getting job queue status")
     try:
@@ -2242,11 +2242,11 @@ async def get_job_queue_status() -> Dict[str, Any]:
 
 @app.get(
     "/api/jobs/{job_id}/status",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Job Queue"],
     status_code=status.HTTP_200_OK,
 )
-async def get_job_status_by_id(job_id: str) -> Dict[str, Any]:
+async def get_job_status_by_id(job_id: str) -> dict[str, Any]:
     """Get status of a specific job"""
     log_function(f"Getting status for job {job_id}")
     try:
@@ -2268,11 +2268,11 @@ async def get_job_status_by_id(job_id: str) -> Dict[str, Any]:
 
 @app.post(
     "/api/jobs/{job_id}/cancel",
-    response_model=Dict[str, Any],
+    response_model=dict[str, Any],
     tags=["Job Queue"],
     status_code=status.HTTP_200_OK,
 )
-async def cancel_job_by_id(job_id: str) -> Dict[str, Any]:
+async def cancel_job_by_id(job_id: str) -> dict[str, Any]:
     """Cancel a queued job"""
     log_function(f"Cancelling job {job_id}")
     try:
@@ -2298,11 +2298,11 @@ async def cancel_job_by_id(job_id: str) -> Dict[str, Any]:
 
 @app.get("/api/iseetv.m3u", tags=["File Generation"])
 async def get_global_m3u():
-    """
-    Generate global M3U playlist with all filtered channels from all sources.
+    """Generate global M3U playlist with all filtered channels from all sources.
 
     Returns:
         M3U playlist content with proper content-type headers
+
     """
     try:
         # Get all channels and apply unified filtering
@@ -2330,11 +2330,11 @@ async def get_global_m3u():
 
 @app.get("/api/iseetv.xml", tags=["File Generation"])
 async def get_global_epg():
-    """
-    Generate global EPG XML with all filtered channels and programs from all sources.
+    """Generate global EPG XML with all filtered channels and programs from all sources.
 
     Returns:
         EPG XML content with proper content-type headers
+
     """
     try:
         # Get all channels and programs, apply unified filtering
@@ -2362,14 +2362,14 @@ async def get_global_epg():
 
 @app.get("/api/{source}.m3u", tags=["File Generation"])
 async def get_source_m3u(source: str):
-    """
-    Generate source-specific M3U playlist with filtered channels from a specific source.
+    """Generate source-specific M3U playlist with filtered channels from a specific source.
 
     Args:
         source: Source name to filter by
 
     Returns:
         M3U playlist content with proper content-type headers
+
     """
     try:
         # Get channels for specific source and apply unified filtering
@@ -2402,14 +2402,14 @@ async def get_source_m3u(source: str):
 
 @app.get("/api/{source}.xml", tags=["File Generation"])
 async def get_source_epg(source: str):
-    """
-    Generate source-specific EPG XML with filtered channels and programs from a specific source.
+    """Generate source-specific EPG XML with filtered channels and programs from a specific source.
 
     Args:
         source: Source name to filter by
 
     Returns:
         EPG XML content with proper content-type headers
+
     """
     try:
         # Get channels and programs for specific source, apply unified filtering

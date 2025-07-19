@@ -2,22 +2,22 @@
 accessed across multiple modules.
 """
 
-from typing import Dict, Literal
 import logging
+from typing import Literal
 
 logger = logging.getLogger(__name__)
 
 # Global state for tracking download progress
 # This is the single source of truth for all download progress data
-download_progress: Dict[str, Dict] = {}
-ingest_progress: Dict[str, Dict] = {}
+download_progress: dict[str, dict] = {}
+ingest_progress: dict[str, dict] = {}
 
 # Global state for tracking cancelled downloads
 # Tasks in this set should be cancelled
 cancelled_tasks: set = set()
 
 
-def get_progress(task_type: Literal["download", "ingest"]) -> Dict[str, Dict]:
+def get_progress(task_type: Literal["download", "ingest"]) -> dict[str, dict]:
     """Get the global download progress dictionary"""
     if task_type == "download":
         return download_progress

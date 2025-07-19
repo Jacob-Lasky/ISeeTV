@@ -1,5 +1,4 @@
-"""
-Global job queue system for ISeeTV to ensure single-job execution.
+"""Global job queue system for ISeeTV to ensure single-job execution.
 
 This module provides atomic, modular job queue functionality that ensures
 only one job runs at a time across the entire application.
@@ -8,11 +7,11 @@ only one job runs at a time across the entire application.
 import asyncio
 import logging
 import uuid
+from collections.abc import Callable
+from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
-from typing import Dict, List, Optional, Callable, Any, Literal
-from dataclasses import dataclass, field
-from contextlib import asynccontextmanager
+from typing import Any, Literal
 
 from common.utils import log_function
 
@@ -40,8 +39,7 @@ class JobType(Enum):
 
 @dataclass
 class JobInfo:
-    """
-    Atomic job information container.
+    """Atomic job information container.
 
     Follows atomic design principles:
     - Single responsibility: contains job metadata only
@@ -52,15 +50,15 @@ class JobInfo:
     job_id: str
     job_type: JobType
     source_name: str
-    file_type: Optional[Literal["m3u", "epg"]] = None
+    file_type: Literal["m3u", "epg"] | None = None
     status: JobStatus = JobStatus.QUEUED
     created_at: datetime = field(default_factory=datetime.now)
-    started_at: Optional[datetime] = None
-    completed_at: Optional[datetime] = None
-    error_message: Optional[str] = None
-    progress: Optional[Dict[str, Any]] = None
+    started_at: datetime | None = None
+    completed_at: datetime | None = None
+    error_message: str | None = None
+    progress: dict[str, Any] | None = None
 
-    def to_dict(self) -> Dict[str, Any]:
+    def to_dict(self) -> dict[str, Any]:
         """Convert job info to dictionary for API responses."""
         return {
             "job_id": self.job_id,
@@ -79,8 +77,7 @@ class JobInfo:
 
 
 class JobQueue:
-    """
-    Atomic global job queue manager.
+    """Atomic global job queue manager.
 
     Follows atomic design principles:
     - Single responsibility: manages job queue and execution
@@ -90,9 +87,9 @@ class JobQueue:
 
     def __init__(self):
         self._queue: asyncio.Queue = asyncio.Queue()
-        self._jobs: Dict[str, JobInfo] = {}
-        self._current_job: Optional[JobInfo] = None
-        self._worker_task: Optional[asyncio.Task] = None
+        self._jobs: dict[str, JobInfo] = {}
+        self._current_job: JobInfo | None = None
+        self._worker_task: asyncio.Task | None = None
         self._running = False
         self._lock = asyncio.Lock()
 
@@ -128,11 +125,10 @@ class JobQueue:
         job_type: JobType,
         source_name: str,
         job_function: Callable,
-        file_type: Optional[Literal["m3u", "epg"]] = None,
+        file_type: Literal["m3u", "epg"] | None = None,
         **kwargs,
     ) -> str:
-        """
-        Enqueue a job for execution.
+        """Enqueue a job for execution.
 
         Args:
             job_type: Type of job to enqueue
@@ -143,6 +139,7 @@ class JobQueue:
 
         Returns:
             Job ID for tracking
+
         """
         job_id = str(uuid.uuid4())
 
@@ -170,14 +167,14 @@ class JobQueue:
         return job_id
 
     async def cancel_job(self, job_id: str) -> bool:
-        """
-        Cancel a queued job.
+        """Cancel a queued job.
 
         Args:
             job_id: ID of job to cancel
 
         Returns:
             True if job was cancelled, False if not found or already running
+
         """
         async with self._lock:
             if job_id not in self._jobs:
@@ -195,16 +192,16 @@ class JobQueue:
         log_function(f"Cancelled job {job_id}")
         return True
 
-    def get_job_status(self, job_id: str) -> Optional[JobInfo]:
+    def get_job_status(self, job_id: str) -> JobInfo | None:
         """Get status of a specific job."""
         return self._jobs.get(job_id)
 
-    def get_queue_status(self) -> Dict[str, Any]:
-        """
-        Get current queue status.
+    def get_queue_status(self) -> dict[str, Any]:
+        """Get current queue status.
 
         Returns:
             Dictionary with queue information
+
         """
         queued_jobs = [
             job.to_dict()
@@ -220,13 +217,12 @@ class JobQueue:
             "total_jobs": len(self._jobs),
         }
 
-    def get_all_jobs(self) -> List[Dict[str, Any]]:
+    def get_all_jobs(self) -> list[dict[str, Any]]:
         """Get all jobs (for debugging/monitoring)."""
         return [job.to_dict() for job in self._jobs.values()]
 
     async def _worker(self) -> None:
-        """
-        Main worker loop that processes jobs one at a time.
+        """Main worker loop that processes jobs one at a time.
 
         Follows atomic design principles:
         - Single responsibility: processes one job at a time
@@ -242,7 +238,7 @@ class JobQueue:
                     job_info, job_function, kwargs = await asyncio.wait_for(
                         self._queue.get(), timeout=1.0
                     )
-                except asyncio.TimeoutError:
+                except TimeoutError:
                     continue
 
                 # Skip cancelled jobs
@@ -263,15 +259,15 @@ class JobQueue:
         log_function("Job queue worker stopped")
 
     async def _execute_job(
-        self, job_info: JobInfo, job_function: Callable, kwargs: Dict[str, Any]
+        self, job_info: JobInfo, job_function: Callable, kwargs: dict[str, Any]
     ) -> None:
-        """
-        Execute a single job with proper error handling and status tracking.
+        """Execute a single job with proper error handling and status tracking.
 
         Args:
             job_info: Job information
             job_function: Function to execute
             kwargs: Arguments for the function
+
         """
         async with self._lock:
             self._current_job = job_info
@@ -310,7 +306,7 @@ class JobQueue:
 
 
 # Global job queue instance
-_job_queue: Optional[JobQueue] = None
+_job_queue: JobQueue | None = None
 
 
 async def get_job_queue() -> JobQueue:
@@ -343,8 +339,7 @@ async def shutdown_job_queue() -> None:
 async def enqueue_download_job(
     source_name: str, file_type: Literal["m3u", "epg"], job_function: Callable, **kwargs
 ) -> str:
-    """
-    Enqueue a download job.
+    """Enqueue a download job.
 
     Args:
         source_name: Name of the source
@@ -354,6 +349,7 @@ async def enqueue_download_job(
 
     Returns:
         Job ID for tracking
+
     """
     queue = await get_job_queue()
     return await queue.enqueue_job(
@@ -364,8 +360,7 @@ async def enqueue_download_job(
 async def enqueue_ingest_job(
     source_name: str, file_type: Literal["m3u", "epg"], job_function: Callable, **kwargs
 ) -> str:
-    """
-    Enqueue an ingest job.
+    """Enqueue an ingest job.
 
     Args:
         source_name: Name of the source
@@ -375,6 +370,7 @@ async def enqueue_ingest_job(
 
     Returns:
         Job ID for tracking
+
     """
     queue = await get_job_queue()
     return await queue.enqueue_job(
@@ -385,8 +381,7 @@ async def enqueue_ingest_job(
 async def enqueue_refresh_job(
     source_name: str, file_type: Literal["m3u", "epg"], job_function: Callable, **kwargs
 ) -> str:
-    """
-    Enqueue a refresh job (download + ingest).
+    """Enqueue a refresh job (download + ingest).
 
     Args:
         source_name: Name of the source
@@ -396,6 +391,7 @@ async def enqueue_refresh_job(
 
     Returns:
         Job ID for tracking
+
     """
     queue = await get_job_queue()
     return await queue.enqueue_job(
@@ -406,8 +402,7 @@ async def enqueue_refresh_job(
 async def enqueue_bulk_download_job(
     source_name: str, job_function: Callable, **kwargs
 ) -> str:
-    """
-    Enqueue a bulk download job.
+    """Enqueue a bulk download job.
 
     Args:
         source_name: Name of the source (or "all" for all sources)
@@ -416,6 +411,7 @@ async def enqueue_bulk_download_job(
 
     Returns:
         Job ID for tracking
+
     """
     queue = await get_job_queue()
     return await queue.enqueue_job(
@@ -423,13 +419,13 @@ async def enqueue_bulk_download_job(
     )
 
 
-async def get_queue_status() -> Dict[str, Any]:
+async def get_queue_status() -> dict[str, Any]:
     """Get current job queue status."""
     queue = await get_job_queue()
     return queue.get_queue_status()
 
 
-async def get_job_status(job_id: str) -> Optional[Dict[str, Any]]:
+async def get_job_status(job_id: str) -> dict[str, Any] | None:
     """Get status of a specific job."""
     queue = await get_job_queue()
     job_info = queue.get_job_status(job_id)

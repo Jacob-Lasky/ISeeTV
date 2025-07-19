@@ -1,7 +1,8 @@
-from pydantic import BaseModel
-from typing import Optional, Literal, Dict, List, Any
 import datetime as dt
 import logging
+from typing import Any, Literal
+
+from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
 
@@ -25,20 +26,20 @@ class DownloadAllTasksResponse(BaseModel):
 
 
 class TotalRecords(BaseModel):
-    channels: Optional[int] = 0
-    programs: Optional[int] = 0
+    channels: int | None = 0
+    programs: int | None = 0
 
 
 class FileMetadata(BaseModel):
     """file metadata for downloadable resources"""
 
     url: str
-    last_refresh_started_timestamp: Optional[str] = ""
-    last_size_bytes: Optional[int] = 0  # Fallback size for progress tracking
-    last_refresh_status: Optional[Literal["success", "failed", "cancelled"]] = None
-    last_refresh_finished_timestamp: Optional[str] = ""
-    local_path: Optional[str] = ""
-    total_records: Optional[TotalRecords] = None
+    last_refresh_started_timestamp: str | None = ""
+    last_size_bytes: int | None = 0  # Fallback size for progress tracking
+    last_refresh_status: Literal["success", "failed", "cancelled"] | None = None
+    last_refresh_finished_timestamp: str | None = ""
+    local_path: str | None = ""
+    total_records: TotalRecords | None = None
 
 
 class GlobalSettings(BaseModel):
@@ -50,49 +51,49 @@ class DownloadProgress(BaseModel):
     task_id: str
     status: Literal["pending", "downloading", "completed", "failed", "cancelled"]
     file_type: Literal["m3u", "epg"]
-    current_item: Optional[str]
+    current_item: str | None
     total_items: int
     completed_items: int
     bytes_downloaded: int
     total_bytes: int
-    error_message: Optional[str]
+    error_message: str | None
     started_at: dt.datetime
-    completed_at: Optional[dt.datetime]
+    completed_at: dt.datetime | None
 
 
 class IngestProgress(BaseModel):
     task_id: str
     status: Literal["pending", "ingesting", "completed", "failed", "cancelled"]
     file_type: Literal["m3u", "epg"]
-    current_item: Optional[str]
+    current_item: str | None
     total_items: int
     completed_items: int
-    error_message: Optional[str]
+    error_message: str | None
     started_at: dt.datetime
-    completed_at: Optional[dt.datetime]
-    source_name: Optional[str] = None  # Source being processed
-    current_phase: Optional[str] = None  # For EPG: "channels" or "programs"
-    updated_at: Optional[dt.datetime] = None  # Last update timestamp
+    completed_at: dt.datetime | None
+    source_name: str | None = None  # Source being processed
+    current_phase: str | None = None  # For EPG: "channels" or "programs"
+    updated_at: dt.datetime | None = None  # Last update timestamp
 
 
 class Source(BaseModel):
     """Source model with file metadata for scalable download tracking"""
 
     name: str
-    number_of_connections: Optional[int]
-    refresh_every_hours: Optional[int]
-    refresh_time: Optional[str]  # HH:MM
-    subscription_expires: Optional[str]
-    source_timezone: Optional[str]
+    number_of_connections: int | None
+    refresh_every_hours: int | None
+    refresh_time: str | None  # HH:MM
+    subscription_expires: str | None
+    source_timezone: str | None
     enabled: bool
     rule_mode: Literal["whitelist", "blacklist"] = (
         "blacklist"  # Default to blacklist (start with all channels)
     )
-    file_metadata: Dict[str, FileMetadata] = {}
+    file_metadata: dict[str, FileMetadata] = {}
 
     def get_file_metadata(
         self, file_type: Literal["m3u", "epg"]
-    ) -> Optional[FileMetadata]:
+    ) -> FileMetadata | None:
         """Get file metadata for a specific file type"""
         return self.file_metadata.get(file_type)
 
@@ -100,10 +101,10 @@ class Source(BaseModel):
         self,
         file_type: Literal["m3u", "epg"],
         url: str,
-        size_bytes: Optional[int] = None,
+        size_bytes: int | None = None,
         status: Literal["success", "failed", "cancelled"] = "success",
         set_start_timestamp: bool = False,
-        local_path: Optional[str] = None,
+        local_path: str | None = None,
     ) -> None:
         """Update file metadata during or after download operation"""
         if file_type not in self.file_metadata:
@@ -112,7 +113,7 @@ class Source(BaseModel):
         metadata = self.file_metadata[file_type]
         metadata.url = url
 
-        timestamp = dt.datetime.now(dt.timezone.utc).isoformat()
+        timestamp = dt.datetime.now(dt.UTC).isoformat()
 
         # Set start timestamp only when download begins
         if set_start_timestamp:
@@ -135,8 +136,8 @@ class EpgChannel(BaseModel):
     source: str  # where the EPG came from
     channel_id: str
     display_name: str
-    icon_url: Optional[str]
-    filter_reasons: Optional[str] = None  # Reason for filtering (blacklist/whitelist)
+    icon_url: str | None
+    filter_reasons: str | None = None  # Reason for filtering (blacklist/whitelist)
 
 
 class M3uChannel(BaseModel):
@@ -146,22 +147,22 @@ class M3uChannel(BaseModel):
     tvg_id: str
     name: str
     stream_url: str
-    logo_url: Optional[str]
-    group: Optional[str]
+    logo_url: str | None
+    group: str | None
     stream_mode: Literal["live", "on_demand"] = "live"
-    filter_reasons: Optional[str] = None  # Reason for filtering (blacklist/whitelist)
+    filter_reasons: str | None = None  # Reason for filtering (blacklist/whitelist)
 
 
 class Channel(BaseModel):
     """Unified channel model combining EPG and M3U data"""
 
-    source_epg: Optional[str]
-    source_m3u: Optional[str]
+    source_epg: str | None
+    source_m3u: str | None
     channel_id: str  # unified key — probably tvg-id / epg id
     name: str
-    stream_url: Optional[str]
-    icon_url: Optional[str]
-    group: Optional[str]
+    stream_url: str | None
+    icon_url: str | None
+    group: str | None
 
 
 class Program(BaseModel):
@@ -172,16 +173,16 @@ class Program(BaseModel):
     channel_id: str
     start_time: dt.datetime
     end_time: dt.datetime
-    title: Optional[str]
-    description: Optional[str]
-    filter_reasons: Optional[str] = None  # Reason for filtering (blacklist/whitelist)
+    title: str | None
+    description: str | None
+    filter_reasons: str | None = None  # Reason for filtering (blacklist/whitelist)
 
 
 class TableData(BaseModel):
-    records: List[Dict[str, Any]]
+    records: list[dict[str, Any]]
     total: int
     table_name: str
-    source_filter: Optional[str] = None
+    source_filter: str | None = None
 
 
 class TableResponse(BaseModel):

@@ -11,20 +11,20 @@ Architecture:
 - Vectorized: Uses pandas for performance on large datasets
 """
 
-from typing import Any, Dict, List
 import json
 import logging
+from typing import Any
 
 import pandas as pd
-
 from sqlalchemy import text
+
 from common.db import SessionLocal
+from common.utils import log_function
 from rules.ingestion_rules import (
     IngestionRule,
-    SourceRuleAssignment,
     IngestionRulesEngine,
+    SourceRuleAssignment,
 )
-from common.utils import log_function
 
 logger = logging.getLogger(__name__)
 
@@ -37,7 +37,7 @@ class PostLoadRulesEngine:
         log_function("PostLoadRulesEngine initialized", level="debug")
         self.ingestion_engine = IngestionRulesEngine()
 
-    def apply_rules_to_table(self, table_name: str, source_name: str) -> Dict[str, Any]:
+    def apply_rules_to_table(self, table_name: str, source_name: str) -> dict[str, Any]:
         """Apply rules to all records in a specific table for a source"""
         log_function(
             f"Applying post-load rules to {table_name} for source {source_name}"
@@ -86,7 +86,7 @@ class PostLoadRulesEngine:
 
     def _load_records_from_db(
         self, table_name: str, source_name: str
-    ) -> List[Dict[str, Any]]:
+    ) -> list[dict[str, Any]]:
         """Load records from database for rule processing"""
         log_function(
             f"Loading records from {table_name} for source {source_name}", level="debug"
@@ -119,11 +119,11 @@ class PostLoadRulesEngine:
 
     def _apply_rules_vectorized(
         self,
-        records: List[Dict[str, Any]],
-        rules: List[IngestionRule],
+        records: list[dict[str, Any]],
+        rules: list[IngestionRule],
         source_assignment: SourceRuleAssignment,
         table_name: str,
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Apply rules to records using vectorized operations"""
         try:
             # Create DataFrame for vectorized processing
@@ -212,7 +212,7 @@ class PostLoadRulesEngine:
             }
 
     def _update_records_in_db(
-        self, table_name: str, records: List[Dict[str, Any]]
+        self, table_name: str, records: list[dict[str, Any]]
     ) -> None:
         """Update records in database with filter reasons"""
         log_function(
@@ -225,7 +225,7 @@ class PostLoadRulesEngine:
                     # Get the primary key (assuming 'id' exists)
                     if "id" not in record:
                         logger.warning(
-                            f"No 'id' field found in record, skipping update"
+                            "No 'id' field found in record, skipping update"
                         )
                         continue
 
@@ -235,9 +235,7 @@ class PostLoadRulesEngine:
                     # Update filter_reasons field with JSON array of assignment IDs or None
                     session.execute(
                         text(
-                            "UPDATE {} SET filter_reasons = :filter_reasons WHERE id = :record_id".format(
-                                table_name
-                            )
+                            f"UPDATE {table_name} SET filter_reasons = :filter_reasons WHERE id = :record_id"
                         ),
                         {
                             "filter_reasons": filter_reasons,
@@ -253,7 +251,7 @@ class PostLoadRulesEngine:
         except Exception as e:
             logger.error(f"Error updating records in {table_name}: {e}")
 
-    def apply_rules_to_all_sources(self, table_name: str) -> Dict[str, Any]:
+    def apply_rules_to_all_sources(self, table_name: str) -> dict[str, Any]:
         """Apply rules to all sources in a table"""
         log_function(f"Applying post-load rules to all sources in {table_name}")
 
@@ -273,7 +271,7 @@ class PostLoadRulesEngine:
         )
         return total_results
 
-    def _get_sources_from_table(self, table_name: str) -> List[str]:
+    def _get_sources_from_table(self, table_name: str) -> list[str]:
         """Get all unique sources from a table"""
         log_function(f"Getting sources from {table_name}", level="debug")
         try:
@@ -290,7 +288,7 @@ class PostLoadRulesEngine:
 
     def apply_assignment_to_table(
         self, assignment_id: str, table_name: str, source_name: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Apply a specific assignment to a table (new multi-assignment architecture)"""
         log_function(
             f"Applying assignment '{assignment_id}' to {table_name} for source {source_name}"
@@ -418,7 +416,7 @@ class PostLoadRulesEngine:
 
     def unapply_assignment_from_table(
         self, assignment_id: str, table_name: str, source_name: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Unapply a specific assignment from a table (new multi-assignment architecture)"""
         log_function(
             f"Unapplying assignment '{assignment_id}' from {table_name} for source {source_name}"
@@ -494,7 +492,7 @@ class PostLoadRulesEngine:
 
     def apply_single_rule_to_source(
         self, rule_name: str, table_name: str, source_name: str
-    ) -> Dict[str, Any]:
+    ) -> dict[str, Any]:
         """Apply a single rule to a specific table and source (atomic operation)"""
         log_function(
             f"Applying single rule '{rule_name}' to {table_name} for source {source_name}"
@@ -554,8 +552,8 @@ class PostLoadRulesEngine:
         return results
 
     def unapply_rules_from_source(
-        self, table_name: str, source_name: str, rule_names: List[str] = None
-    ) -> Dict[str, Any]:
+        self, table_name: str, source_name: str, rule_names: list[str] = None
+    ) -> dict[str, Any]:
         """Unapply (remove) rules from a specific table and source (atomic operation)"""
         log_function(
             f"Unapplying rules from {table_name} for source {source_name}: {rule_names or 'all rules'}"
@@ -618,8 +616,8 @@ class PostLoadRulesEngine:
             return {"processed": 0, "filtered": 0, "passed": 0}
 
     def apply_all_rules_to_source(
-        self, source_name: str, table_names: List[str] = None
-    ) -> Dict[str, Any]:
+        self, source_name: str, table_names: list[str] = None
+    ) -> dict[str, Any]:
         """Apply all assigned rules to a specific source across all or specified tables"""
         if not table_names:
             table_names = ["m3u_channels", "epg_channels", "programs"]
@@ -648,7 +646,7 @@ class PostLoadRulesEngine:
 post_load_engine = PostLoadRulesEngine()
 
 
-def apply_post_load_rules(table_name: str, source_name: str = None) -> Dict[str, Any]:
+def apply_post_load_rules(table_name: str, source_name: str = None) -> dict[str, Any]:
     """Apply post-load rules to a table (atomic operation)"""
     log_function(f"Applying post-load rules to {table_name}")
     if source_name:

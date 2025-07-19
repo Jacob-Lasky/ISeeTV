@@ -1,9 +1,11 @@
 # common/state.py or common/db.py
 
-from sqlalchemy import create_engine
-from sqlalchemy.orm import sessionmaker, declarative_base
-from common.constants import DATABASE_URL
 import logging
+
+from sqlalchemy import create_engine
+from sqlalchemy.orm import declarative_base, sessionmaker
+
+from common.constants import DATABASE_URL
 from common.utils import log_function
 
 logger = logging.getLogger(__name__)

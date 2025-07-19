@@ -1,15 +1,17 @@
+import asyncio
+import datetime as dt
+import json
 import logging
 import os
-import asyncio
+from typing import Literal
+
 import httpx
-import json
-import datetime as dt
-from typing import List, Optional, Tuple, Literal
-from models.models import Source
-from common.state import get_progress, is_task_cancelled, remove_cancelled_task
-from common.task_manager import TaskManager, DownloadTaskManager
-from common.utils import log_function
 from fastapi import HTTPException, status
+
+from common.state import get_progress, is_task_cancelled, remove_cancelled_task
+from common.task_manager import DownloadTaskManager
+from common.utils import log_function
+from models.models import Source
 
 logger = logging.getLogger(__name__)
 
@@ -22,8 +24,8 @@ async def download_file_with_progress(
     filepath: str,
     task_id: str,
     item_name: str,
-    fallback_size: Optional[int] = None,
-) -> Tuple[bool, int, Literal["success", "failed", "cancelled"]]:
+    fallback_size: int | None = None,
+) -> tuple[bool, int, Literal["success", "failed", "cancelled"]]:
     """Download a single file with real-time progress tracking by bytes"""
     log_function(f"Downloading {item_name} from {url}: {task_id}")
     try:
@@ -78,7 +80,7 @@ async def download_file_with_progress(
                                 status="cancelled",
                                 error_message="Download cancelled by user",
                                 completed_at=dt.datetime.now(
-                                    dt.timezone.utc
+                                    dt.UTC
                                 ).isoformat(),
                             )
                             return False, 0, "cancelled"
@@ -107,7 +109,7 @@ async def orchestrate_file_download_from_source(
     download_type: Literal["m3u", "epg"],
     sources_file: str,
     download_dir: str,
-    task_id: Optional[str] = None,
+    task_id: str | None = None,
 ) -> None:
     """Download function for any file type with optional progress tracking"""
     log_function(f"Orchestrating download for {source_name} {download_type}: {task_id}")
@@ -116,7 +118,7 @@ async def orchestrate_file_download_from_source(
     elif download_type == "epg":
         extension = "xml"
 
-    with open(sources_file, "r") as f:
+    with open(sources_file) as f:
         sources = [Source(**source) for source in json.load(f)]
 
     if source_name not in [source.name for source in sources]:
@@ -182,7 +184,7 @@ async def orchestrate_file_download_from_source(
 
 async def background_download_task(
     task_id: str,
-    sources: List[Source],
+    sources: list[Source],
     download_type: Literal["m3u", "epg"],
     sources_file: str,
     download_dir: str,
@@ -237,7 +239,7 @@ async def background_download_task(
         DownloadTaskManager.update_download_progress(
             task_id,
             status="completed",
-            completed_at=dt.datetime.now(dt.timezone.utc).isoformat(),
+            completed_at=dt.datetime.now(dt.UTC).isoformat(),
             current_item=None,
         )
 
@@ -246,7 +248,7 @@ async def background_download_task(
             task_id,
             status="failed",
             error_message=str(e),
-            completed_at=dt.datetime.now(dt.timezone.utc).isoformat(),
+            completed_at=dt.datetime.now(dt.UTC).isoformat(),
         )
 
 
@@ -296,7 +298,7 @@ async def background_single_download_task(
         DownloadTaskManager.update_download_progress(
             task_id,
             status="completed",
-            completed_at=dt.datetime.now(dt.timezone.utc).isoformat(),
+            completed_at=dt.datetime.now(dt.UTC).isoformat(),
             current_item=None,
             completed_items=1,
         )
@@ -306,5 +308,5 @@ async def background_single_download_task(
             task_id,
             status="failed",
             error_message=str(e),
-            completed_at=dt.datetime.now(dt.timezone.utc).isoformat(),
+            completed_at=dt.datetime.now(dt.UTC).isoformat(),
         )

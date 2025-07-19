@@ -4,16 +4,16 @@
 
 import asyncio
 import logging
-from typing import AsyncGenerator, Optional, List
-from common.utils import log_function
-from sqlalchemy.orm import Session
-from sqlalchemy.dialects.sqlite import insert
+from collections.abc import AsyncGenerator
 
-from models.models import EpgChannel, Program
-from models.db_models import EpgChannelTable, ProgramTable
-from ingest.epg_parser import parse_epg_for_channels, parse_epg_for_programs
+from sqlalchemy.dialects.sqlite import insert
+from sqlalchemy.orm import Session
+
 from common.task_manager import IngestTaskManager, TaskManager
-from rules.ingestion_rules import apply_ingestion_rules
+from common.utils import log_function
+from ingest.epg_parser import parse_epg_for_channels, parse_epg_for_programs
+from models.db_models import EpgChannelTable, ProgramTable
+from models.models import EpgChannel, Program
 
 logger = logging.getLogger(__name__)
 
@@ -79,8 +79,8 @@ def _upsert_epg_channel(session: Session, channel: EpgChannel) -> LoadResult:
 
 
 async def _bulk_upsert_epg_channels(
-    session: Session, channels: List[EpgChannel]
-) -> List[LoadResult]:
+    session: Session, channels: list[EpgChannel]
+) -> list[LoadResult]:
     """Bulk upsert EPG channels using efficient batch operations"""
     if not channels:
         return []
@@ -193,8 +193,8 @@ def _upsert_program(session: Session, program: Program) -> LoadResult:
 
 
 async def _bulk_upsert_programs(
-    session: Session, programs: List[Program]
-) -> List[LoadResult]:
+    session: Session, programs: list[Program]
+) -> list[LoadResult]:
     """Bulk upsert programs using efficient batch operations"""
     if not programs:
         return []
@@ -266,7 +266,7 @@ async def load_epg_channels_async(
     session: Session,
     file_path: str,
     source_name: str,
-    task_id: Optional[str] = None,
+    task_id: str | None = None,
     batch_size: int = 1000,
 ) -> AsyncGenerator[LoadResult, None]:
     """Async generator that loads EPG channels using bulk operations for improved performance"""
@@ -331,7 +331,7 @@ async def load_programs_async(
     session: Session,
     file_path: str,
     source_name: str,
-    task_id: Optional[str] = None,
+    task_id: str | None = None,
     batch_size: int = 2000,
 ) -> AsyncGenerator[LoadResult, None]:
     """Async generator that loads programs using bulk operations for improved performance"""
@@ -391,7 +391,7 @@ async def load_programs_async(
 
 
 async def load_epg_file_async(
-    session: Session, file_path: str, source_name: str, task_id: Optional[str] = None
+    session: Session, file_path: str, source_name: str, task_id: str | None = None
 ) -> AsyncGenerator[LoadResult, None]:
     """Main async function to load complete EPG file (channels + programs)"""
     log_function(f"Starting complete EPG file load: {file_path} for {source_name}")

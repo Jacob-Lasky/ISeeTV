@@ -3,10 +3,10 @@ Provides shared utilities for managing download and ingest tasks with DRY compli
 """
 
 import datetime as dt
-from typing import Dict, Optional, Literal, Any, Union
+from typing import Any, Literal
+
 from common.state import get_progress
 from common.utils import log_function
-
 
 TASK_TYPES = Literal["download", "ingest"]
 
@@ -18,7 +18,7 @@ class TaskManager:
     def create_task(
         task_id: str,
         task_type: TASK_TYPES,
-        base_fields: Dict[str, Any],
+        base_fields: dict[str, Any],
         **additional_fields,
     ) -> None:
         """Create a new task with base fields and task-type-specific fields.
@@ -40,9 +40,9 @@ class TaskManager:
             "total_items": 0,
             "completed_items": 0,
             "error_message": None,
-            "started_at": dt.datetime.now(dt.timezone.utc),
+            "started_at": dt.datetime.now(dt.UTC),
             "completed_at": None,
-            "updated_at": dt.datetime.now(dt.timezone.utc),
+            "updated_at": dt.datetime.now(dt.UTC),
             **base_fields,
             **additional_fields,
         }
@@ -64,12 +64,12 @@ class TaskManager:
         progress = get_progress(task_type)
         if task_id in progress:
             # Always update timestamp on any progress change
-            kwargs["updated_at"] = dt.datetime.now(dt.timezone.utc)
+            kwargs["updated_at"] = dt.datetime.now(dt.UTC)
             progress[task_id].update(kwargs)
 
     @staticmethod
     def start_task(
-        task_id: str, task_type: TASK_TYPES, status_name: Optional[str] = None
+        task_id: str, task_type: TASK_TYPES, status_name: str | None = None
     ) -> None:
         """Mark task as started with appropriate status.
 
@@ -86,12 +86,12 @@ class TaskManager:
             task_id,
             task_type,
             status=status,
-            started_at=dt.datetime.now(dt.timezone.utc),
+            started_at=dt.datetime.now(dt.UTC),
         )
 
     @staticmethod
     def complete_task(
-        task_id: str, task_type: TASK_TYPES, message: Optional[str] = None
+        task_id: str, task_type: TASK_TYPES, message: str | None = None
     ) -> None:
         """Mark task as completed successfully.
 
@@ -105,7 +105,7 @@ class TaskManager:
 
         update_data = {
             "status": "completed",
-            "completed_at": dt.datetime.now(dt.timezone.utc),
+            "completed_at": dt.datetime.now(dt.UTC),
         }
 
         if message:
@@ -130,14 +130,14 @@ class TaskManager:
             task_type,
             status="failed",
             error_message=error_message,
-            completed_at=dt.datetime.now(dt.timezone.utc),
+            completed_at=dt.datetime.now(dt.UTC),
         )
 
     @staticmethod
     def get_task(
         task_id: str,
         task_type: TASK_TYPES,
-    ) -> Optional[Dict[str, Any]]:
+    ) -> dict[str, Any] | None:
         """Get a specific task by ID and type.
 
         Args:
@@ -215,7 +215,7 @@ class DownloadTaskManager:
         # Use ISO format for download tasks (legacy compatibility)
         base_fields = {
             "total_items": total_items,
-            "started_at": dt.datetime.now(dt.timezone.utc).isoformat(),
+            "started_at": dt.datetime.now(dt.UTC).isoformat(),
         }
 
         TaskManager.create_task(task_id, "download", base_fields, **download_fields)
@@ -292,7 +292,7 @@ class IngestTaskManager:
         task_id: str,
         current_item: str,
         completed_items: int,
-        current_phase: Optional[str] = None,
+        current_phase: str | None = None,
     ) -> None:
         """Update progress for a specific item in an ingest task."""
         additional_fields = {}

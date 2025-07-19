@@ -2,8 +2,9 @@
 table definitions for EpgChannel, M3uChannel, and Program.
 """
 
-from sqlalchemy import Column, String, DateTime, Integer, Index
+from sqlalchemy import Column, DateTime, Index, Integer, String
 from sqlalchemy.sql import func
+
 from common.db import Base
 
 

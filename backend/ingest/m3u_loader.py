@@ -4,15 +4,16 @@
 
 import asyncio
 import logging
-from typing import AsyncGenerator, Optional, List
-from common.utils import log_function
-from sqlalchemy.orm import Session
-from sqlalchemy.dialects.sqlite import insert
+from collections.abc import AsyncGenerator
 
-from models.models import M3uChannel
-from models.db_models import M3uChannelTable
-from ingest.m3u_parser import parse_m3u
+from sqlalchemy.dialects.sqlite import insert
+from sqlalchemy.orm import Session
+
 from common.task_manager import IngestTaskManager, TaskManager
+from common.utils import log_function
+from ingest.m3u_parser import parse_m3u
+from models.db_models import M3uChannelTable
+from models.models import M3uChannel
 from rules.post_load_rules import apply_post_load_rules
 
 logger = logging.getLogger(__name__)
@@ -83,8 +84,8 @@ def _upsert_m3u_channel(session: Session, channel: M3uChannel) -> LoadResult:
 
 
 async def _bulk_upsert_m3u_channels(
-    session: Session, channels: List[M3uChannel]
-) -> List[LoadResult]:
+    session: Session, channels: list[M3uChannel]
+) -> list[LoadResult]:
     """Bulk upsert M3U channels using efficient batch operations"""
     if not channels:
         return []
@@ -156,7 +157,7 @@ async def load_m3u_channels_async(
     session: Session,
     file_path: str,
     source_name: str,
-    task_id: Optional[str] = None,
+    task_id: str | None = None,
     batch_size: int = 1000,
 ) -> AsyncGenerator[LoadResult, None]:
     """Async generator that loads M3U channels using bulk operations for improved performance"""
@@ -215,7 +216,7 @@ async def load_m3u_channels_async(
 
 
 async def load_m3u_file_async(
-    session: Session, file_path: str, source_name: str, task_id: Optional[str] = None
+    session: Session, file_path: str, source_name: str, task_id: str | None = None
 ) -> AsyncGenerator[LoadResult, None]:
     """Main async function to load complete M3U file"""
     log_function(f"Starting complete M3U file load: {file_path} for {source_name}")

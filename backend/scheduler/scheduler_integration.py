@@ -1,23 +1,21 @@
-"""
-Scheduler integration module for ISeeTV FastAPI application.
+"""Scheduler integration module for ISeeTV FastAPI application.
 
 This module provides atomic integration between the RefreshScheduler and
 the existing FastAPI download/ingest endpoints.
 """
 
 import logging
-from typing import Dict, Any, List
+from typing import Any
 
-from scheduler.refresh_scheduler import RefreshScheduler
-from models.models import Source
 from common.utils import log_function
+from models.models import Source
+from scheduler.refresh_scheduler import RefreshScheduler
 
 logger = logging.getLogger(__name__)
 
 
 class SchedulerManager:
-    """
-    Atomic manager for scheduler lifecycle and integration.
+    """Atomic manager for scheduler lifecycle and integration.
 
     Follows atomic design principles:
     - Single responsibility: manages scheduler lifecycle only
@@ -31,13 +29,13 @@ class SchedulerManager:
         log_function("SchedulerManager initialized")
 
     def initialize(self, download_callback, ingest_callback, sources_file: str) -> None:
-        """
-        Initialize the scheduler with callback functions.
+        """Initialize the scheduler with callback functions.
 
         Args:
             download_callback: Async function to trigger downloads
             ingest_callback: Async function to trigger ingestion
             sources_file: Path to sources configuration file
+
         """
         log_function("Initializing scheduler with callbacks")
         self.scheduler = RefreshScheduler(
@@ -78,11 +76,11 @@ class SchedulerManager:
         self.start()
 
     def update_source_schedule(self, source: Source) -> None:
-        """
-        Update schedule for a specific source.
+        """Update schedule for a specific source.
 
         Args:
             source: Updated source object
+
         """
         if not self.scheduler:
             logger.warning("Scheduler not initialized, cannot update source schedule")
@@ -91,12 +89,12 @@ class SchedulerManager:
         log_function(f"Updating schedule for source: {source.name}")
         self.scheduler.update_source_schedule(source)
 
-    def get_scheduler_status(self) -> Dict[str, Any]:
-        """
-        Get current scheduler status and job information.
+    def get_scheduler_status(self) -> dict[str, Any]:
+        """Get current scheduler status and job information.
 
         Returns:
             Dictionary with scheduler status and job details
+
         """
         if not self.scheduler:
             return {"running": False, "initialized": False, "jobs": []}
@@ -107,15 +105,15 @@ class SchedulerManager:
             "jobs": self.scheduler.get_scheduled_jobs(),
         }
 
-    def validate_and_schedule_sources(self, sources: List[Source]) -> Dict[str, Any]:
-        """
-        Validate source configurations and schedule valid ones.
+    def validate_and_schedule_sources(self, sources: list[Source]) -> dict[str, Any]:
+        """Validate source configurations and schedule valid ones.
 
         Args:
             sources: List of source objects to validate and schedule
 
         Returns:
             Dictionary with validation results and scheduling status
+
         """
         from scheduler.refresh_scheduler import validate_source_refresh_config
 
@@ -159,8 +157,7 @@ scheduler_manager = SchedulerManager()
 
 
 async def download_callback_wrapper(source_name: str, file_type: str) -> None:
-    """
-    Wrapper function to trigger download via existing endpoint logic.
+    """Wrapper function to trigger download via existing endpoint logic.
 
     This function replicates the core logic from queue_file_for_download
     without the HTTP response handling.
@@ -168,16 +165,18 @@ async def download_callback_wrapper(source_name: str, file_type: str) -> None:
     Args:
         source_name: Name of the source
         file_type: Type of file to download
+
     """
     log_function(f"Scheduler triggering download: {source_name} {file_type}")
 
     try:
         # Import here to avoid circular imports
-        from download.downloader import background_single_download_task
-        from common.utils import create_task_id
-        from common.task_manager import DownloadTaskManager
-        from common.constants import DATA_PATH
         import os
+
+        from common.constants import DATA_PATH
+        from common.task_manager import DownloadTaskManager
+        from common.utils import create_task_id
+        from download.downloader import background_single_download_task
 
         # Create task ID
         task_id = create_task_id(source_name, file_type, "download")
@@ -201,8 +200,7 @@ async def download_callback_wrapper(source_name: str, file_type: str) -> None:
 
 
 async def ingest_callback_wrapper(source_name: str, file_type: str) -> None:
-    """
-    Wrapper function to trigger ingest via existing endpoint logic.
+    """Wrapper function to trigger ingest via existing endpoint logic.
 
     This function replicates the core logic from load_file_to_db
     without the HTTP response handling.
@@ -210,21 +208,23 @@ async def ingest_callback_wrapper(source_name: str, file_type: str) -> None:
     Args:
         source_name: Name of the source
         file_type: Type of file to ingest
+
     """
     log_function(f"Scheduler triggering ingest: {source_name} {file_type}")
 
     try:
         # Import here to avoid circular imports
-        from common.utils import create_task_id
-        from common.task_manager import IngestTaskManager
-        from common.constants import DATA_PATH
-        from models.models import Source
-        import os
         import json
+        import os
+
+        from common.constants import DATA_PATH
+        from common.task_manager import IngestTaskManager
+        from common.utils import create_task_id
+        from models.models import Source
 
         # Load sources configuration
         sources_file = os.path.join(DATA_PATH, "sources.json")
-        with open(sources_file, "r") as f:
+        with open(sources_file) as f:
             sources = [Source(**source) for source in json.load(f)]
 
         # Find the source
@@ -287,11 +287,11 @@ def get_scheduler_manager() -> SchedulerManager:
 
 
 def initialize_scheduler(sources_file: str) -> None:
-    """
-    Initialize the global scheduler with job queue integration.
+    """Initialize the global scheduler with job queue integration.
 
     Args:
         sources_file: Path to sources configuration file
+
     """
     log_function("Initializing global scheduler with job queue integration")
 

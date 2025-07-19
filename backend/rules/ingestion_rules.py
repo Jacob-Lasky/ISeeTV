@@ -11,21 +11,20 @@ Architecture:
 - Scalable: Handles large datasets efficiently with streaming processing
 """
 
-from typing import List, Dict, Any, Optional, Tuple, Union, Literal
-from dataclasses import dataclass, field
-from pathlib import Path
 import json
+import logging
 import os
 import re
 import time
+from dataclasses import dataclass, field
 from datetime import datetime
-import logging
-import pandas as pd
-import numpy as np
+from typing import Any, Literal
 
-from models.models import EpgChannel, M3uChannel, Program
-from common.utils import log_function
+import pandas as pd
+
 from common.constants import DATA_PATH
+from common.utils import log_function
+from models.models import EpgChannel, M3uChannel, Program
 
 logger = logging.getLogger(__name__)
 
@@ -45,7 +44,7 @@ class IngestionRule:
     log_function("Creating ingestion rule")
 
     name: str
-    tables: List[
+    tables: list[
         str
     ]  # Tables this rule applies to (e.g., ["m3u_channels", "epg_channels"])
     field: str  # Field name to apply regex to
@@ -83,7 +82,7 @@ class SourceRuleAssignment:
     rule_mode: Literal[
         "whitelist", "blacklist"
     ]  # whitelist = start with 0, blacklist = start with all
-    assigned_rules: List[str] = field(default_factory=list)  # List of rule names
+    assigned_rules: list[str] = field(default_factory=list)  # List of rule names
     enabled: bool = True
 
     def __post_init__(self):
@@ -105,8 +104,8 @@ class FilterResult:
     log_function("Creating filter result")
 
     passed: bool  # True if record passes all rules
-    rejected_by: Optional[str] = None  # Name of rule that rejected the record
-    reason: Optional[str] = None  # Detailed rejection reason
+    rejected_by: str | None = None  # Name of rule that rejected the record
+    reason: str | None = None  # Detailed rejection reason
 
 
 class IngestionRulesEngine:
@@ -118,10 +117,10 @@ class IngestionRulesEngine:
         """Initialize the rules engine with optional rules file path"""
         self.rules_file = rules_file or os.path.join(DATA_PATH, "rules.json")
         self.assignments_file = os.path.join(DATA_PATH, "assignments.json")
-        self._rules_cache: List[IngestionRule] = []
-        self._assignments_cache: List[SourceRuleAssignment] = []
-        self._cache_timestamp: Optional[float] = None
-        self._compiled_patterns: Dict[str, re.Pattern] = {}
+        self._rules_cache: list[IngestionRule] = []
+        self._assignments_cache: list[SourceRuleAssignment] = []
+        self._cache_timestamp: float | None = None
+        self._compiled_patterns: dict[str, re.Pattern] = {}
 
     def _should_reload_rules(self) -> bool:
         """Check if rules file has been modified since last load"""
@@ -134,7 +133,7 @@ class IngestionRulesEngine:
         except (OSError, FileNotFoundError):
             return True
 
-    def load_rules(self) -> Tuple[List[IngestionRule], List[SourceRuleAssignment]]:
+    def load_rules(self) -> tuple[list[IngestionRule], list[SourceRuleAssignment]]:
         """Load rules and source assignments from separate configuration files with caching"""
         # Define paths for separate files
         assignments_file = self.assignments_file
@@ -160,7 +159,7 @@ class IngestionRulesEngine:
             try:
                 # Load rules from rules.json
                 if os.path.exists(self.rules_file):
-                    with open(self.rules_file, "r", encoding="utf-8") as f:
+                    with open(self.rules_file, encoding="utf-8") as f:
                         rules_data = json.load(f)
 
                     # Handle both array format and object format
@@ -183,7 +182,7 @@ class IngestionRulesEngine:
 
                 # Load assignments from assignments.json
                 if os.path.exists(assignments_file):
-                    with open(assignments_file, "r", encoding="utf-8") as f:
+                    with open(assignments_file, encoding="utf-8") as f:
                         assignments_data = json.load(f)
 
                     # Handle both array format and object format
@@ -235,7 +234,7 @@ class IngestionRulesEngine:
 
     def get_applicable_rules(
         self, table_name: str, source_name: str
-    ) -> List[IngestionRule]:
+    ) -> list[IngestionRule]:
         """Get rules that apply to a specific table and source (atomic operation)"""
         log_function("Getting applicable rules for table and source", level="debug")
         rules, _ = self.load_rules()
@@ -266,7 +265,7 @@ class IngestionRulesEngine:
         )
         return applicable_rules
 
-    def get_source_assignments(self, source_name: str) -> List[SourceRuleAssignment]:
+    def get_source_assignments(self, source_name: str) -> list[SourceRuleAssignment]:
         """Get all assignments for a specific source (supports multi-assignment architecture)"""
         log_function(
             f"Getting all assignments for source: {source_name}", level="debug"
@@ -289,7 +288,7 @@ class IngestionRulesEngine:
 
     def get_assignment_by_id(
         self, assignment_id: str
-    ) -> Optional[SourceRuleAssignment]:
+    ) -> SourceRuleAssignment | None:
         """Get a specific assignment by its ID"""
         log_function(f"Getting assignment by ID: {assignment_id}", level="debug")
         _, assignments = self.load_rules()
@@ -300,12 +299,12 @@ class IngestionRulesEngine:
 
         return None
 
-    def get_source_assignment(self, source_name: str) -> Optional[SourceRuleAssignment]:
+    def get_source_assignment(self, source_name: str) -> SourceRuleAssignment | None:
         """Legacy method for backwards compatibility - returns first assignment for source"""
         assignments = self.get_source_assignments(source_name)
         return assignments[0] if assignments else None
 
-    def get_all_source_assignments(self) -> List[SourceRuleAssignment]:
+    def get_all_source_assignments(self) -> list[SourceRuleAssignment]:
         """Get all enabled source assignments across all sources"""
         log_function("Getting all source assignments", level="debug")
         _, assignments = self.load_rules()
@@ -324,10 +323,10 @@ class IngestionRulesEngine:
 
     def apply_rules_to_records_batch(
         self,
-        records: List[Union[M3uChannel, EpgChannel, Program]],
+        records: list[M3uChannel | EpgChannel | Program],
         table_name: str,
         source_name: str,
-    ) -> Tuple[List[Union[M3uChannel, EpgChannel, Program]], List[Dict[str, Any]]]:
+    ) -> tuple[list[M3uChannel | EpgChannel | Program], list[dict[str, Any]]]:
         """Apply rules to a batch of records using vectorized operations for performance"""
         if not records:
             return [], []
@@ -418,10 +417,10 @@ class IngestionRulesEngine:
 
     def _apply_rules_fallback(
         self,
-        records: List[Union[M3uChannel, EpgChannel, Program]],
+        records: list[M3uChannel | EpgChannel | Program],
         table_name: str,
         source_name: str,
-    ) -> Tuple[List[Union[M3uChannel, EpgChannel, Program]], List[Dict[str, Any]]]:
+    ) -> tuple[list[M3uChannel | EpgChannel | Program], list[dict[str, Any]]]:
         """Fallback to single record processing if batch processing fails"""
         logger.warning("Falling back to single record processing")
         filtered_records = []
@@ -447,7 +446,7 @@ class IngestionRulesEngine:
 
     def apply_rules_to_record(
         self,
-        record: Union[M3uChannel, EpgChannel, Program],
+        record: M3uChannel | EpgChannel | Program,
         table_name: str,
         source_name: str,
     ) -> FilterResult:
@@ -511,15 +510,15 @@ class IngestionRulesEngine:
         # Apply rules based on source mode
         if source_assignment.rule_mode == "whitelist":
             # Whitelist mode: start with rejected, rules can allow
-            log_function(f"Applying whitelist rules to record", level="debug")
+            log_function("Applying whitelist rules to record", level="debug")
             return self._apply_whitelist_rules(record_dict, applicable_rules)
         else:
             # Blacklist mode: start with allowed, rules can reject
-            log_function(f"Applying blacklist rules to record", level="debug")
+            log_function("Applying blacklist rules to record", level="debug")
             return self._apply_blacklist_rules(record_dict, applicable_rules)
 
     def _apply_whitelist_rules(
-        self, record_dict: dict, rules: List[IngestionRule]
+        self, record_dict: dict, rules: list[IngestionRule]
     ) -> FilterResult:
         """Apply rules in whitelist mode (start rejected, rules allow)"""
         log_function("Applying whitelist rules")
@@ -553,7 +552,7 @@ class IngestionRulesEngine:
         )
 
     def _apply_blacklist_rules(
-        self, record_dict: dict, rules: List[IngestionRule]
+        self, record_dict: dict, rules: list[IngestionRule]
     ) -> FilterResult:
         """Apply rules in blacklist mode (start allowed, rules reject)"""
         log_function("Applying blacklist rules", level="debug")
@@ -583,7 +582,7 @@ class IngestionRulesEngine:
         return FilterResult(passed=True)
 
     def save_rejected_records(
-        self, rejected_records: List[Dict[str, Any]], table_name: str, source_name: str
+        self, rejected_records: list[dict[str, Any]], table_name: str, source_name: str
     ) -> None:
         """Save rejected records to JSON file (atomic operation)"""
         if not rejected_records:
@@ -610,10 +609,10 @@ rules_engine = IngestionRulesEngine()
 
 
 def apply_ingestion_rules(
-    records: List[Union[M3uChannel, EpgChannel, Program]],
+    records: list[M3uChannel | EpgChannel | Program],
     table_name: str,
     source_name: str,
-) -> Tuple[List[Union[M3uChannel, EpgChannel, Program]], List[Dict[str, Any]]]:
+) -> tuple[list[M3uChannel | EpgChannel | Program], list[dict[str, Any]]]:
     """Apply ingestion rules to a list of records and return filtered and rejected records"""
     log_function(
         f"Applying ingestion rules to {len(records)} {table_name} records from {source_name}"
@@ -705,7 +704,7 @@ def apply_ingestion_rules(
 
 
 def save_rejected_records(
-    rejected_records: List[Dict[str, Any]], table_name: str, source_name: str
+    rejected_records: list[dict[str, Any]], table_name: str, source_name: str
 ) -> None:
     """Save rejected records to JSON file (atomic operation)"""
     log_function(
@@ -728,7 +727,7 @@ def save_rejected_records(
         logger.error(f"Error saving rejected records to {filepath}: {e}")
 
 
-def validate_rules_config(rules_data: List[Dict[str, Any]]) -> Tuple[bool, List[str]]:
+def validate_rules_config(rules_data: list[dict[str, Any]]) -> tuple[bool, list[str]]:
     """Validate rules configuration data (atomic operation)
 
     Args:
@@ -736,6 +735,7 @@ def validate_rules_config(rules_data: List[Dict[str, Any]]) -> Tuple[bool, List[
 
     Returns:
         Tuple of (is_valid, error_messages)
+
     """
     log_function("Validating rules configuration")
     errors = []
@@ -784,7 +784,7 @@ def validate_rules_config(rules_data: List[Dict[str, Any]]) -> Tuple[bool, List[
     return len(errors) == 0, errors
 
 
-def get_ingestion_rules_status() -> Dict[str, Any]:
+def get_ingestion_rules_status() -> dict[str, Any]:
     """Get current status of ingestion rules system (atomic operation)"""
     log_function("Getting rules status")
     rules_engine.load_rules()

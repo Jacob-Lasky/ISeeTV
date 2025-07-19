@@ -4,12 +4,12 @@ This module provides atomic functions for saving and loading ingestion rules
 and source rule assignments to separate JSON files.
 """
 
-import os
-from typing import List, Dict, Any
 import logging
+import os
+from typing import Any
 
 from common.constants import DATA_PATH
-from common.file_utils import atomic_write_json, atomic_read_json, ensure_file_exists
+from common.file_utils import atomic_read_json, atomic_write_json, ensure_file_exists
 from common.utils import log_function
 
 logger = logging.getLogger(__name__)
@@ -19,7 +19,7 @@ RULES_FILE = os.path.join(DATA_PATH, "rules.json")
 ASSIGNMENTS_FILE = os.path.join(DATA_PATH, "assignments.json")
 
 
-def save_rules(rules: List[Dict[str, Any]]) -> Dict[str, Any]:
+def save_rules(rules: list[dict[str, Any]]) -> dict[str, Any]:
     """Atomically save ingestion rules to rules.json file.
 
     Args:
@@ -30,6 +30,7 @@ def save_rules(rules: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     Raises:
         Exception: If file operations fail
+
     """
     log_function(f"Saving {len(rules)} rules to {RULES_FILE}")
 
@@ -51,7 +52,7 @@ def save_rules(rules: List[Dict[str, Any]]) -> Dict[str, Any]:
         raise e
 
 
-def save_assignments(assignments: List[Dict[str, Any]]) -> Dict[str, Any]:
+def save_assignments(assignments: list[dict[str, Any]]) -> dict[str, Any]:
     """Atomically save source rule assignments to assignments.json file.
 
     Args:
@@ -62,6 +63,7 @@ def save_assignments(assignments: List[Dict[str, Any]]) -> Dict[str, Any]:
 
     Raises:
         Exception: If file operations fail
+
     """
     log_function(f"Saving {len(assignments)} assignments to {ASSIGNMENTS_FILE}")
 
@@ -113,11 +115,12 @@ def save_assignments(assignments: List[Dict[str, Any]]) -> Dict[str, Any]:
         raise e
 
 
-def load_rules() -> List[Dict[str, Any]]:
+def load_rules() -> list[dict[str, Any]]:
     """Load ingestion rules from rules.json file.
 
     Returns:
         List of rule dictionaries, empty list if file doesn't exist
+
     """
     log_function(f"Loading rules from {RULES_FILE}")
 
@@ -129,11 +132,12 @@ def load_rules() -> List[Dict[str, Any]]:
     return rules
 
 
-def load_assignments() -> List[Dict[str, Any]]:
+def load_assignments() -> list[dict[str, Any]]:
     """Load source rule assignments from assignments.json file.
 
     Returns:
         List of assignment dictionaries, empty list if file doesn't exist
+
     """
     log_function(f"Loading assignments from {ASSIGNMENTS_FILE}")
 

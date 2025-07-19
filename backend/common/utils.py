@@ -1,8 +1,10 @@
 import datetime as dt
-from typing import Literal, Dict, List, Any, Optional
-import logging
 import inspect
+import logging
+from typing import Any, Literal
+
 from fastapi import HTTPException, status
+
 from common.state import get_progress
 
 logger = logging.getLogger(__name__)
@@ -52,8 +54,8 @@ def get_all_progress_response(task_type: Literal["download", "ingest"]):
 
 
 def format_download_progress_response(
-    progress_data: Dict[str, Dict],
-) -> Dict[str, "DownloadProgress"]:
+    progress_data: dict[str, dict],
+) -> dict[str, "DownloadProgress"]:
     """Format raw progress data into DownloadProgress models"""
     from models.models import DownloadProgress
 
@@ -63,17 +65,17 @@ def format_download_progress_response(
     }
 
 
-def format_ingest_progress_response(progress_data: Dict[str, Dict]) -> Dict[str, Dict]:
+def format_ingest_progress_response(progress_data: dict[str, dict]) -> dict[str, dict]:
     """Format raw progress data for ingest endpoints (legacy format)"""
     return {"ingest": progress_data}
 
 
 def format_table_response(
-    records: List[Dict[str, Any]],
+    records: list[dict[str, Any]],
     table_name: str,
-    source_filter: Optional[str] = None,
-    filter_stats: Optional[Dict[str, int]] = None,
-) -> Dict[str, Any]:
+    source_filter: str | None = None,
+    filter_stats: dict[str, int] | None = None,
+) -> dict[str, Any]:
     # Use provided filter statistics or calculate from records
     if filter_stats and len(filter_stats) > 0:
         total_records = sum(filter_stats.values())
