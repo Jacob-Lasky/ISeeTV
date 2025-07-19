@@ -87,19 +87,16 @@ def precompute_filter_values(session: Session, table_name: str) -> None:
             result = session.execute(query)
 
             # Insert filter values
-            filter_values = []
-            for row in result:
-                if (
-                    row.value and row.count > 0
-                ):  # Only add non-empty values with positive counts
-                    filter_values.append(
-                        FilterValueTable(
-                            table_name=table_name,
-                            column_name=column_name,
-                            value=row.value,
-                            count=row.count,
-                        )
-                    )
+            filter_values = [
+                FilterValueTable(
+                    table_name=table_name,
+                    column_name=column_name,
+                    value=row.value,
+                    count=row.count,
+                )
+                for row in result
+                if row.value and row.count > 0
+            ]
 
             if filter_values:
                 session.add_all(filter_values)

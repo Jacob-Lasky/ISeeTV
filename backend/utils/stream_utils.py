@@ -599,16 +599,15 @@ def precompute_streams_filter_values(session: Session) -> None:
         )
 
         source_result = session.execute(source_query)
-        source_values = []
-        for row in source_result:
-            source_values.append(
-                FilterValueTable(
-                    table_name="streams",
-                    column_name="source",
-                    value=row.value,
-                    count=row.count,
-                )
+        source_values = [
+            FilterValueTable(
+                table_name="streams",
+                column_name="source",
+                value=row.value,
+                count=row.count,
             )
+            for row in source_result
+        ]
 
         # Precompute group values from M3U channels
         group_query = text(
@@ -622,16 +621,15 @@ def precompute_streams_filter_values(session: Session) -> None:
         )
 
         group_result = session.execute(group_query)
-        group_values = []
-        for row in group_result:
-            group_values.append(
-                FilterValueTable(
-                    table_name="streams",
-                    column_name="group",
-                    value=row.value,
-                    count=row.count,
-                )
+        group_values = [
+            FilterValueTable(
+                table_name="streams",
+                column_name="group",
+                value=row.value,
+                count=row.count,
             )
+            for row in group_result
+        ]
 
         # Add all filter values
         all_values = source_values + group_values
