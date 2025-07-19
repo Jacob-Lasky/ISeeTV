@@ -7,10 +7,13 @@
         "dev": "vite",
         "build": "vue-tsc -b && vite build",
         "preview": "vite preview",
-        "lint": "eslint . --ext .ts,.vue",
+        "lint": "ONLY_WARN=true eslint . --ext .ts,.vue",
         "lint:fix": "eslint . --ext .ts,.vue --fix",
+        "lint:ci": "npm run type-check && eslint . --ext .ts,.vue",
+        "type-check": "vue-tsc --noEmit --skipLibCheck",
+        "type-check:watch": "vue-tsc --noEmit --skipLibCheck --watch",
         "format": "prettier . --write",
-        "format-and-lint": "prettier . --write && eslint . --ext .ts,.vue"
+        "format-and-lint": "prettier . --write && npm run type-check && eslint . --ext .ts,.vue"
     },
     "dependencies": {
         "@primeuix/themes": "^1.1.2",
@@ -30,6 +33,7 @@
         "autoprefixer": "^10.4.21",
         "eslint": "^9.29.0",
         "eslint-config-prettier": "^10.1.5",
+        "eslint-plugin-only-warn": "^1.1.0",
         "eslint-plugin-prettier": "^5.5.0",
         "eslint-plugin-vue": "^10.2.0",
         "postcss": "^8.5.6",

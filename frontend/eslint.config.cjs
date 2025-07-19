@@ -9,7 +9,7 @@ const tsRecommended = require("@typescript-eslint/eslint-plugin").configs
 const prettierRecommended = require("eslint-plugin-prettier").configs
     .recommended
 
-module.exports = [
+const config = [
     // Global ignores (applies to everything)
     {
         ignores: [
@@ -44,9 +44,23 @@ module.exports = [
             ...tsRecommended.rules,
             ...prettierRecommended.rules,
             "prettier/prettier": "error",
+            
+            // TypeScript type safety rules - surface type errors as lint errors
             "@typescript-eslint/no-unsafe-member-access": "error",
             "@typescript-eslint/no-unsafe-assignment": "warn",
             "@typescript-eslint/no-unsafe-call": "warn",
+            "@typescript-eslint/no-unsafe-return": "error",
+            "@typescript-eslint/no-unsafe-argument": "error",
+            "@typescript-eslint/no-explicit-any": "error",
+            "@typescript-eslint/strict-boolean-expressions": "error",
+            "@typescript-eslint/no-unnecessary-type-assertion": "error",
+            "@typescript-eslint/prefer-as-const": "error",
+            "@typescript-eslint/no-non-null-assertion": "error",
+            
+            // Catch type assignment errors
+            "@typescript-eslint/no-misused-new": "error",
+            "@typescript-eslint/no-this-alias": "error",
+            "@typescript-eslint/prefer-readonly": "error",
         },
     },
 
@@ -73,3 +87,11 @@ module.exports = [
         },
     },
 ]
+
+// Downgrade to warnings if ONLY_WARN=true (for development)
+if (process.env.ONLY_WARN === "true") {
+    const onlyWarn = require("eslint-plugin-only-warn")
+    module.exports = onlyWarn(config)
+} else {
+    module.exports = config
+}
