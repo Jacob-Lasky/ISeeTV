@@ -3,6 +3,7 @@ accessed across multiple modules.
 """
 
 from typing import Literal
+
 from common.log_utils import get_logger
 
 logger = get_logger(__name__)

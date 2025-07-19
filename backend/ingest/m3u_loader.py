@@ -3,18 +3,17 @@
 """
 
 import asyncio
-import logging
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session
 
+from common.log_utils import get_logger
 from common.task_manager import IngestTaskManager, TaskManager
 from ingest.m3u_parser import parse_m3u
 from models.db_models import M3uChannelTable
 from models.models import M3uChannel
 from rules.post_load_rules import apply_post_load_rules
-from common.log_utils import get_logger
 
 logger = get_logger(__name__)
 

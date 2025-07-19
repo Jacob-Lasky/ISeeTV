@@ -5,18 +5,17 @@ the existing FastAPI download/ingest endpoints.
 """
 
 import json
-import logging
 import os
 from typing import Any
 
 from common.constants import DATA_PATH
+from common.log_utils import get_logger
 from common.task_manager import DownloadTaskManager, IngestTaskManager
 from common.utils import create_task_id
 from download.downloader import background_single_download_task
 from models.models import Source
 from scheduler.job_queue_callbacks import refresh_job_callback_wrapper
 from scheduler.refresh_scheduler import RefreshScheduler, validate_source_refresh_config
-from common.log_utils import get_logger
 
 logger = get_logger(__name__)
 

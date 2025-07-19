@@ -5,8 +5,8 @@ Provides shared utilities for managing download and ingest tasks with DRY compli
 import datetime as dt
 from typing import Any, Literal
 
-from common.state import get_progress
 from common.log_utils import get_logger
+from common.state import get_progress
 
 logger = get_logger(__name__)
 

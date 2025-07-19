@@ -5,13 +5,13 @@ only one job runs at a time across the entire application.
 """
 
 import asyncio
-import logging
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
 from datetime import datetime
 from enum import Enum
 from typing import Any, Literal
+
 from common.log_utils import get_logger
 
 logger = get_logger(__name__)

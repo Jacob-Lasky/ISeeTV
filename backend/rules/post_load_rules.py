@@ -12,19 +12,18 @@ Architecture:
 """
 
 import json
-import logging
 from typing import Any
 
 import pandas as pd
 from sqlalchemy import text
 
 from common.db import SessionLocal
+from common.log_utils import get_logger
 from rules.ingestion_rules import (
     IngestionRule,
     IngestionRulesEngine,
     SourceRuleAssignment,
 )
-from common.log_utils import get_logger
 
 logger = get_logger(__name__)
 

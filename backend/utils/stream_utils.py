@@ -1,17 +1,17 @@
 """Utility functions for streams view with atomic join logic."""
 
-import logging
 from datetime import datetime
 from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
+from common.log_utils import get_logger
+
 # Clear existing filter values for streams
 from models.db_models import FilterValueTable
 from models.stream_models import StreamChannel, StreamProgram
 from utils.filter_utils import get_all_filter_values
-from common.log_utils import get_logger
 
 logger = get_logger(__name__)
 

@@ -5,7 +5,6 @@ through temporary file writes and atomic moves.
 """
 
 import json
-import logging
 import os
 import tempfile
 from pathlib import Path

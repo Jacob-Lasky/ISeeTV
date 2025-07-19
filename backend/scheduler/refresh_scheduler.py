@@ -6,7 +6,6 @@ with existing download and ingest flows in main.py.
 
 import asyncio
 import json
-import logging
 import os
 from collections.abc import Callable
 from datetime import datetime, timedelta
@@ -19,8 +18,8 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from common.constants import DATA_PATH
-from models.models import Source
 from common.log_utils import get_logger
+from models.models import Source
 
 logger = get_logger(__name__)
 

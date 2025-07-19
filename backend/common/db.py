@@ -1,6 +1,5 @@
 # common/state.py or common/db.py
 
-import logging
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker

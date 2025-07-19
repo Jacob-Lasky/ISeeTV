@@ -3,9 +3,9 @@ from typing import Any, Literal
 
 from fastapi import HTTPException, status
 
+from common.log_utils import get_logger
 from common.state import get_progress
 from models.models import DownloadProgress
-from common.log_utils import get_logger
 
 logger = get_logger(__name__)
 

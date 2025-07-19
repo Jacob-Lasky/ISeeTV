@@ -1,12 +1,11 @@
-import logging
 import re
 from collections import defaultdict
 
 from fastapi import HTTPException, status
 
+from common.log_utils import get_logger
 from common.task_manager import IngestTaskManager
 from models.models import M3uChannel
-from common.log_utils import get_logger
 
 logger = get_logger(__name__)
 

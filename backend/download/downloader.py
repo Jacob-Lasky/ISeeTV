@@ -1,17 +1,16 @@
 import asyncio
 import datetime as dt
 import json
-import logging
 import os
 from typing import Literal
 
 import httpx
 from fastapi import HTTPException, status
 
+from common.log_utils import get_logger
 from common.state import get_progress, is_task_cancelled, remove_cancelled_task
 from common.task_manager import DownloadTaskManager
 from models.models import Source
-from common.log_utils import get_logger
 
 logger = get_logger(__name__)
 

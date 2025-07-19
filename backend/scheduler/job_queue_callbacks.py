@@ -5,17 +5,16 @@ with the global job queue system to ensure single-job execution.
 """
 
 import json
-import logging
 import os
 from typing import Literal
 
 from common.constants import DATA_PATH
 from common.job_queue import enqueue_refresh_job
+from common.log_utils import get_logger
 from common.task_manager import DownloadTaskManager, IngestTaskManager
 from common.utils import create_task_id
 from download.downloader import background_single_download_task
 from models.models import Source
-from common.log_utils import get_logger
 
 logger = get_logger(__name__)
 

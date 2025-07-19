@@ -4,14 +4,13 @@ This module provides atomic functions for saving and loading ingestion rules
 and source rule assignments to separate JSON files.
 """
 
-import logging
 import os
 from typing import Any
 
 from common.constants import DATA_PATH
 from common.file_utils import atomic_read_json, atomic_write_json, ensure_file_exists
-from rules.ingestion_rules import IngestionRule, SourceRuleAssignment
 from common.log_utils import get_logger
+from rules.ingestion_rules import IngestionRule, SourceRuleAssignment
 
 logger = get_logger(__name__)
 

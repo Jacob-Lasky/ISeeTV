@@ -12,7 +12,6 @@ Architecture:
 """
 
 import json
-import logging
 import os
 import re
 import time
@@ -23,8 +22,8 @@ from typing import Any, Literal
 import pandas as pd
 
 from common.constants import DATA_PATH
-from models.models import EpgChannel, M3uChannel, Program
 from common.log_utils import get_logger
+from models.models import EpgChannel, M3uChannel, Program
 
 logger = get_logger(__name__)
 

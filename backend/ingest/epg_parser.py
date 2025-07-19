@@ -1,13 +1,12 @@
 import datetime as dt
-import logging
 from collections import defaultdict
 
 from lxml import etree
 from lxml.etree import _Element
 
+from common.log_utils import get_logger
 from common.task_manager import IngestTaskManager
 from models.models import EpgChannel, Program
-from common.log_utils import get_logger
 
 logger = get_logger(__name__)
 

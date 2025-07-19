@@ -1,14 +1,13 @@
 """Utility functions for precomputing and managing filter values."""
 
-import logging
 from collections import defaultdict
 from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from models.db_models import FilterValueTable
 from common.log_utils import get_logger
+from models.db_models import FilterValueTable
 
 logger = get_logger(__name__)
 

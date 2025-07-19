@@ -23,6 +23,7 @@ from common.job_queue import (
     initialize_job_queue,
     shutdown_job_queue,
 )
+from common.log_utils import get_logger
 from common.rules_storage import (
     load_assignments,
     load_rules,
@@ -93,7 +94,6 @@ from utils.stream_utils import (
     get_streams_query,
     precompute_streams_filter_values,
 )
-from common.log_utils import get_logger
 
 logger = get_logger(__name__)
 

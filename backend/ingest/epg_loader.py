@@ -8,11 +8,11 @@ from collections.abc import AsyncGenerator
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session
 
+from common.log_utils import get_logger
 from common.task_manager import IngestTaskManager, TaskManager
 from ingest.epg_parser import parse_epg_for_channels, parse_epg_for_programs
 from models.db_models import EpgChannelTable, ProgramTable
 from models.models import EpgChannel, Program
-from common.log_utils import get_logger
 
 logger = get_logger(__name__)
 
