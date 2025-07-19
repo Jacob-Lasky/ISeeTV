@@ -36,7 +36,6 @@ async def refresh_job_callback_wrapper(
     log_function(f"Scheduler triggering refresh job for {source_name} {file_type}")
 
     try:
-
         # Load sources configuration
         sources_file = os.path.join(DATA_PATH, "sources.json")
         with open(sources_file) as f:

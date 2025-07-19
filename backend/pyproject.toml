@@ -35,11 +35,11 @@ requires = ["hatchling"]
 build-backend = "hatchling.build"
 
 [tool.ruff]
-lint.select = ["D", "DOC", "E", "F", "FAST", "FLY", "I", "N", "TID", "UP"]
+lint.select = ["ALL"]
 lint.preview = true
-
-# Disable conflicting docstring rules
 lint.ignore = [
-  "D203",  # conflict with formatter: prefers no blank line before class docstring
-  "D213",  # ignore 'multi-line-summary-second-line'
+    "COM812",  # missing-trailing-comma
+    "D203",    # blank line required before class docstring
+    "D211",    # no-blank-line-before-class
+    "D213",    # multi-line-summary-second-line
 ]

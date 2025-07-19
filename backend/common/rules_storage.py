@@ -67,7 +67,6 @@ def save_assignments(assignments: list[dict[str, Any]]) -> dict[str, Any]:
     log_function(f"Saving {len(assignments)} assignments to {ASSIGNMENTS_FILE}")
 
     try:
-
         # Filter out unknown fields before validation and saving
         valid_fields = {
             "id",

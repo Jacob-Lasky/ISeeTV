@@ -181,7 +181,6 @@ async def download_callback_wrapper(source_name: str, file_type: str) -> None:
     log_function(f"Scheduler triggering download: {source_name} {file_type}")
 
     try:
-
         # Create task ID
         task_id = create_task_id(source_name, file_type, "download")
 
@@ -217,7 +216,6 @@ async def ingest_callback_wrapper(source_name: str, file_type: str) -> None:
     log_function(f"Scheduler triggering ingest: {source_name} {file_type}")
 
     try:
-
         # Load sources configuration
         sources_file = os.path.join(DATA_PATH, "sources.json")
         with open(sources_file) as f:
