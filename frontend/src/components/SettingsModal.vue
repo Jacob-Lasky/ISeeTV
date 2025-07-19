@@ -86,6 +86,7 @@
 import { ref, onMounted, watch, computed } from "vue"
 import { useConfirm } from "primevue/useconfirm"
 import { apiGet, apiPost } from "@/utils/apiUtils"
+import type { GlobalSettings } from "@/types/types"
 
 // Import PrimeVue components
 import Dialog from "primevue/dialog"
@@ -170,7 +171,7 @@ async function fetchSettings() {
     loading.value = true
     error.value = null
     try {
-        const data = await apiGet("/api/settings", false, {
+        const data = await apiGet<GlobalSettings>("/api/settings", false, {
             showSuccessToast: true,
             errorPrefix: "Failed to load settings",
         })
