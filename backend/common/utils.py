@@ -6,6 +6,7 @@ from typing import Any, Literal
 from fastapi import HTTPException, status
 
 from common.state import get_progress
+from models.models import DownloadProgress
 
 logger = logging.getLogger(__name__)
 
@@ -57,7 +58,6 @@ def format_download_progress_response(
     progress_data: dict[str, dict],
 ) -> dict[str, "DownloadProgress"]:
     """Format raw progress data into DownloadProgress models"""
-    from models.models import DownloadProgress
 
     return {
         task_id: DownloadProgress(**progress)

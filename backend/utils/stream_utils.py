@@ -11,6 +11,9 @@ from common.utils import log_function
 from models.stream_models import StreamChannel, StreamProgram
 from utils.filter_utils import get_all_filter_values
 
+# Clear existing filter values for streams
+from models.db_models import FilterValueTable
+
 logger = logging.getLogger(__name__)
 
 
@@ -571,9 +574,6 @@ def precompute_streams_filter_values(session: Session) -> None:
     try:
         # Define filterable columns for streams view
         streams_filterable_columns = ["source", "group"]
-
-        # Clear existing filter values for streams
-        from models.db_models import FilterValueTable
 
         session.query(FilterValueTable).filter(
             FilterValueTable.table_name == "streams"

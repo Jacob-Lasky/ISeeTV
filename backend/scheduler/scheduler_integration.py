@@ -11,6 +11,18 @@ from common.utils import log_function
 from models.models import Source
 from scheduler.refresh_scheduler import RefreshScheduler
 
+from scheduler.job_queue_callbacks import refresh_job_callback_wrapper
+import json
+import os
+
+from common.constants import DATA_PATH
+from common.task_manager import IngestTaskManager
+from common.utils import create_task_id
+from models.models import Source
+from common.task_manager import DownloadTaskManager
+from download.downloader import background_single_download_task
+from scheduler.refresh_scheduler import validate_source_refresh_config
+
 logger = logging.getLogger(__name__)
 
 
@@ -115,7 +127,6 @@ class SchedulerManager:
             Dictionary with validation results and scheduling status
 
         """
-        from scheduler.refresh_scheduler import validate_source_refresh_config
 
         results = {
             "valid_sources": [],
@@ -170,13 +181,6 @@ async def download_callback_wrapper(source_name: str, file_type: str) -> None:
     log_function(f"Scheduler triggering download: {source_name} {file_type}")
 
     try:
-        # Import here to avoid circular imports
-        import os
-
-        from common.constants import DATA_PATH
-        from common.task_manager import DownloadTaskManager
-        from common.utils import create_task_id
-        from download.downloader import background_single_download_task
 
         # Create task ID
         task_id = create_task_id(source_name, file_type, "download")
@@ -213,14 +217,6 @@ async def ingest_callback_wrapper(source_name: str, file_type: str) -> None:
     log_function(f"Scheduler triggering ingest: {source_name} {file_type}")
 
     try:
-        # Import here to avoid circular imports
-        import json
-        import os
-
-        from common.constants import DATA_PATH
-        from common.task_manager import IngestTaskManager
-        from common.utils import create_task_id
-        from models.models import Source
 
         # Load sources configuration
         sources_file = os.path.join(DATA_PATH, "sources.json")
@@ -294,9 +290,6 @@ def initialize_scheduler(sources_file: str) -> None:
 
     """
     log_function("Initializing global scheduler with job queue integration")
-
-    # Import the job queue callback wrapper
-    from scheduler.job_queue_callbacks import refresh_job_callback_wrapper
 
     scheduler_manager.initialize(
         download_callback=refresh_job_callback_wrapper,

@@ -92,6 +92,9 @@ from utils.stream_utils import (
     precompute_streams_filter_values,
 )
 
+# Import and unapply rules
+from rules.post_load_rules import post_load_engine
+
 logging.basicConfig(level=logging.INFO, format="%(levelname)s: %(message)s")
 logger = logging.getLogger(__name__)
 
@@ -1627,9 +1630,6 @@ async def apply_assignment(
             f"[apply_assignment]: Applying assignment '{assignment_id}' to {table_name}"
         )
 
-        # Import post_load_engine and check if assignment exists (regardless of enabled status)
-        from rules.post_load_rules import post_load_engine
-
         # Load all assignments to check if it exists
         _, assignments = post_load_engine.ingestion_engine.load_rules()
         assignment_exists = any(a.id == assignment_id for a in assignments)
@@ -1703,9 +1703,6 @@ async def unapply_assignment(
         logger.info(
             f"[unapply_assignment]: Unapplying assignment '{assignment_id}' from {table_name or 'all relevant tables'}"
         )
-
-        # Import post_load_engine and get the assignment by ID (including disabled ones for unapply)
-        from rules.post_load_rules import post_load_engine
 
         # Load all assignments to find the one we want to unapply (including disabled)
         _, assignments = post_load_engine.ingestion_engine.load_rules()
@@ -1993,9 +1990,6 @@ async def apply_rule_assignments(request: dict[str, Any] = Body(...)) -> dict[st
             f"Applying rules to table: {table_name}, source: {source_name or 'all sources'}"
         )
 
-        # Import and apply post-load rules
-        from rules.post_load_rules import apply_post_load_rules
-
         # Apply rules to the specified table and source
         result = apply_post_load_rules(table_name, source_name)
 
@@ -2055,9 +2049,6 @@ async def apply_single_rule(request: dict[str, Any] = Body(...)) -> dict[str, An
         log_function(
             f"Applying single rule '{rule_name}' to {table_name} for source {source_name}"
         )
-
-        # Import and apply single rule
-        from rules.post_load_rules import post_load_engine
 
         result = post_load_engine.apply_single_rule_to_source(
             rule_name, table_name, source_name
@@ -2128,9 +2119,6 @@ async def apply_rules_to_source(request: dict[str, Any] = Body(...)) -> dict[str
             f"Applying all rules to source {source_name} for tables: {table_names or 'all'}"
         )
 
-        # Import and apply rules to source
-        from rules.post_load_rules import post_load_engine
-
         result = post_load_engine.apply_all_rules_to_source(source_name, table_names)
 
         log_function(f"All rules for {source_name} applied to {table_names}")
@@ -2188,9 +2176,6 @@ async def unapply_rules(request: dict[str, Any] = Body(...)) -> dict[str, Any]:
         log_function(
             f"Unapplying rules from {table_name} for source {source_name}: {rule_names or 'all rules'}"
         )
-
-        # Import and unapply rules
-        from rules.post_load_rules import post_load_engine
 
         result = post_load_engine.unapply_rules_from_source(
             table_name, source_name, rule_names

@@ -11,6 +11,7 @@ from typing import Any
 from common.constants import DATA_PATH
 from common.file_utils import atomic_read_json, atomic_write_json, ensure_file_exists
 from common.utils import log_function
+from rules.ingestion_rules import SourceRuleAssignment, IngestionRule
 
 logger = logging.getLogger(__name__)
 
@@ -36,8 +37,6 @@ def save_rules(rules: list[dict[str, Any]]) -> dict[str, Any]:
 
     try:
         # Validate rules structure
-        from rules.ingestion_rules import IngestionRule
-
         for rule_data in rules:
             IngestionRule(**rule_data)  # This will raise if invalid
 
@@ -68,8 +67,6 @@ def save_assignments(assignments: list[dict[str, Any]]) -> dict[str, Any]:
     log_function(f"Saving {len(assignments)} assignments to {ASSIGNMENTS_FILE}")
 
     try:
-        # Validate assignments structure
-        from rules.ingestion_rules import SourceRuleAssignment
 
         # Filter out unknown fields before validation and saving
         valid_fields = {

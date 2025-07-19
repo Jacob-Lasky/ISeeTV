@@ -8,6 +8,14 @@ import logging
 from typing import Literal
 
 from common.utils import log_function
+import json
+import os
+from common.constants import DATA_PATH
+from models.models import Source
+from download.downloader import background_single_download_task
+from common.job_queue import enqueue_refresh_job
+from common.task_manager import DownloadTaskManager, IngestTaskManager
+from common.utils import create_task_id
 
 logger = logging.getLogger(__name__)
 
@@ -28,15 +36,6 @@ async def refresh_job_callback_wrapper(
     log_function(f"Scheduler triggering refresh job for {source_name} {file_type}")
 
     try:
-        # Import here to avoid circular imports
-        import json
-        import os
-
-        from common.constants import DATA_PATH
-        from common.job_queue import enqueue_refresh_job
-        from common.task_manager import DownloadTaskManager, IngestTaskManager
-        from common.utils import create_task_id
-        from models.models import Source
 
         # Load sources configuration
         sources_file = os.path.join(DATA_PATH, "sources.json")
@@ -124,13 +123,7 @@ async def _execute_refresh_job(
 
     try:
         # Import here to avoid circular imports
-        import json
-        import os
-
-        from common.constants import DATA_PATH
-        from download.downloader import background_single_download_task
         from main import background_load_task
-        from models.models import Source
 
         download_dir = os.path.join(DATA_PATH, "sources")
 

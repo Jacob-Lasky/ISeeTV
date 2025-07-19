@@ -26,6 +26,8 @@ from rules.ingestion_rules import (
     SourceRuleAssignment,
 )
 
+import json
+
 logger = logging.getLogger(__name__)
 
 
@@ -359,9 +361,6 @@ class PostLoadRulesEngine:
                 logger.warning(f"Error applying rule '{rule.name}': {e}")
                 continue
 
-        # Process filter_reasons for each record (JSON array approach)
-        import json
-
         processed_count = len(df)
         filtered_count = 0
         passed_count = 0
@@ -436,9 +435,6 @@ class PostLoadRulesEngine:
         log_function(
             f"Loaded {len(records)} records from {table_name} for {source_name}"
         )
-
-        # Process filter_reasons for each record (JSON array approach)
-        import json
 
         processed_count = len(records)
         restored_count = 0
