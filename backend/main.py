@@ -6,7 +6,7 @@ from sqlalchemy import inspect, text, Row
 import uvicorn
 import json
 from fastapi import HTTPException, status, Body
-from fastapi.responses import RedirectResponse, StreamingResponse
+from fastapi.responses import RedirectResponse, StreamingResponse, Response
 import httpx
 from fastapi.responses import StreamingResponse
 import asyncio
@@ -65,6 +65,13 @@ from utils.stream_utils import (
     precompute_streams_filter_values,
     get_streams_filter_values,
     get_filter_view_counts,
+)
+from utils.file_generators import (
+    get_filtered_channels_and_programs,
+    filter_passed_channels,
+    apply_unified_channel_filtering,
+    generate_m3u_content,
+    generate_epg_content,
 )
 from common.db import init_db, engine, SessionLocal
 from common.utils import log_function
@@ -2284,6 +2291,135 @@ async def cancel_job_by_id(job_id: str) -> Dict[str, Any]:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to cancel job: {str(e)}",
         )
+
+
+# File Generation API Endpoints
+
+
+@app.get("/api/iseetv.m3u", tags=["File Generation"])
+async def get_global_m3u():
+    """
+    Generate global M3U playlist with all filtered channels from all sources.
+    
+    Returns:
+        M3U playlist content with proper content-type headers
+    """
+    try:
+        # Get all channels and apply unified filtering
+        m3u_channels, epg_channels, programs = get_filtered_channels_and_programs()
+        filtered_m3u_channels, _, _ = apply_unified_channel_filtering(m3u_channels, epg_channels, programs)
+        
+        # Generate M3U content
+        m3u_content = generate_m3u_content(filtered_m3u_channels)
+        
+        # Return with proper content type
+        return Response(
+            content=m3u_content,
+            media_type="audio/x-mpegurl",
+            headers={
+                "Content-Disposition": "attachment; filename=iseetv.m3u",
+                "Cache-Control": "no-cache"
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error generating global M3U: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating M3U: {str(e)}")
+
+
+@app.get("/api/iseetv.xml", tags=["File Generation"])
+async def get_global_epg():
+    """
+    Generate global EPG XML with all filtered channels and programs from all sources.
+    
+    Returns:
+        EPG XML content with proper content-type headers
+    """
+    try:
+        # Get all channels and programs, apply unified filtering
+        m3u_channels, epg_channels, programs = get_filtered_channels_and_programs()
+        _, filtered_epg_channels, filtered_programs = apply_unified_channel_filtering(m3u_channels, epg_channels, programs)
+        
+        # Generate EPG content
+        epg_content = generate_epg_content(filtered_epg_channels, filtered_programs)
+        
+        # Return with proper content type
+        return Response(
+            content=epg_content,
+            media_type="application/xml",
+            headers={
+                "Content-Disposition": "attachment; filename=iseetv.xml",
+                "Cache-Control": "no-cache"
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error generating global EPG: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating EPG: {str(e)}")
+
+
+@app.get("/api/{source}.m3u", tags=["File Generation"])
+async def get_source_m3u(source: str):
+    """
+    Generate source-specific M3U playlist with filtered channels from a specific source.
+    
+    Args:
+        source: Source name to filter by
+        
+    Returns:
+        M3U playlist content with proper content-type headers
+    """
+    try:
+        # Get channels for specific source and apply unified filtering
+        m3u_channels, epg_channels, programs = get_filtered_channels_and_programs(source=source)
+        filtered_m3u_channels, _, _ = apply_unified_channel_filtering(m3u_channels, epg_channels, programs)
+        
+        # Generate M3U content
+        m3u_content = generate_m3u_content(filtered_m3u_channels)
+        
+        # Return with proper content type
+        return Response(
+            content=m3u_content,
+            media_type="audio/x-mpegurl",
+            headers={
+                "Content-Disposition": f"attachment; filename={source}.m3u",
+                "Cache-Control": "no-cache"
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error generating M3U for source {source}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating M3U for source {source}: {str(e)}")
+
+
+@app.get("/api/{source}.xml", tags=["File Generation"])
+async def get_source_epg(source: str):
+    """
+    Generate source-specific EPG XML with filtered channels and programs from a specific source.
+    
+    Args:
+        source: Source name to filter by
+        
+    Returns:
+        EPG XML content with proper content-type headers
+    """
+    try:
+        # Get channels and programs for specific source, apply unified filtering
+        m3u_channels, epg_channels, programs = get_filtered_channels_and_programs(source=source)
+        _, filtered_epg_channels, filtered_programs = apply_unified_channel_filtering(m3u_channels, epg_channels, programs)
+        
+        # Generate EPG content
+        epg_content = generate_epg_content(filtered_epg_channels, filtered_programs)
+        
+        # Return with proper content type
+        return Response(
+            content=epg_content,
+            media_type="application/xml",
+            headers={
+                "Content-Disposition": f"attachment; filename={source}.xml",
+                "Cache-Control": "no-cache"
+            }
+        )
+    except Exception as e:
+        logger.error(f"Error generating EPG for source {source}: {e}")
+        raise HTTPException(status_code=500, detail=f"Error generating EPG for source {source}: {str(e)}")
 
 
 # Application event handlers
