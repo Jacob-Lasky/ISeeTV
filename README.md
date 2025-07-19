@@ -2,7 +2,7 @@
 
 <hr></hr>
 
-The ISeeTV project seeks to build a docker-based IPTV proxy and client for desktop and mobile browsers. The spirit of the project is to be:
+The ISeeTV project seeks to build a docker-based IPTV proxy and filtering-client for desktop and mobile browsers. The spirit of the project is to be:
 - Easy to use
 - Easy to deploy
 - Easy to contribute
@@ -12,16 +12,13 @@ Check out the project roadmap here:
 - https://github.com/users/Jacob-Lasky/projects/6/views/1
 
 # Guide and Channel proxy
-## Major Focus
-As I've continued working on this project, I realize that I'm working on two distinct features; an EPG/M3U proxy similar to xTeVe and a video-player. The aspect that is missing from other proxies is that TV is dynamic and program-based. Sure, channels can be an important indicator of my interest in the show. BBC always has news playing, ESPN always has sports playing. But what if I want to watch a top-25 NCAA football or basketball matchup? It might be playing on my local news station, on ESPN, CBS or even some channel I've never seen. I want to be able to filter the channels I reveal to an IPTV player based on a channel name or a program name. And I want to do this dynamically so that my guide is 'on demand' and easy to scroll through instead of full of fluff that simply adds noise.
-
-Today, my focus is on fleshing out the proxy while maintaining ISeeTV's spirit of ease. My plans for this phase of the project are on the roadmap but broadly can be broken down into the following pieces:
-- [ ] Strong foundational database design
-- [ ] UI for managing IPTV streams
+## Major Features
+- [x] Strong foundational database design
+- [x] UI for managing IPTV streams
+- [x] Explorable inital M3U, filtered M3U and final M3U
+- [ ] Easily editable final M3U
 - [ ] Powerful built-in filters for creating M3U playlists
 - [ ] Plugin-based filters for ever more fine-tuned refining of playlists
-- [ ] Easily editable final M3U
-- [ ] Explorable inital M3U, filtered M3U and final M3U
 
 ## Running the project manually
 This is the standard way to run the project. It will build the frontend and backend and start the containers.
