@@ -58,7 +58,6 @@ def format_download_progress_response(
     progress_data: dict[str, dict],
 ) -> dict[str, "DownloadProgress"]:
     """Format raw progress data into DownloadProgress models"""
-
     return {
         task_id: DownloadProgress(**progress)
         for task_id, progress in progress_data.items()

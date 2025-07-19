@@ -4,24 +4,18 @@ This module provides atomic integration between the RefreshScheduler and
 the existing FastAPI download/ingest endpoints.
 """
 
+import json
 import logging
+import os
 from typing import Any
 
-from common.utils import log_function
-from models.models import Source
-from scheduler.refresh_scheduler import RefreshScheduler
-
-from scheduler.job_queue_callbacks import refresh_job_callback_wrapper
-import json
-import os
-
 from common.constants import DATA_PATH
-from common.task_manager import IngestTaskManager
-from common.utils import create_task_id
-from models.models import Source
-from common.task_manager import DownloadTaskManager
+from common.task_manager import DownloadTaskManager, IngestTaskManager
+from common.utils import create_task_id, log_function
 from download.downloader import background_single_download_task
-from scheduler.refresh_scheduler import validate_source_refresh_config
+from models.models import Source
+from scheduler.job_queue_callbacks import refresh_job_callback_wrapper
+from scheduler.refresh_scheduler import RefreshScheduler, validate_source_refresh_config
 
 logger = logging.getLogger(__name__)
 
@@ -127,7 +121,6 @@ class SchedulerManager:
             Dictionary with validation results and scheduling status
 
         """
-
         results = {
             "valid_sources": [],
             "invalid_sources": [],

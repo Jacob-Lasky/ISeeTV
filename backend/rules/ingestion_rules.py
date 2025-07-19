@@ -510,10 +510,9 @@ class IngestionRulesEngine:
             # Whitelist mode: start with rejected, rules can allow
             log_function("Applying whitelist rules to record", level="debug")
             return self._apply_whitelist_rules(record_dict, applicable_rules)
-        else:
-            # Blacklist mode: start with allowed, rules can reject
-            log_function("Applying blacklist rules to record", level="debug")
-            return self._apply_blacklist_rules(record_dict, applicable_rules)
+        # Blacklist mode: start with allowed, rules can reject
+        log_function("Applying blacklist rules to record", level="debug")
+        return self._apply_blacklist_rules(record_dict, applicable_rules)
 
     def _apply_whitelist_rules(
         self, record_dict: dict, rules: list[IngestionRule]

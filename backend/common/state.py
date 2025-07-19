@@ -21,7 +21,7 @@ def get_progress(task_type: Literal["download", "ingest"]) -> dict[str, dict]:
     """Get the global download progress dictionary"""
     if task_type == "download":
         return download_progress
-    elif task_type == "ingest":
+    if task_type == "ingest":
         return ingest_progress
 
 

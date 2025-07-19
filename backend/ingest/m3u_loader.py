@@ -68,13 +68,12 @@ def _upsert_m3u_channel(session: Session, channel: M3uChannel) -> LoadResult:
                 "upserted",
                 f"Channel '{channel.name}' in group '{channel.group}' processed",
             )
-        else:
-            return LoadResult(
-                "M3U_CHANNEL",
-                f"{channel.source}:{channel.tvg_id}",
-                "skipped",
-                "No changes detected",
-            )
+        return LoadResult(
+            "M3U_CHANNEL",
+            f"{channel.source}:{channel.tvg_id}",
+            "skipped",
+            "No changes detected",
+        )
 
     except Exception as e:
         logger.error(f"Error upserting M3U channel {channel.tvg_id}: {e}")

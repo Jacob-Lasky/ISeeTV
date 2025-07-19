@@ -26,8 +26,6 @@ from rules.ingestion_rules import (
     SourceRuleAssignment,
 )
 
-import json
-
 logger = logging.getLogger(__name__)
 
 
@@ -110,7 +108,7 @@ class PostLoadRulesEngine:
                 # Convert to list of dictionaries
                 records = []
                 for row in rows:
-                    record_dict = dict(zip(columns, row))
+                    record_dict = dict(zip(columns, row, strict=True))
                     records.append(record_dict)
 
                 return records
@@ -645,5 +643,4 @@ def apply_post_load_rules(table_name: str, source_name: str = None) -> dict[str,
     log_function(f"Applying post-load rules to {table_name}")
     if source_name:
         return post_load_engine.apply_rules_to_table(table_name, source_name)
-    else:
-        return post_load_engine.apply_rules_to_all_sources(table_name)
+    return post_load_engine.apply_rules_to_all_sources(table_name)

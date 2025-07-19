@@ -4,18 +4,17 @@ This module provides atomic callback functions that integrate the scheduler
 with the global job queue system to ensure single-job execution.
 """
 
+import json
 import logging
+import os
 from typing import Literal
 
-from common.utils import log_function
-import json
-import os
 from common.constants import DATA_PATH
-from models.models import Source
-from download.downloader import background_single_download_task
 from common.job_queue import enqueue_refresh_job
 from common.task_manager import DownloadTaskManager, IngestTaskManager
-from common.utils import create_task_id
+from common.utils import create_task_id, log_function
+from download.downloader import background_single_download_task
+from models.models import Source
 
 logger = logging.getLogger(__name__)
 

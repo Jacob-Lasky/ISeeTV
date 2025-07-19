@@ -63,13 +63,12 @@ def _upsert_epg_channel(session: Session, channel: EpgChannel) -> LoadResult:
                 "upserted",
                 f"Channel '{channel.display_name}' processed",
             )
-        else:
-            return LoadResult(
-                "EPG_CHANNEL",
-                f"{channel.source}:{channel.channel_id}",
-                "skipped",
-                "No changes detected",
-            )
+        return LoadResult(
+            "EPG_CHANNEL",
+            f"{channel.source}:{channel.channel_id}",
+            "skipped",
+            "No changes detected",
+        )
 
     except Exception as e:
         logger.error(f"Error upserting EPG channel {channel.channel_id}: {e}")
@@ -177,13 +176,12 @@ def _upsert_program(session: Session, program: Program) -> LoadResult:
                 "upserted",
                 f"Program '{program.title}' on {program.channel_id} processed",
             )
-        else:
-            return LoadResult(
-                "PROGRAM",
-                f"{program.source}:{program.program_id}",
-                "skipped",
-                "No changes detected",
-            )
+        return LoadResult(
+            "PROGRAM",
+            f"{program.source}:{program.program_id}",
+            "skipped",
+            "No changes detected",
+        )
 
     except Exception as e:
         logger.error(f"Error upserting program {program.program_id}: {e}")

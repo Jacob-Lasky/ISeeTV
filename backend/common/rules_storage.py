@@ -11,7 +11,7 @@ from typing import Any
 from common.constants import DATA_PATH
 from common.file_utils import atomic_read_json, atomic_write_json, ensure_file_exists
 from common.utils import log_function
-from rules.ingestion_rules import SourceRuleAssignment, IngestionRule
+from rules.ingestion_rules import IngestionRule, SourceRuleAssignment
 
 logger = logging.getLogger(__name__)
 

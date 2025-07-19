@@ -8,11 +8,11 @@ from sqlalchemy import text
 from sqlalchemy.orm import Session
 
 from common.utils import log_function
-from models.stream_models import StreamChannel, StreamProgram
-from utils.filter_utils import get_all_filter_values
 
 # Clear existing filter values for streams
 from models.db_models import FilterValueTable
+from models.stream_models import StreamChannel, StreamProgram
+from utils.filter_utils import get_all_filter_values
 
 logger = logging.getLogger(__name__)
 
@@ -52,16 +52,15 @@ def _get_rules_filter_condition(
         # TODO: This could be enhanced to check actual rule_mode per source
         return "(m.filter_reasons = '[]')"
 
-    elif filter_view == "inverse":
+    if filter_view == "inverse":
         # Inverse: Shows opposite of intended result
         # For blacklist mode: show records that were filtered out (filter_reasons is not empty JSON array)
         # For whitelist mode: show records that didn't match rules (filter_reasons is empty JSON array)
         # Since most current assignments are blacklist, default to blacklist inverse behavior
         return "(m.filter_reasons != '[]')"
-    else:
-        # Default to showing all if unknown filter_view
-        log_function(f"Unknown filter_view: {filter_view}, showing all records")
-        return None
+    # Default to showing all if unknown filter_view
+    log_function(f"Unknown filter_view: {filter_view}, showing all records")
+    return None
 
 
 def get_filter_view_counts(
