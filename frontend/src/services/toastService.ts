@@ -6,7 +6,7 @@ export interface ToastMessage {
     severity: ToastType
     summary: string
     detail?: string
-    life?: number
+    life: number
     closable?: boolean
 }
 
