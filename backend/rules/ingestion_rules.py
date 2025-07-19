@@ -286,9 +286,7 @@ class IngestionRulesEngine:
 
         return source_assignments
 
-    def get_assignment_by_id(
-        self, assignment_id: str
-    ) -> SourceRuleAssignment | None:
+    def get_assignment_by_id(self, assignment_id: str) -> SourceRuleAssignment | None:
         """Get a specific assignment by its ID"""
         log_function(f"Getting assignment by ID: {assignment_id}", level="debug")
         _, assignments = self.load_rules()

@@ -224,9 +224,7 @@ class PostLoadRulesEngine:
                 for record in records:
                     # Get the primary key (assuming 'id' exists)
                     if "id" not in record:
-                        logger.warning(
-                            "No 'id' field found in record, skipping update"
-                        )
+                        logger.warning("No 'id' field found in record, skipping update")
                         continue
 
                     # Use filter_reasons JSON array field for assignment IDs

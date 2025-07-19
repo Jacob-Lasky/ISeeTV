@@ -79,9 +79,7 @@ async def download_file_with_progress(
                                 task_id,
                                 status="cancelled",
                                 error_message="Download cancelled by user",
-                                completed_at=dt.datetime.now(
-                                    dt.UTC
-                                ).isoformat(),
+                                completed_at=dt.datetime.now(dt.UTC).isoformat(),
                             )
                             return False, 0, "cancelled"
 
