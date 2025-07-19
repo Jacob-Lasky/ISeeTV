@@ -72,27 +72,39 @@ validation_results = M3uValidationResults()
 
 def detect_stream_mode(stream_url: str) -> str:
     """Detect stream mode based on URL pattern.
-    
+
     Returns 'on_demand' if URL ends with common video file extensions,
     otherwise returns 'live' for streaming URLs.
     """
     if not stream_url:
         return "live"
-    
+
     # Common video file extensions that indicate on-demand content
     on_demand_extensions = {
-        '.avi', '.mkv', '.mp4', '.mov', '.wmv', '.flv', '.webm',
-        '.m4v', '.3gp', '.ogv', '.ts', '.m2ts', '.vob', '.divx'
+        ".avi",
+        ".mkv",
+        ".mp4",
+        ".mov",
+        ".wmv",
+        ".flv",
+        ".webm",
+        ".m4v",
+        ".3gp",
+        ".ogv",
+        ".ts",
+        ".m2ts",
+        ".vob",
+        ".divx",
     }
-    
+
     # Extract the path part of the URL (ignore query parameters)
-    url_path = stream_url.split('?')[0].lower()
-    
+    url_path = stream_url.split("?")[0].lower()
+
     # Check if URL ends with any on-demand file extension
     for ext in on_demand_extensions:
         if url_path.endswith(ext):
             return "on_demand"
-    
+
     # Default to live streaming
     return "live"
 

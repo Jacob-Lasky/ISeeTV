@@ -36,6 +36,7 @@ build-backend = "hatchling.build"
 
 [tool.ruff]
 lint.select = ["D", "DOC", "E", "F", "FAST", "FLY", "I", "N", "UP"]
+lint.preview = true
 
 # Disable conflicting docstring rules
 lint.ignore = [

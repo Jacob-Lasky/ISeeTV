@@ -17,7 +17,9 @@ class EpgChannelTable(Base):
     channel_id = Column(String, nullable=False)
     display_name = Column(String, nullable=False)
     icon_url = Column(String, nullable=True)
-    filter_reasons = Column(String, nullable=True)  # JSON array of assignment IDs for multi-rule assignments
+    filter_reasons = Column(
+        String, nullable=True
+    )  # JSON array of assignment IDs for multi-rule assignments
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -41,7 +43,9 @@ class M3uChannelTable(Base):
     logo_url = Column(String, nullable=True)
     group = Column(String, nullable=True)
     stream_mode = Column(String, nullable=False, default="live")
-    filter_reasons = Column(String, nullable=True)  # JSON array of assignment IDs for multi-rule assignments
+    filter_reasons = Column(
+        String, nullable=True
+    )  # JSON array of assignment IDs for multi-rule assignments
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -66,7 +70,9 @@ class ProgramTable(Base):
     end_time = Column(DateTime, nullable=False)
     title = Column(String, nullable=True)
     description = Column(String, nullable=True)
-    filter_reasons = Column(String, nullable=True)  # JSON array of assignment IDs for multi-rule assignments
+    filter_reasons = Column(
+        String, nullable=True
+    )  # JSON array of assignment IDs for multi-rule assignments
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 

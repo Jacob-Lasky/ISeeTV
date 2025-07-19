@@ -14,59 +14,76 @@ from sqlalchemy import text
 
 
 def apply_unified_channel_filtering(
-    m3u_channels: List[Dict[str, Any]], 
-    epg_channels: List[Dict[str, Any]], 
-    programs: List[Dict[str, Any]]
+    m3u_channels: List[Dict[str, Any]],
+    epg_channels: List[Dict[str, Any]],
+    programs: List[Dict[str, Any]],
 ) -> tuple[List[Dict[str, Any]], List[Dict[str, Any]], List[Dict[str, Any]]]:
     """
     Apply unified filtering across M3U and EPG data to ensure cross-consistency.
     If a channel is blacklisted in either M3U or EPG, it's excluded from both outputs.
-    
+
     Args:
         m3u_channels: List of M3U channel dictionaries
-        epg_channels: List of EPG channel dictionaries  
+        epg_channels: List of EPG channel dictionaries
         programs: List of program dictionaries
-        
+
     Returns:
         Tuple of (filtered_m3u_channels, filtered_epg_channels, filtered_programs)
     """
     log_function("Applying unified channel filtering...")
-    
+
     # Step 1: Get channels that passed filtering in M3U
     passed_m3u_channels = filter_passed_channels(m3u_channels)
-    m3u_valid_ids = {channel.get("tvg_id") for channel in passed_m3u_channels if channel.get("tvg_id")}
-    log_function(f"M3U channels that passed filtering: {len(passed_m3u_channels)} (valid IDs: {len(m3u_valid_ids)})")
-    
+    m3u_valid_ids = {
+        channel.get("tvg_id")
+        for channel in passed_m3u_channels
+        if channel.get("tvg_id")
+    }
+    log_function(
+        f"M3U channels that passed filtering: {len(passed_m3u_channels)} (valid IDs: {len(m3u_valid_ids)})"
+    )
+
     # Step 2: Get channels that passed filtering in EPG
     passed_epg_channels = filter_passed_channels(epg_channels)
-    epg_valid_ids = {channel.get("channel_id") for channel in passed_epg_channels if channel.get("channel_id")}
-    log_function(f"EPG channels that passed filtering: {len(passed_epg_channels)} (valid IDs: {len(epg_valid_ids)})")
-    
+    epg_valid_ids = {
+        channel.get("channel_id")
+        for channel in passed_epg_channels
+        if channel.get("channel_id")
+    }
+    log_function(
+        f"EPG channels that passed filtering: {len(passed_epg_channels)} (valid IDs: {len(epg_valid_ids)})"
+    )
+
     # Step 3: Find intersection - only IDs that exist in BOTH and passed filtering in BOTH
     unified_valid_ids = m3u_valid_ids.intersection(epg_valid_ids)
     log_function(f"Unified valid channel IDs (intersection): {len(unified_valid_ids)}")
-    
+
     # Step 4: Filter M3U channels to only include unified valid IDs
     final_m3u_channels = [
-        channel for channel in passed_m3u_channels
+        channel
+        for channel in passed_m3u_channels
         if channel.get("tvg_id") in unified_valid_ids
     ]
-    
+
     # Step 5: Filter EPG channels to only include unified valid IDs
     final_epg_channels = [
-        channel for channel in passed_epg_channels
+        channel
+        for channel in passed_epg_channels
         if channel.get("channel_id") in unified_valid_ids
     ]
-    
+
     # Step 6: Filter programs to only include those with unified valid channel IDs
     passed_programs = filter_passed_channels(programs)
     final_programs = [
-        program for program in passed_programs
+        program
+        for program in passed_programs
         if program.get("channel_id") in unified_valid_ids
     ]
-    
-    log_function(f"Final filtering results: M3U={len(final_m3u_channels)}, EPG={len(final_epg_channels)}, Programs={len(final_programs)}")
-    
+
+    log_function(
+        f"Final filtering results: M3U={len(final_m3u_channels)}, EPG={len(final_epg_channels)}, Programs={len(final_programs)}"
+    )
+
     return final_m3u_channels, final_epg_channels, final_programs
 
 
@@ -139,7 +156,7 @@ def generate_m3u_content(channels: List[Dict[str, Any]]) -> str:
         # Add channel name at the end
         extinf_line = " ".join(extinf_parts)
         if channel.get("name"):
-            extinf_line += f',{channel["name"]}'
+            extinf_line += f",{channel['name']}"
 
         lines.append(extinf_line)
 

@@ -18,41 +18,39 @@ logger = logging.getLogger(__name__)
 
 def atomic_write_json(file_path: str, data: Any) -> None:
     """Atomically write JSON data to a file using temporary file and move.
-    
+
     This ensures that the file is either completely written or not written at all,
     preventing corruption from partial writes.
-    
+
     Args:
         file_path: Target file path to write to
         data: Data to serialize as JSON
-        
+
     Raises:
         OSError: If file operations fail
         json.JSONEncodeError: If data cannot be serialized to JSON
     """
     log_function(f"Atomically writing JSON to {file_path}")
-    
+
     # Ensure parent directory exists
     parent_dir = Path(file_path).parent
     parent_dir.mkdir(parents=True, exist_ok=True)
-    
+
     # Write to temporary file first
     temp_fd, temp_path = tempfile.mkstemp(
-        dir=parent_dir,
-        prefix=f".{Path(file_path).name}.",
-        suffix=".tmp"
+        dir=parent_dir, prefix=f".{Path(file_path).name}.", suffix=".tmp"
     )
-    
+
     try:
-        with os.fdopen(temp_fd, 'w', encoding='utf-8') as temp_file:
+        with os.fdopen(temp_fd, "w", encoding="utf-8") as temp_file:
             json.dump(data, temp_file, indent=2, ensure_ascii=False)
             temp_file.flush()
             os.fsync(temp_file.fileno())  # Ensure data is written to disk
-        
+
         # Atomically move temporary file to target location
         os.replace(temp_path, file_path)
         log_function(f"Successfully wrote JSON to {file_path}")
-        
+
     except Exception as e:
         # Clean up temporary file on error
         try:
@@ -64,26 +62,26 @@ def atomic_write_json(file_path: str, data: Any) -> None:
 
 def atomic_read_json(file_path: str, default: Any = None) -> Any:
     """Atomically read JSON data from a file with fallback to default.
-    
+
     Args:
         file_path: Path to JSON file to read
         default: Default value to return if file doesn't exist or is invalid
-        
+
     Returns:
         Parsed JSON data or default value
     """
     log_function(f"Reading JSON from {file_path}")
-    
+
     try:
         if not os.path.exists(file_path):
             log_function(f"File {file_path} does not exist, returning default")
             return default
-            
-        with open(file_path, 'r', encoding='utf-8') as f:
+
+        with open(file_path, "r", encoding="utf-8") as f:
             data = json.load(f)
             log_function(f"Successfully read JSON from {file_path}")
             return data
-            
+
     except (json.JSONDecodeError, OSError) as e:
         logger.warning(f"Failed to read JSON from {file_path}: {e}, returning default")
         return default
@@ -91,7 +89,7 @@ def atomic_read_json(file_path: str, default: Any = None) -> Any:
 
 def ensure_file_exists(file_path: str, default_content: Any = None) -> None:
     """Ensure a file exists, creating it with default content if it doesn't.
-    
+
     Args:
         file_path: Path to file to ensure exists
         default_content: Default content to write if file doesn't exist

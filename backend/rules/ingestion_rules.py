@@ -262,57 +262,64 @@ class IngestionRulesEngine:
 
         log_function(
             f"Found {len(applicable_rules)} applicable rules for {table_name}/{source_name}: {[r.name for r in applicable_rules]}",
-            level="debug"
+            level="debug",
         )
         return applicable_rules
 
     def get_source_assignments(self, source_name: str) -> List[SourceRuleAssignment]:
         """Get all assignments for a specific source (supports multi-assignment architecture)"""
-        log_function(f"Getting all assignments for source: {source_name}", level="debug")
+        log_function(
+            f"Getting all assignments for source: {source_name}", level="debug"
+        )
         _, assignments = self.load_rules()
 
         # Find all enabled assignments for this source
         source_assignments = [
-            assignment for assignment in assignments 
+            assignment
+            for assignment in assignments
             if assignment.source_name == source_name and assignment.enabled
         ]
-        
+
         log_function(
             f"Found {len(source_assignments)} assignments for {source_name}: {[a.id for a in source_assignments]}",
-            level="debug"
+            level="debug",
         )
-        
+
         return source_assignments
-    
-    def get_assignment_by_id(self, assignment_id: str) -> Optional[SourceRuleAssignment]:
+
+    def get_assignment_by_id(
+        self, assignment_id: str
+    ) -> Optional[SourceRuleAssignment]:
         """Get a specific assignment by its ID"""
         log_function(f"Getting assignment by ID: {assignment_id}", level="debug")
         _, assignments = self.load_rules()
-        
+
         for assignment in assignments:
             if assignment.id == assignment_id and assignment.enabled:
                 return assignment
-                
+
         return None
-        
+
     def get_source_assignment(self, source_name: str) -> Optional[SourceRuleAssignment]:
         """Legacy method for backwards compatibility - returns first assignment for source"""
         assignments = self.get_source_assignments(source_name)
         return assignments[0] if assignments else None
-    
+
     def get_all_source_assignments(self) -> List[SourceRuleAssignment]:
         """Get all enabled source assignments across all sources"""
         log_function("Getting all source assignments", level="debug")
         _, assignments = self.load_rules()
-        
+
         # Return all enabled assignments
-        enabled_assignments = [assignment for assignment in assignments if assignment.enabled]
-        
+        enabled_assignments = [
+            assignment for assignment in assignments if assignment.enabled
+        ]
+
         log_function(
             f"Found {len(enabled_assignments)} enabled assignments: {[a.id for a in enabled_assignments]}",
-            level="debug"
+            level="debug",
         )
-        
+
         return enabled_assignments
 
     def apply_rules_to_records_batch(

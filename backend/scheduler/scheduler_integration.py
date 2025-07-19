@@ -294,10 +294,10 @@ def initialize_scheduler(sources_file: str) -> None:
         sources_file: Path to sources configuration file
     """
     log_function("Initializing global scheduler with job queue integration")
-    
+
     # Import the job queue callback wrapper
     from scheduler.job_queue_callbacks import refresh_job_callback_wrapper
-    
+
     scheduler_manager.initialize(
         download_callback=refresh_job_callback_wrapper,
         ingest_callback=refresh_job_callback_wrapper,

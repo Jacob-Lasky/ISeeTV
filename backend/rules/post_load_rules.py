@@ -151,9 +151,9 @@ class PostLoadRulesEngine:
                     # Vectorized regex matching
                     field_series = df[rule.field].astype(str)
                     matches = field_series.str.match(rule.regex, na=False)
-                    
+
                     # Apply NOT logic if rule.not_ is True
-                    if getattr(rule, 'not_', False):
+                    if getattr(rule, "not_", False):
                         matches = ~matches
 
                     if source_assignment.rule_mode == "blacklist":

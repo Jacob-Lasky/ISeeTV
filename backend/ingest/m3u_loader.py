@@ -232,7 +232,9 @@ async def load_m3u_file_async(
     log_function(f"Applying post-load rules to M3U channels for {source_name}")
     try:
         rule_results = apply_post_load_rules("m3u_channels", source_name)
-        log_function(f"Post-load rules applied: {rule_results['processed']} processed, {rule_results['filtered']} filtered, {rule_results['passed']} passed")
+        log_function(
+            f"Post-load rules applied: {rule_results['processed']} processed, {rule_results['filtered']} filtered, {rule_results['passed']} passed"
+        )
 
         # Yield a result for rule application
         yield LoadResult(
