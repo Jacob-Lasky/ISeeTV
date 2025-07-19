@@ -151,14 +151,14 @@
             scrollable
             scrollHeight="calc(100vh - 320px)"
             class="streams-datatable"
+            dataKey="m3u_id"
+            sortField="name"
+            :sortOrder="1"
             @page="onPageChange"
             @sort="onSort"
             @filter="onFilter"
             @rowExpand="onRowExpand"
             @rowCollapse="onRowCollapse"
-            dataKey="m3u_id"
-            sortField="name"
-            :sortOrder="1"
         >
             <template #header>
                 <div class="flex justify-between align-items-center">
@@ -381,8 +381,8 @@
                             "
                         />
                         <div
-                            class="filter-detail"
                             v-tooltip="data.filter_reasons"
+                            class="filter-detail"
                         >
                             {{
                                 data.filter_reasons.length > 50
@@ -448,19 +448,19 @@
                 <template #body="{ data }">
                     <div class="action-buttons">
                         <Button
+                            v-tooltip="'View Programs'"
                             icon="pi pi-video"
                             severity="info"
                             size="small"
                             outlined
-                            v-tooltip="'View Programs'"
                             @click="viewPrograms(data)"
                         />
                         <Button
+                            v-tooltip="'Open Stream'"
                             icon="pi pi-external-link"
                             severity="secondary"
                             size="small"
                             outlined
-                            v-tooltip="'Open Stream'"
                             @click="openStream(data)"
                         />
                     </div>

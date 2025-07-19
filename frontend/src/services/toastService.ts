@@ -12,7 +12,7 @@ export interface ToastMessage {
 
 // Global event emitter for toast messages
 class ToastEventEmitter {
-    private listeners: Array<(message: ToastMessage) => void> = []
+    private readonly listeners: Array<(message: ToastMessage) => void> = []
 
     emit(message: ToastMessage) {
         this.listeners.forEach((listener) => listener(message))

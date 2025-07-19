@@ -83,17 +83,17 @@
                                 <template #editor="{ data, field }">
                                     <Select
                                         :model-value="data[field][0]"
+                                        :options="tableOptions"
+                                        optionLabel="label"
+                                        optionValue="value"
+                                        placeholder="Select table"
+                                        class="w-full"
                                         @update:model-value="
                                             (value) => {
                                                 data[field] = [value]
                                                 loadTableColumns(value)
                                             }
                                         "
-                                        :options="tableOptions"
-                                        optionLabel="label"
-                                        optionValue="value"
-                                        placeholder="Select table"
-                                        class="w-full"
                                     />
                                 </template>
                             </Column>
@@ -153,12 +153,12 @@
                                             'p-button-success': !data.not_,
                                         }"
                                         size="small"
-                                        @click="data.not_ = !data.not_"
                                         :title="
                                             data.not_
                                                 ? 'Click to change to Match'
                                                 : 'Click to change to NOT'
                                         "
+                                        @click="data.not_ = !data.not_"
                                     />
                                 </template>
                             </Column>
@@ -236,37 +236,37 @@
                                 <template #body="{ data }">
                                     <div class="flex gap-1 justify-center">
                                         <Button
+                                            v-tooltip="
+                                                'Apply this rule to all assigned sources'
+                                            "
                                             icon="pi pi-filter"
                                             severity="success"
                                             outlined
                                             size="small"
-                                            v-tooltip="
-                                                'Apply this rule to all assigned sources'
-                                            "
                                             :loading="
                                                 applyingRule === data.name
                                             "
                                             @click="applyRule(data.name)"
                                         />
                                         <Button
+                                            v-tooltip="
+                                                'Unapply this rule from all assigned sources'
+                                            "
                                             icon="pi pi-filter-slash"
                                             severity="warn"
                                             outlined
                                             size="small"
-                                            v-tooltip="
-                                                'Unapply this rule from all assigned sources'
-                                            "
                                             :loading="
                                                 unapplyingRule === data.name
                                             "
                                             @click="unapplyRule(data.name)"
                                         />
                                         <Button
+                                            v-tooltip="'Delete this rule'"
                                             icon="pi pi-trash"
                                             severity="danger"
                                             outlined
                                             size="small"
-                                            v-tooltip="'Delete this rule'"
                                             @click="
                                                 deleteRule(rules.indexOf(data))
                                             "
@@ -496,10 +496,10 @@
                                             "
                                         />
                                         <i
-                                            class="pi pi-lock text-gray-400 text-xs"
                                             v-tooltip="
                                                 'Mode is inherited from source configuration and cannot be edited here'
                                             "
+                                            class="pi pi-lock text-gray-400 text-xs"
                                         ></i>
                                     </div>
                                 </template>
@@ -559,18 +559,15 @@
                                 <template #body="{ data }">
                                     <div class="flex gap-1 justify-center">
                                         <Button
-                                            icon="pi pi-play"
-                                            severity="success"
-                                            outlined
-                                            size="small"
                                             v-tooltip="
                                                 !data.enabled
                                                     ? 'Assignment is disabled - enable it first to apply'
                                                     : 'Apply this assignment'
                                             "
-                                            @click="
-                                                applyAssignmentToTables(data.id)
-                                            "
+                                            icon="pi pi-play"
+                                            severity="success"
+                                            outlined
+                                            size="small"
                                             :loading="
                                                 applyingAssignments[data.id]
                                             "
@@ -583,16 +580,19 @@
                                                 unapplyingSourceRule !== null ||
                                                 applyingAssignments[data.id]
                                             "
+                                            @click="
+                                                applyAssignmentToTables(data.id)
+                                            "
                                         />
 
                                         <Button
+                                            v-tooltip="
+                                                'Unapply this assignment'
+                                            "
                                             icon="pi pi-filter-slash"
                                             severity="warn"
                                             outlined
                                             size="small"
-                                            v-tooltip="
-                                                'Unapply this assignment'
-                                            "
                                             :loading="
                                                 unapplyingSourceRule ===
                                                 `${data.source_name}-${data.id}`
@@ -612,11 +612,11 @@
                                             "
                                         />
                                         <Button
+                                            v-tooltip="'Delete this assignment'"
                                             icon="pi pi-trash"
                                             severity="danger"
                                             outlined
                                             size="small"
-                                            v-tooltip="'Delete this assignment'"
                                             @click="
                                                 deleteAssignment(
                                                     sourceAssignments.indexOf(

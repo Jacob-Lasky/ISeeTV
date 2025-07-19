@@ -120,7 +120,7 @@ const error = ref<string | null>(null)
 const settings = ref<AppSettings | null>(null)
 const editableSettings = ref<AppSettings>({
     user_timezone: "UTC",
-    theme: themeStore.theme as ThemeMode,
+    theme: themeStore.theme,
 })
 
 // Computed property for dialog visibility with two-way binding

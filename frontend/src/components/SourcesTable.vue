@@ -2372,7 +2372,7 @@ async function resumeActiveIngestPolling() {
             for (const [taskId, taskProgress] of Object.entries(
                 progress.ingest
             )) {
-                const taskData = taskProgress as IngestProgress
+                const taskData = taskProgress
                 if (
                     taskData.status === "ingesting" ||
                     taskData.status === "pending"
