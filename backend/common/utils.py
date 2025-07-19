@@ -24,7 +24,7 @@ def create_task_id(
 
 def log_function(
     message: str = "",
-    level: Literal["debug", "info", "warning", "error"] = "info",
+    level: Literal["debug", "info", "warning", "error", "critical"] = "info",
 ):
     func_name = inspect.currentframe().f_back.f_code.co_name  # type: ignore
     log_message = f"\t [{func_name}]: {message}"
@@ -36,6 +36,8 @@ def log_function(
         logger.warning(log_message)
     elif level == "error":
         logger.error(log_message)
+    elif level == "critical":
+        logger.critical(log_message)
 
 
 def get_progress_response(task_id: str, task_type: Literal["download", "ingest"]):
