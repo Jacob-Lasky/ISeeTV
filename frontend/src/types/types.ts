@@ -140,7 +140,6 @@ export interface SourceFileRow {
  */
 export interface GlobalSettings {
     user_timezone: string
-    program_cache_days: number
     theme: string
 }
 

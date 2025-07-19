@@ -36,20 +36,6 @@
                         </td>
                     </tr>
                     <tr>
-                        <td class="label">Program Cache Days</td>
-                        <td class="value">
-                            <div v-if="loading" class="skeleton-row">
-                                <Skeleton width="100%" height="2.5rem" />
-                            </div>
-                            <InputNumber
-                                v-else
-                                v-model="editableSettings.program_cache_days"
-                                inputClass="settings-input right-align"
-                                :min="1"
-                            />
-                        </td>
-                    </tr>
-                    <tr>
                         <td class="label">Theme</td>
                         <td class="value">
                             <div v-if="loading" class="skeleton-row">
@@ -104,7 +90,6 @@ import { apiGet, apiPost } from "@/utils/apiUtils"
 // Import PrimeVue components
 import Dialog from "primevue/dialog"
 import Button from "primevue/button"
-import InputNumber from "primevue/inputnumber"
 import Select from "primevue/select"
 import Skeleton from "primevue/skeleton"
 import Message from "primevue/message"
@@ -116,7 +101,6 @@ import { useThemeStore, type ThemeMode } from "@/stores/themeStore"
 // Define interface for settings structure
 interface AppSettings {
     user_timezone: string
-    program_cache_days: number
     theme: ThemeMode
     [key: string]: string | number | boolean // Allow for additional properties
 }
@@ -135,7 +119,6 @@ const error = ref<string | null>(null)
 const settings = ref<AppSettings | null>(null)
 const editableSettings = ref<AppSettings>({
     user_timezone: "UTC",
-    program_cache_days: 7,
     theme: themeStore.theme as ThemeMode,
 })
 
@@ -179,8 +162,6 @@ const hasUnsavedChanges = computed(() => {
     if (!settings.value) return false
     return (
         settings.value.user_timezone !== editableSettings.value.user_timezone ||
-        settings.value.program_cache_days !==
-            editableSettings.value.program_cache_days ||
         settings.value.theme !== editableSettings.value.theme
     )
 })

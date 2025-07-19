@@ -43,7 +43,6 @@ class FileMetadata(BaseModel):
 
 class GlobalSettings(BaseModel):
     user_timezone: str
-    program_cache_days: int
     theme: str
 
 
