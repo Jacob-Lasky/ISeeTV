@@ -1,8 +1,19 @@
+# Frontend
 frontend/node_modules
 frontend/dist
 frontend/.vscode
-backend/__pycache__
-backend/.mypy_cache
-backend/.ruff_cache
-backend/.venv
-.venv
+
+# Backend caches and venv
+backend/__pycache__/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/.venv/
+
+# Python-related junk anywhere
+**/__pycache__/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.venv/
+
+# Optional: VSCode workspace
+.vscode/

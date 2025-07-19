@@ -23,6 +23,4 @@ docker-compose*.yml
 *.swp
 
 # Ignore lockfiles if you're not formatting them
-package-lock.json
-yarn.lock
 pnpm-lock.yaml

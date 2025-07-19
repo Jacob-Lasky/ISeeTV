@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile.dev
       target: frontend
     working_dir: /app/frontend
-    command: npm run dev -- --host 0.0.0.0 --port 80
+    command: pnpm run dev -- --host 0.0.0.0 --port 80
     ports:
       - "1313:80"
     volumes:
@@ -26,6 +26,8 @@ services:
         # Rebuild on package.json changes
         - action: rebuild
           path: ./frontend/package.json
+    depends_on:
+      - backend
 
   backend:
     build:
@@ -42,6 +44,7 @@ services:
     environment:
       - PYTHONUNBUFFERED=1
       - UV_LINK_MODE=copy
+      - UV_VENV_CREATE=0
     develop:
       watch:
         # Sync backend source code changes

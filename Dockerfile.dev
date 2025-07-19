@@ -5,7 +5,7 @@ WORKDIR /app
 
 RUN corepack enable && corepack prepare pnpm@10.13.1 --activate
 
-COPY frontend/package*.json ./
+COPY frontend/pnpm-lock.yaml frontend/package.json ./
 RUN pnpm install
 COPY frontend/ ./
 

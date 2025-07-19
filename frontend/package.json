@@ -2,6 +2,7 @@
     "name": "frontend",
     "private": true,
     "version": "0.0.0",
+    "packageManager": "pnpm@10.13.1",
     "type": "module",
     "scripts": {
         "dev": "vite",
@@ -9,11 +10,11 @@
         "preview": "vite preview",
         "lint": "ONLY_WARN=true eslint . --ext .ts,.vue",
         "lint:fix": "eslint . --ext .ts,.vue --fix",
-        "lint:ci": "npm run type-check && eslint . --ext .ts,.vue",
+        "lint:ci": "pnpm run type-check && eslint . --ext .ts,.vue",
         "type-check": "vue-tsc --noEmit --skipLibCheck",
         "type-check:watch": "vue-tsc --noEmit --skipLibCheck --watch",
         "format": "prettier . --write",
-        "format-and-lint": "prettier . --write && npm run type-check && eslint . --ext .ts,.vue"
+        "format-and-lint": "prettier . --write && pnpm run type-check && eslint . --ext .ts,.vue"
     },
     "dependencies": {
         "@primeuix/themes": "^1.1.2",

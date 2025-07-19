@@ -32,7 +32,7 @@ jobs:
       - name: Install Frontend dependencies
         run: |
           cd frontend
-          npm ci
+          pnpm ci
 
       - name: Run linting
         run: |
@@ -44,4 +44,4 @@ jobs:
       - name: Run linting
         run: |
           cd frontend
-          npm run lint
+          pnpm run lint
