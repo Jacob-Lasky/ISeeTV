@@ -6,8 +6,10 @@ from lxml import etree
 from lxml.etree import _Element
 
 from common.task_manager import IngestTaskManager
-from common.utils import log_function
 from models.models import EpgChannel, Program
+from common.log_utils import get_logger
+
+logger = get_logger(__name__)
 
 # EPG are usually XML-based with a structure similar to:
 """
@@ -63,9 +65,6 @@ As we parse the above XML, we would see something like this:
     root[2].attrib["stop_timestamp"] --> '1751454000'
     
 """
-
-logger = logging.getLogger(__name__)
-
 # Expected structure definitions - configuration
 EXPECTED_ROOT_TAGS = {"channel", "programme"}  # Only these tags allowed under <tv>
 EXPECTED_ROOT_ATTRS = {
@@ -108,34 +107,36 @@ class ValidationResults:
         prefix = f"[{context}] " if context else ""
 
         if self.unexpected_root_tags:
-            logger.warning(f"{prefix}Unhandled root-level tags found:")
+            logger.warning("%sUnhandled root-level tags found:", prefix)
             for tag, count in self.unexpected_root_tags.items():
-                logger.warning(f"  - <{tag}>: {count} occurrences")
+                logger.warning("  - <%s>: %s occurrences", tag, count)
 
         if self.unexpected_root_attrs:
             logger.warning(
-                f"{prefix}Unhandled root attributes found: {sorted(self.unexpected_root_attrs)}"
+                "%sUnhandled root attributes found: %s",
+                prefix,
+                sorted(self.unexpected_root_attrs),
             )
 
         if self.unexpected_channel_tags:
-            logger.warning(f"{prefix}Unhandled channel child tags found:")
+            logger.warning("%sUnhandled channel child tags found:", prefix)
             for tag, count in self.unexpected_channel_tags.items():
-                logger.warning(f"  - <{tag}>: {count} occurrences")
+                logger.warning("  - <%s>: %s occurrences", tag, count)
 
         if self.unexpected_channel_attrs:
-            logger.warning(f"{prefix}Unhandled channel attributes found:")
+            logger.warning("%sUnhandled channel attributes found:", prefix)
             for channel_id, attrs in self.unexpected_channel_attrs.items():
-                logger.warning(f"  - Channel '{channel_id}': {sorted(attrs)}")
+                logger.warning("  - Channel '%s': %s", channel_id, sorted(attrs))
 
         if self.unexpected_programme_tags:
-            logger.warning(f"{prefix}Unhandled programme child tags found:")
+            logger.warning("%sUnhandled programme child tags found:", prefix)
             for tag, count in self.unexpected_programme_tags.items():
-                logger.warning(f"  - <{tag}>: {count} occurrences")
+                logger.warning("  - <%s>: %s occurrences", tag, count)
 
         if self.unexpected_programme_attrs:
-            logger.warning(f"{prefix}Unhandled programme attributes found:")
+            logger.warning("%sUnhandled programme attributes found:", prefix)
             for prog_id, attrs in self.unexpected_programme_attrs.items():
-                logger.warning(f"  - Programme '{prog_id}': {sorted(attrs)}")
+                logger.warning("  - Programme '%s': %s", prog_id, sorted(attrs))
 
 
 validation_results = ValidationResults()
@@ -143,6 +144,7 @@ validation_results = ValidationResults()
 
 def validate_root_element(root_elem: _Element) -> None:
     """Function to validate root <tv> element attributes"""
+    logger.debug("Validating root element attributes")
     for attr in root_elem.attrib.keys():
         if attr not in EXPECTED_ROOT_ATTRS:
             validation_results.unexpected_root_attrs.add(attr)
@@ -150,6 +152,7 @@ def validate_root_element(root_elem: _Element) -> None:
 
 def validate_channel_element(channel_elem: _Element) -> str:
     """Function to validate channel element structure and return channel_id"""
+    logger.debug("Validating channel element attributes")
     channel_id = channel_elem.attrib.get("id", "Unknown")
 
     # Validate channel attributes
@@ -167,6 +170,7 @@ def validate_channel_element(channel_elem: _Element) -> str:
 
 def validate_programme_element(programme_elem: _Element) -> str:
     """Function to validate programme element structure and return programme_id"""
+    logger.debug("Validating programme element attributes")
     programme_id = programme_elem.attrib.get("program-id") or programme_elem.attrib.get(
         "channel", "Unknown"
     )
@@ -188,7 +192,7 @@ def parse_epg_for_channels(
     epg_file: str, source: str, task_id: str | None = None
 ) -> list[EpgChannel]:
     """Parse an EPG file  and return a list of Channel objects."""
-    log_function(f"Parsing EPG file for channels: {epg_file}")
+    logger.info("Parsing EPG file for channels: %s", epg_file)
 
     if task_id:
         IngestTaskManager.update_step_progress(task_id, 2, "Parsing EPG channels", 0)
@@ -198,7 +202,7 @@ def parse_epg_for_channels(
     root = tree.getroot()
 
     if root.tag != "tv":
-        logger.error(f"Expected root tag 'tv', found '{root.tag}'")
+        logger.error("Expected root tag 'tv', found '%s'", root.tag)
         return []
 
     # Validate root element
@@ -234,9 +238,9 @@ def parse_epg_for_channels(
                 )
             )
         except ValueError as e:
-            log_function(f"Skipping invalid channel: {e}", level="warning")
-        except Exception as e:
-            log_function(f"Unexpected error parsing channel: {e}", level="error")
+            logger.warning("Skipping invalid channel: %s", e)
+        except Exception:
+            logger.exception("Unexpected error parsing channel")
 
     # Log validation results
     validation_results.log_results("Channel Parsing")
@@ -248,7 +252,7 @@ def parse_epg_for_programs(
     epg_file: str, source: str, task_id: str | None = None
 ) -> list[Program]:
     """Parse an EPG file and return a list of Program objects."""
-    log_function(f"Parsing EPG file for programs: {epg_file}")
+    logger.info("Parsing EPG file for programs: %s", epg_file)
 
     if task_id:
         IngestTaskManager.update_step_progress(task_id, 4, "Parsing EPG programs", 0)
@@ -258,7 +262,7 @@ def parse_epg_for_programs(
     root = tree.getroot()
 
     if root.tag != "tv":
-        logger.error(f"Expected root tag 'tv', found '{root.tag}'")
+        logger.error("Expected root tag 'tv', found '%s'", root.tag)
         return []
 
     # Validate root element
@@ -312,9 +316,9 @@ def parse_epg_for_programs(
                 )
             )
         except ValueError as e:
-            log_function(f"Skipping invalid programme: {e}", level="warning")
-        except Exception as e:
-            log_function(f"Unexpected error parsing programme: {e}", level="error")
+            logger.warning("Skipping invalid programme: %s", e)
+        except Exception:
+            logger.exception("Unexpected error parsing programme")
 
     # Log validation results
     validation_results.log_results("Programme Parsing")
@@ -324,6 +328,7 @@ def parse_epg_for_programs(
 
 def get_required_text(elem: _Element, tag: str, context: str = "") -> str:
     """Get the text of a required child tag. Raises ValueError if missing or empty."""
+    logger.debug("Getting required text for tag: %s", tag)
     value = elem.findtext(tag)
     if not value or not value.strip():
         line = getattr(elem, "sourceline", "unknown")
@@ -333,6 +338,7 @@ def get_required_text(elem: _Element, tag: str, context: str = "") -> str:
 
 def get_required_attr(elem: _Element, attr: str, context: str = "") -> str:
     """Get a required attribute. Raises ValueError if missing or empty."""
+    logger.debug("Getting required attribute: %s", attr)
     value = elem.attrib.get(attr)
     if not value or not value.strip():
         line = getattr(elem, "sourceline", "unknown")

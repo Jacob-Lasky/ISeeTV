@@ -1,11 +1,10 @@
 import requests
 import os
 import re
-import logging
 
-logging.basicConfig(level=logging.INFO)
+from common.log_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 REPO = "Jacob-Lasky/ISeeTV"
@@ -67,7 +66,7 @@ def update_readme_for_open_milestones(milestones):
     open_milestones_content = []
 
     for version in sorted(version_groups.keys()):
-        log_function(f"Processing version: {version}")
+        logger.info(f"Processing version: {version}")
         if version == "unknown":
             continue
 
@@ -76,9 +75,9 @@ def update_readme_for_open_milestones(milestones):
         open_milestones_content.append("|-----------|----------|--------------|\n")
 
         for milestone in version_groups[version]:
-            log_function(f"Processing milestone: {milestone['title']}")
+            logger.info(f"Processing milestone: {milestone['title']}")
             if milestone["state"] == "open":
-                log_function(f"- Milestone is open")
+                logger.info(f"- Milestone is open")
                 formatted_title = format_milestone_title(milestone["title"])
                 progress_badge = f"![Progress](https://img.shields.io/github/milestones/progress-percent/{REPO}/{milestone['number']}?label=)"
                 milestone_link = f"[{formatted_title}](https://github.com/{REPO}/milestone/{milestone['number']})"
@@ -88,7 +87,7 @@ def update_readme_for_open_milestones(milestones):
 
         open_milestones_content.append("\n")
     # Replace milestones content
-    log_function(f"Updating milestones content")
+    logger.info(f"Updating milestones content")
     content[open_start_index:open_end_index] = open_milestones_content
     # Write the updated README back to disk
     with open("README.md", "w") as file:
@@ -112,8 +111,8 @@ def update_readme_for_completed_milestones(milestones):
 
     for milestone in milestones:
         if milestone["state"] == "closed":
-            log_function(f"Processing milestone: {milestone['title']}")
-            log_function(f"- Milestone is closed")
+            logger.info(f"Processing milestone: {milestone['title']}")
+            logger.info(f"- Milestone is closed")
             progress_badge = f"![Progress](https://img.shields.io/github/milestones/progress-percent/{REPO}/{milestone['number']}?label=&color=green)"
             milestone_link = f"[{milestone['title']}](https://github.com/{REPO}/milestone/{milestone['number']})"
             closed_milestones_content.append(

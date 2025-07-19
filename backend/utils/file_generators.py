@@ -11,7 +11,9 @@ from xml.dom import minidom
 from sqlalchemy import text
 
 from common.db import SessionLocal
-from common.utils import log_function
+from common.log_utils import get_logger
+
+logger = get_logger(__name__)
 
 
 def apply_unified_channel_filtering(
@@ -31,7 +33,7 @@ def apply_unified_channel_filtering(
         Tuple of (filtered_m3u_channels, filtered_epg_channels, filtered_programs)
 
     """
-    log_function("Applying unified channel filtering...")
+    logger.info("Applying unified channel filtering...")
 
     # Step 1: Get channels that passed filtering in M3U
     passed_m3u_channels = filter_passed_channels(m3u_channels)
@@ -40,8 +42,10 @@ def apply_unified_channel_filtering(
         for channel in passed_m3u_channels
         if channel.get("tvg_id")
     }
-    log_function(
-        f"M3U channels that passed filtering: {len(passed_m3u_channels)} (valid IDs: {len(m3u_valid_ids)})"
+    logger.info(
+        "M3U channels that passed filtering: %s (valid IDs: %s)",
+        len(passed_m3u_channels),
+        len(m3u_valid_ids),
     )
 
     # Step 2: Get channels that passed filtering in EPG
@@ -51,13 +55,15 @@ def apply_unified_channel_filtering(
         for channel in passed_epg_channels
         if channel.get("channel_id")
     }
-    log_function(
-        f"EPG channels that passed filtering: {len(passed_epg_channels)} (valid IDs: {len(epg_valid_ids)})"
+    logger.info(
+        "EPG channels that passed filtering: %s (valid IDs: %s)",
+        len(passed_epg_channels),
+        len(epg_valid_ids),
     )
 
     # Step 3: Find intersection - only IDs that exist in BOTH and passed filtering in BOTH
     unified_valid_ids = m3u_valid_ids.intersection(epg_valid_ids)
-    log_function(f"Unified valid channel IDs (intersection): {len(unified_valid_ids)}")
+    logger.info("Unified valid channel IDs (intersection): %s", len(unified_valid_ids))
 
     # Step 4: Filter M3U channels to only include unified valid IDs
     final_m3u_channels = [
@@ -81,8 +87,11 @@ def apply_unified_channel_filtering(
         if program.get("channel_id") in unified_valid_ids
     ]
 
-    log_function(
-        f"Final filtering results: M3U={len(final_m3u_channels)}, EPG={len(final_epg_channels)}, Programs={len(final_programs)}"
+    logger.info(
+        "Final filtering results: M3U=%s, EPG=%s, Programs=%s",
+        len(final_m3u_channels),
+        len(final_epg_channels),
+        len(final_programs),
     )
 
     return final_m3u_channels, final_epg_channels, final_programs
@@ -98,7 +107,7 @@ def filter_passed_channels(channels: list[dict[str, Any]]) -> list[dict[str, Any
         List of channels that passed all filters
 
     """
-    log_function("Filtering passed channels...")
+    logger.info("Filtering passed channels...")
     passed_channels = []
 
     for channel in channels:
@@ -131,7 +140,7 @@ def generate_m3u_content(channels: list[dict[str, Any]]) -> str:
         M3U playlist content as string
 
     """
-    log_function("Generating M3U content...")
+    logger.info("Generating M3U content...")
     lines = ["#EXTM3U"]
 
     for channel in channels:
@@ -181,13 +190,13 @@ def generate_epg_content(
         EPG XML content as string
 
     """
-    log_function("Generating EPG content...")
+    logger.info("Generating EPG content...")
 
     # Get set of valid channel IDs from filtered channels
     valid_channel_ids = {
         channel.get("channel_id") for channel in channels if channel.get("channel_id")
     }
-    log_function(f"Found {len(valid_channel_ids)} valid channel IDs")
+    logger.info("Found %s valid channel IDs", len(valid_channel_ids))
 
     # Filter programs to only include those with valid channel IDs
     filtered_programs = [
@@ -195,8 +204,10 @@ def generate_epg_content(
         for program in programs
         if program.get("channel_id") in valid_channel_ids
     ]
-    log_function(
-        f"Filtered programs from {len(programs)} to {len(filtered_programs)} based on valid channels"
+    logger.info(
+        "Filtered programs from %s to %s based on valid channels",
+        len(programs),
+        len(filtered_programs),
     )
 
     # Create root TV element
@@ -284,7 +295,7 @@ def _format_epg_datetime(dt_str: str) -> str:
         EPG formatted datetime string
 
     """
-    log_function("Formatting EPG datetime...", level="debug")
+    logger.debug("Formatting EPG datetime...")
     try:
         # Parse the datetime string
         if dt_str.endswith("Z"):
@@ -309,7 +320,7 @@ def _datetime_to_timestamp(dt_str: str) -> int:
         Unix timestamp as integer
 
     """
-    log_function("Converting datetime to timestamp...", level="debug")
+    logger.debug("Converting datetime to timestamp...")
     try:
         if dt_str.endswith("Z"):
             dt_str = dt_str[:-1] + "+00:00"
@@ -333,7 +344,7 @@ def get_filtered_channels_and_programs(
         Tuple of (m3u_channels, epg_channels, programs) that passed filters
 
     """
-    log_function("Getting filtered channels and programs...")
+    logger.info("Getting filtered channels and programs...")
     with SessionLocal() as session:
         # Get M3U channels
         m3u_query = "SELECT * FROM m3u_channels"

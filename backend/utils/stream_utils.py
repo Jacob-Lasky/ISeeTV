@@ -7,14 +7,13 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from common.utils import log_function
-
 # Clear existing filter values for streams
 from models.db_models import FilterValueTable
 from models.stream_models import StreamChannel, StreamProgram
 from utils.filter_utils import get_all_filter_values
+from common.log_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def _get_rules_filter_condition(
@@ -42,7 +41,7 @@ def _get_rules_filter_condition(
         # Show all rows, ignoring filter status
         return None
 
-    log_function(f"Applying rules filtering for filter_view: {filter_view}")
+    logger.info("Applying rules filtering for filter_view: %s", filter_view)
 
     if filter_view == "normal":
         # Normal: Shows intended result based on rule mode
@@ -59,7 +58,7 @@ def _get_rules_filter_condition(
         # Since most current assignments are blacklist, default to blacklist inverse behavior
         return "(m.filter_reasons != '[]')"
     # Default to showing all if unknown filter_view
-    log_function(f"Unknown filter_view: {filter_view}, showing all records")
+    logger.info("Unknown filter_view: %s, showing all records", filter_view)
     return None
 
 
@@ -83,6 +82,7 @@ def get_filter_view_counts(
         Dictionary with counts for normal, inverse, and all views
 
     """
+    logger.info("Getting filter view counts")
     try:
         # Single query with conditional counting for all filter views
         base_query = """
@@ -153,11 +153,11 @@ def get_filter_view_counts(
             "all": row.all_count or 0,
         }
 
-        log_function(f"Filter view counts: {counts}")
+        logger.info("Filter view counts: %s", counts)
         return counts
 
-    except Exception as e:
-        logger.error(f"Error getting filter view counts: {e}")
+    except Exception:
+        logger.exception("Error getting filter view counts")
         return {"normal": 0, "inverse": 0, "all": 0}
 
 
@@ -201,8 +201,12 @@ def get_streams_query(
         Tuple of (stream_channels, total_count)
 
     """
-    log_function(
-        f"Executing streams query: page={page}, size={page_size}, source={source}, group={group}"
+    logger.info(
+        "Executing streams query: page=%s, size=%s, source=%s, group=%s",
+        page,
+        page_size,
+        source,
+        group,
     )
 
     try:
@@ -381,11 +385,11 @@ def get_streams_query(
             )
             streams.append(stream)
 
-        log_function(f"Retrieved {len(streams)} streams out of {total_count} total")
+        logger.info("Retrieved %s streams out of %s total", len(streams), total_count)
         return streams, total_count
 
-    except Exception as e:
-        logger.error(f"Error executing streams query: {e}")
+    except Exception:
+        logger.exception("Error executing streams query")
         raise
 
 
@@ -417,8 +421,10 @@ def get_stream_programs_query(
         Tuple of (stream_programs, total_count)
 
     """
-    log_function(
-        f"Executing stream programs query: channel_id={channel_id}, source={source}"
+    logger.info(
+        "Executing stream programs query: channel_id=%s, source=%s",
+        channel_id,
+        source,
     )
 
     try:
@@ -551,13 +557,16 @@ def get_stream_programs_query(
             )
             programs.append(program)
 
-        log_function(
-            f"Retrieved {len(programs)} programs out of {total_count} total for channel {channel_id}"
+        logger.info(
+            "Retrieved %s programs out of %s total for channel %s",
+            len(programs),
+            total_count,
+            channel_id,
         )
         return programs, total_count
 
-    except Exception as e:
-        logger.error(f"Error executing stream programs query: {e}")
+    except Exception:
+        logger.exception("Error executing stream programs query")
         raise
 
 
@@ -568,7 +577,7 @@ def precompute_streams_filter_values(session: Session) -> None:
         session: SQLAlchemy session
 
     """
-    log_function("Precomputing filter values for streams view")
+    logger.info("Precomputing filter values for streams view")
 
     try:
         # Define filterable columns for streams view
@@ -629,12 +638,12 @@ def precompute_streams_filter_values(session: Session) -> None:
         if all_values:
             session.add_all(all_values)
             session.commit()
-            log_function(f"Added {len(all_values)} filter values for streams view")
+            logger.info("Added %s filter values for streams view", len(all_values))
         else:
             logger.warning("No filter values found for streams view")
 
-    except Exception as e:
-        logger.error(f"Error precomputing streams filter values: {e}")
+    except Exception:
+        logger.exception("Error precomputing streams filter values")
         session.rollback()
         raise
 
@@ -651,6 +660,6 @@ def get_streams_filter_values(session: Session) -> dict[str, list[dict[str, Any]
     """
     try:
         return get_all_filter_values(session, "streams")
-    except Exception as e:
-        logger.error(f"Error getting streams filter values: {e}")
+    except Exception:
+        logger.exception("Error getting streams filter values")
         return {}

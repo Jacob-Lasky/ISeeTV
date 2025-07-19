@@ -6,9 +6,9 @@ from sqlalchemy import create_engine
 from sqlalchemy.orm import declarative_base, sessionmaker
 
 from common.constants import DATABASE_URL
-from common.utils import log_function
+from common.log_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 engine = create_engine(DATABASE_URL, echo=False, future=True)
 SessionLocal = sessionmaker(bind=engine)
@@ -17,10 +17,10 @@ Base = declarative_base()
 
 def init_db():
     """Initialize database and create all tables"""
-    log_function("Initializing database...")
+    logger.info("Initializing database...")
 
     # Import table models to ensure they're registered with Base
 
     Base.metadata.create_all(bind=engine)
-    log_function(f"Database initialized successfully at {DATABASE_URL}")
-    log_function("Created tables: epg_channels, m3u_channels, programs")
+    logger.info("Database initialized successfully at %s", DATABASE_URL)
+    logger.debug("Created tables: epg_channels, m3u_channels, programs")

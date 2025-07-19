@@ -12,11 +12,12 @@ from typing import Literal
 from common.constants import DATA_PATH
 from common.job_queue import enqueue_refresh_job
 from common.task_manager import DownloadTaskManager, IngestTaskManager
-from common.utils import create_task_id, log_function
+from common.utils import create_task_id
 from download.downloader import background_single_download_task
 from models.models import Source
+from common.log_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 async def refresh_job_callback_wrapper(
@@ -32,7 +33,7 @@ async def refresh_job_callback_wrapper(
         file_type: Type of file to refresh
 
     """
-    log_function(f"Scheduler triggering refresh job for {source_name} {file_type}")
+    logger.info("Scheduler triggering refresh job for %s %s", source_name, file_type)
 
     try:
         # Load sources configuration
@@ -89,12 +90,19 @@ async def refresh_job_callback_wrapper(
             sources_file=sources_file,
         )
 
-        log_function(
-            f"Scheduler refresh job queued for {source_name} {file_type}: {job_id}"
+        logger.info(
+            "Scheduler refresh job queued for %s %s: %s",
+            source_name,
+            file_type,
+            job_id,
         )
 
-    except Exception as e:
-        logger.error(f"Scheduler refresh job failed for {source_name} {file_type}: {e}")
+    except Exception:
+        logger.exception(
+            "Scheduler refresh job failed for %s %s",
+            source_name,
+            file_type,
+        )
         raise
 
 
@@ -117,7 +125,7 @@ async def _execute_refresh_job(
         sources_file: Path to sources configuration file
 
     """
-    log_function(f"Executing refresh job for {source_name} {file_type}")
+    logger.info("Executing refresh job for %s %s", source_name, file_type)
 
     try:
         # Import here to avoid circular imports
@@ -126,11 +134,11 @@ async def _execute_refresh_job(
         download_dir = os.path.join(DATA_PATH, "sources")
 
         # Step 1: Download the file
-        log_function(f"Starting download for {source_name} {file_type}")
+        logger.info("Starting download for %s %s", source_name, file_type)
         await background_single_download_task(
             download_task_id, source_name, file_type, sources_file, download_dir
         )
-        log_function(f"Download completed for {source_name} {file_type}")
+        logger.info("Download completed for %s %s", source_name, file_type)
 
         # Step 2: Load sources to get file path
         with open(sources_file) as f:
@@ -156,14 +164,20 @@ async def _execute_refresh_job(
             )
 
         # Step 3: Ingest the file
-        log_function(f"Starting ingest for {source_name} {file_type}")
+        logger.info("Starting ingest for %s %s", source_name, file_type)
         await background_load_task(ingest_task_id, file_type, file_path, source_name)
-        log_function(f"Ingest completed for {source_name} {file_type}")
+        logger.info("Ingest completed for %s %s", source_name, file_type)
 
-        log_function(
-            f"Refresh job completed successfully for {source_name} {file_type}"
+        logger.info(
+            "Refresh job completed successfully for %s %s",
+            source_name,
+            file_type,
         )
 
-    except Exception as e:
-        logger.error(f"Refresh job execution failed for {source_name} {file_type}: {e}")
+    except Exception:
+        logger.exception(
+            "Refresh job execution failed for %s %s",
+            source_name,
+            file_type,
+        )
         raise

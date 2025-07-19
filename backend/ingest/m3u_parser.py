@@ -5,8 +5,10 @@ from collections import defaultdict
 from fastapi import HTTPException, status
 
 from common.task_manager import IngestTaskManager
-from common.utils import log_function
 from models.models import M3uChannel
+from common.log_utils import get_logger
+
+logger = get_logger(__name__)
 
 """
 M3U are usually text-based with a structure similar to:
@@ -20,7 +22,6 @@ https://url.to.stream/extrainfo
 #EXTINF:-1 tvg-id="Channel3.us" tvg-name="Channel 3" tvg-logo="https://channel3.png" group-title="Group 1",Channel 3
 https://url.to.stream/extrainfo
 """
-logger = logging.getLogger(__name__)
 
 # Expected M3U tags (case-insensitive)
 EXPECTED_M3U_TAGS = {
@@ -52,19 +53,19 @@ class M3uValidationResults:
         prefix = f"[{context}] " if context else ""
 
         if self.unhandled_tags:
-            logger.warning(f"{prefix}Unhandled M3U tags found:")
+            logger.warning("%sUnhandled M3U tags found:", prefix)
             for tag, count in self.unhandled_tags.items():
-                logger.warning(f"  - {tag}: {count} occurrences")
+                logger.warning("  - %s: %s occurrences", tag, count)
 
         if self.unhandled_extinf_keys:
-            logger.warning(f"{prefix}Unhandled EXTINF keys found:")
+            logger.warning("%sUnhandled EXTINF keys found:", prefix)
             for key, count in self.unhandled_extinf_keys.items():
-                logger.warning(f"  - {key}: {count} occurrences")
+                logger.warning("  - %s: %s occurrences", key, count)
 
         if self.channels_without_urls:
-            logger.warning(f"{prefix}Channels without playlist URLs found:")
+            logger.warning("%sChannels without playlist URLs found:", prefix)
             for channel_name in self.channels_without_urls:
-                logger.warning(f"  - '{channel_name}'")
+                logger.warning("  - '%s'", channel_name)
 
 
 # Global validation results tracker
@@ -77,6 +78,7 @@ def detect_stream_mode(stream_url: str) -> str:
     Returns 'on_demand' if URL ends with common video file extensions,
     otherwise returns 'live' for streaming URLs.
     """
+    logger.debug("Detecting stream mode for URL: %s", stream_url)
     if not stream_url:
         return "live"
 
@@ -114,10 +116,11 @@ def parse_extinf_line(line: str) -> tuple[dict, str]:
     """Parse an EXTINF line and return attributes dict and channel name"""
     # EXTINF format: #EXTINF:duration attr1="val1" attr2="val2",Channel Name
     # Remove #EXTINF: prefix and split on comma to separate attributes from name
+    logger.debug("Parsing EXTINF line: %s", line)
     should_be_empty, line = line.split("#EXTINF:")
     if should_be_empty.strip():
         logger.warning(
-            f"Found unexpected text before #EXTINF: {should_be_empty.strip()}"
+            "Found unexpected text before #EXTINF: %s", should_be_empty.strip()
         )
 
     # Find the last comma to separate attributes from channel name
@@ -149,10 +152,11 @@ def validate_m3u_channel(
     attrs: dict, channel_name: str, stream_url: str | None
 ) -> M3uChannel | None:
     """Validate and create M3uChannel from parsed data"""
+    logger.debug("Validating M3U channel: %s", channel_name)
     # Warn if no stream URL
     if not stream_url or not stream_url.strip():
         validation_results.channels_without_urls.append(channel_name)
-        logger.warning(f"Channel '{channel_name}' has no playlist URL")
+        logger.warning("Channel '%s' has no playlist URL", channel_name)
         return None
 
     # Extract required and optional fields
@@ -183,7 +187,7 @@ def parse_m3u(
     m3u_file: str, source: str = "m3u", task_id: str | None = None
 ) -> list[M3uChannel]:
     """Parse an M3U file and return a list of M3uChannel objects"""
-    log_function(f"Parsing M3U file: {m3u_file}")
+    logger.info("Parsing M3U file: %s", m3u_file)
 
     if task_id:
         IngestTaskManager.update_step_progress(task_id, 2, "Parsing", 0)
@@ -237,7 +241,9 @@ def parse_m3u(
                         current_channel_name = None
                     else:
                         logger.warning(
-                            f"Found stream URL without EXTINF at line {line_num}: {line}"
+                            "Found stream URL without EXTINF at line %s: %s",
+                            line_num,
+                            line,
                         )
     except Exception as e:
         raise HTTPException(
@@ -248,5 +254,5 @@ def parse_m3u(
     # Log validation results
     validation_results.log_results(context="parse_m3u")
 
-    log_function(f"Successfully parsed {len(channels)} channels from M3U file")
+    logger.info("Successfully parsed %s channels from M3U file", len(channels))
     return channels

@@ -11,13 +11,14 @@ from typing import Any
 
 from common.constants import DATA_PATH
 from common.task_manager import DownloadTaskManager, IngestTaskManager
-from common.utils import create_task_id, log_function
+from common.utils import create_task_id
 from download.downloader import background_single_download_task
 from models.models import Source
 from scheduler.job_queue_callbacks import refresh_job_callback_wrapper
 from scheduler.refresh_scheduler import RefreshScheduler, validate_source_refresh_config
+from common.log_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class SchedulerManager:
@@ -32,7 +33,7 @@ class SchedulerManager:
     def __init__(self):
         self.scheduler: RefreshScheduler = None
         self._is_running = False
-        log_function("SchedulerManager initialized")
+        logger.debug("SchedulerManager initialized")
 
     def initialize(self, download_callback, ingest_callback, sources_file: str) -> None:
         """Initialize the scheduler with callback functions.
@@ -43,7 +44,7 @@ class SchedulerManager:
             sources_file: Path to sources configuration file
 
         """
-        log_function("Initializing scheduler with callbacks")
+        logger.debug("Initializing scheduler with callbacks")
         self.scheduler = RefreshScheduler(
             download_callback=download_callback,
             ingest_callback=ingest_callback,
@@ -59,25 +60,25 @@ class SchedulerManager:
             logger.warning("Scheduler already running")
             return
 
-        log_function("Starting scheduler")
+        logger.debug("Starting scheduler")
         self.scheduler.start()
         self.scheduler.schedule_all_sources()
         self._is_running = True
-        log_function("Scheduler started and sources scheduled")
+        logger.info("Scheduler started and sources scheduled")
 
     def stop(self) -> None:
         """Stop the scheduler."""
         if not self._is_running or not self.scheduler:
             return
 
-        log_function("Stopping scheduler")
+        logger.debug("Stopping scheduler")
         self.scheduler.shutdown(wait=True)
         self._is_running = False
-        log_function("Scheduler stopped")
+        logger.debug("Scheduler stopped")
 
     def restart(self) -> None:
         """Restart the scheduler."""
-        log_function("Restarting scheduler")
+        logger.info("Restarting scheduler")
         self.stop()
         self.start()
 
@@ -92,7 +93,7 @@ class SchedulerManager:
             logger.warning("Scheduler not initialized, cannot update source schedule")
             return
 
-        log_function(f"Updating schedule for source: {source.name}")
+        logger.info("Updating schedule for source: %s", source.name)
         self.scheduler.update_source_schedule(source)
 
     def get_scheduler_status(self) -> dict[str, Any]:
@@ -102,6 +103,7 @@ class SchedulerManager:
             Dictionary with scheduler status and job details
 
         """
+        logger.info("Getting scheduler status")
         if not self.scheduler:
             return {"running": False, "initialized": False, "jobs": []}
 
@@ -121,6 +123,7 @@ class SchedulerManager:
             Dictionary with validation results and scheduling status
 
         """
+        logger.info("Validating and scheduling sources")
         results = {
             "valid_sources": [],
             "invalid_sources": [],
@@ -171,7 +174,7 @@ async def download_callback_wrapper(source_name: str, file_type: str) -> None:
         file_type: Type of file to download
 
     """
-    log_function(f"Scheduler triggering download: {source_name} {file_type}")
+    logger.info("Scheduler triggering download: %s %s", source_name, file_type)
 
     try:
         # Create task ID
@@ -188,10 +191,12 @@ async def download_callback_wrapper(source_name: str, file_type: str) -> None:
             task_id, source_name, file_type, sources_file, download_dir
         )
 
-        log_function(f"Scheduler download completed: {source_name} {file_type}")
+        logger.info("Scheduler download completed: %s %s", source_name, file_type)
 
     except Exception as e:
-        logger.error(f"Scheduler download failed for {source_name} {file_type}: {e}")
+        logger.error(
+            "Scheduler download failed for %s %s: %s", source_name, file_type, e
+        )
         raise
 
 
@@ -206,7 +211,7 @@ async def ingest_callback_wrapper(source_name: str, file_type: str) -> None:
         file_type: Type of file to ingest
 
     """
-    log_function(f"Scheduler triggering ingest: {source_name} {file_type}")
+    logger.info("Scheduler triggering ingest: %s %s", source_name, file_type)
 
     try:
         # Load sources configuration
@@ -258,10 +263,10 @@ async def ingest_callback_wrapper(source_name: str, file_type: str) -> None:
 
         await background_load_task(task_id, file_type, file_path, source_name)
 
-        log_function(f"Scheduler ingest completed: {source_name} {file_type}")
+        logger.info("Scheduler ingest completed: %s %s", source_name, file_type)
 
-    except Exception as e:
-        logger.error(f"Scheduler ingest failed for {source_name} {file_type}: {e}")
+    except Exception:
+        logger.exception("Scheduler ingest failed for %s %s", source_name, file_type)
         raise
 
 
@@ -270,6 +275,7 @@ async def ingest_callback_wrapper(source_name: str, file_type: str) -> None:
 
 def get_scheduler_manager() -> SchedulerManager:
     """Get the global scheduler manager instance."""
+    logger.debug("Getting scheduler manager")
     return scheduler_manager
 
 
@@ -280,7 +286,7 @@ def initialize_scheduler(sources_file: str) -> None:
         sources_file: Path to sources configuration file
 
     """
-    log_function("Initializing global scheduler with job queue integration")
+    logger.debug("Initializing global scheduler with job queue integration")
 
     scheduler_manager.initialize(
         download_callback=refresh_job_callback_wrapper,
@@ -291,9 +297,11 @@ def initialize_scheduler(sources_file: str) -> None:
 
 def start_scheduler() -> None:
     """Start the global scheduler."""
+    logger.debug("Starting global scheduler")
     scheduler_manager.start()
 
 
 def stop_scheduler() -> None:
     """Stop the global scheduler."""
+    logger.debug("Stopping global scheduler")
     scheduler_manager.stop()

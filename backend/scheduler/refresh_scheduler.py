@@ -19,10 +19,10 @@ from apscheduler.triggers.cron import CronTrigger
 from apscheduler.triggers.interval import IntervalTrigger
 
 from common.constants import DATA_PATH
-from common.utils import log_function
 from models.models import Source
+from common.log_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class RefreshScheduler:
@@ -58,16 +58,16 @@ class RefreshScheduler:
         self.scheduler.add_listener(self._on_job_executed, EVENT_JOB_EXECUTED)
         self.scheduler.add_listener(self._on_job_error, EVENT_JOB_ERROR)
 
-        log_function("RefreshScheduler initialized")
+        logger.debug("RefreshScheduler initialized")
 
     def start(self) -> None:
         """Start the scheduler."""
-        log_function("Starting RefreshScheduler")
+        logger.debug("Starting RefreshScheduler")
         self.scheduler.start()
 
     def shutdown(self, wait: bool = True) -> None:
         """Shutdown the scheduler."""
-        log_function("Shutting down RefreshScheduler")
+        logger.debug("Shutting down RefreshScheduler")
         self.scheduler.shutdown(wait=wait)
 
     def load_sources(self) -> list[Source]:
@@ -77,12 +77,13 @@ class RefreshScheduler:
             List of Source objects
 
         """
+        logger.info("Loading sources from %s", self.sources_file)
         try:
             with open(self.sources_file) as f:
                 sources_data = json.load(f)
             return [Source(**source) for source in sources_data]
-        except (FileNotFoundError, json.JSONDecodeError, ValueError) as e:
-            logger.error(f"Error loading sources from {self.sources_file}: {e}")
+        except (FileNotFoundError, json.JSONDecodeError, ValueError):
+            logger.exception("Error loading sources from %s", self.sources_file)
             return []
 
     def schedule_all_sources(self) -> None:
@@ -90,14 +91,14 @@ class RefreshScheduler:
 
         This is the main entry point for setting up all scheduled refreshes.
         """
-        log_function("Scheduling all sources")
+        logger.info("Scheduling all sources")
         sources = self.load_sources()
 
         for source in sources:
             if source.enabled:
                 self.schedule_source_refresh(source)
             else:
-                log_function(f"Skipping disabled source: {source.name}")
+                logger.info("Skipping disabled source: %s", source.name)
 
     def schedule_source_refresh(self, source: Source) -> None:
         """Schedule refresh jobs for a single source.
@@ -106,14 +107,14 @@ class RefreshScheduler:
             source: Source object to schedule
 
         """
-        log_function(f"Scheduling refresh for source: {source.name}")
+        logger.info("Scheduling refresh for source: %s", source.name)
 
         # Remove existing jobs for this source
         self.remove_source_jobs(source.name)
 
         # Skip if refresh is not configured
         if not source.refresh_every_hours or not source.refresh_time:
-            log_function(f"Source {source.name} has no refresh configuration, skipping")
+            logger.info("Source %s has no refresh configuration, skipping", source.name)
             return
 
         # Calculate next refresh times for each file type
@@ -130,8 +131,10 @@ class RefreshScheduler:
         # Register jobs for this source
         if job_ids:
             self._job_registry[source.name] = job_ids
-            log_function(
-                f"Scheduled {len(job_ids)} refresh jobs for source {source.name}"
+            logger.debug(
+                "Scheduled %s refresh jobs for source %s",
+                len(job_ids),
+                source.name,
             )
 
     def _schedule_file_refresh(
@@ -147,6 +150,7 @@ class RefreshScheduler:
             Job ID if scheduled successfully, None otherwise
 
         """
+        logger.debug("Scheduling %s refresh for source %s", file_type, source.name)
         try:
             # Calculate next refresh datetime
             next_refresh = self._calculate_next_refresh(source)
@@ -170,13 +174,18 @@ class RefreshScheduler:
                 replace_existing=True,
             )
 
-            log_function(
-                f"Scheduled {file_type} refresh for {source.name} at {next_refresh}"
+            logger.info(
+                "Scheduled %s refresh for %s at %s",
+                file_type,
+                source.name,
+                next_refresh,
             )
             return job_id
 
-        except Exception as e:
-            logger.error(f"Error scheduling {file_type} refresh for {source.name}: {e}")
+        except Exception:
+            logger.exception(
+                "Error scheduling %s refresh for %s", file_type, source.name
+            )
             return None
 
     def _calculate_next_refresh(self, source: Source) -> datetime | None:
@@ -215,11 +224,11 @@ class RefreshScheduler:
             if next_refresh <= now:
                 next_refresh += timedelta(hours=source.refresh_every_hours)
 
-            log_function(f"Next refresh for {source.name}: {next_refresh} ({tz})")
+            logger.debug("Next refresh for %s: %s (%s)", source.name, next_refresh, tz)
             return next_refresh
 
-        except (ValueError, Exception) as e:
-            logger.error(f"Error calculating next refresh for {source.name}: {e}")
+        except (ValueError, Exception):
+            logger.exception("Error calculating next refresh for %s", source.name)
             return None
 
     def _create_cron_trigger(self, source: Source):
@@ -232,6 +241,7 @@ class RefreshScheduler:
             Trigger for the source's refresh schedule (CronTrigger or IntervalTrigger)
 
         """
+        logger.debug("Creating cron trigger for %s", source.name)
         hour, minute = map(int, source.refresh_time.split(":"))
         tz = (
             ZoneInfo(source.source_timezone)
@@ -271,11 +281,11 @@ class RefreshScheduler:
             file_type: Type of file to refresh
 
         """
-        log_function(f"Executing refresh job for {source_name} {file_type}")
+        logger.info("Executing refresh job for %s %s", source_name, file_type)
 
         try:
             # Step 1: Download the file
-            log_function(f"Starting download for {source_name} {file_type}")
+            logger.info("Starting download for %s %s", source_name, file_type)
             await self.download_callback(source_name, file_type)
 
             # Step 2: Wait a moment for download to complete
@@ -283,13 +293,13 @@ class RefreshScheduler:
             await asyncio.sleep(5)
 
             # Step 3: Ingest the file to database
-            log_function(f"Starting ingest for {source_name} {file_type}")
+            logger.info("Starting ingest for %s %s", source_name, file_type)
             await self.ingest_callback(source_name, file_type)
 
-            log_function(f"Completed refresh job for {source_name} {file_type}")
+            logger.info("Completed refresh job for %s %s", source_name, file_type)
 
-        except Exception as e:
-            logger.error(f"Error in refresh job for {source_name} {file_type}: {e}")
+        except Exception:
+            logger.exception("Error in refresh job for %s %s", source_name, file_type)
             raise
 
     def remove_source_jobs(self, source_name: str) -> None:
@@ -303,9 +313,9 @@ class RefreshScheduler:
             for job_id in self._job_registry[source_name]:
                 try:
                     self.scheduler.remove_job(job_id)
-                    log_function(f"Removed job {job_id}")
-                except Exception as e:
-                    logger.warning(f"Error removing job {job_id}: {e}")
+                    logger.info("Removed job %s", job_id)
+                except Exception:
+                    logger.warning("Error removing job %s", job_id)
 
             del self._job_registry[source_name]
 
@@ -316,7 +326,7 @@ class RefreshScheduler:
             source: Updated source object
 
         """
-        log_function(f"Updating schedule for source: {source.name}")
+        logger.info("Updating schedule for source: %s", source.name)
         self.schedule_source_refresh(source)
 
     def get_scheduled_jobs(self) -> list[dict[str, Any]]:
@@ -326,6 +336,7 @@ class RefreshScheduler:
             List of job information dictionaries
 
         """
+        logger.info("Getting scheduled jobs")
         jobs = []
         for job in self.scheduler.get_jobs():
             jobs.append(
@@ -342,11 +353,11 @@ class RefreshScheduler:
 
     def _on_job_executed(self, event: JobExecutionEvent) -> None:
         """Handle successful job execution."""
-        log_function(f"Job {event.job_id} executed successfully")
+        logger.info("Job %s executed successfully", event.job_id)
 
     def _on_job_error(self, event: JobExecutionEvent) -> None:
         """Handle job execution errors."""
-        logger.error(f"Job {event.job_id} failed: {event.exception}")
+        logger.error("Job %s failed: %s", event.job_id, event.exception)
 
 
 # Utility functions for atomic time calculations
@@ -365,6 +376,7 @@ def parse_refresh_time(refresh_time: str) -> tuple[int, int]:
         ValueError: If time format is invalid
 
     """
+    logger.info("Parsing refresh time: %s", refresh_time)
     try:
         hour, minute = map(int, refresh_time.split(":"))
         if not (0 <= hour <= 23) or not (0 <= minute <= 59):
@@ -392,6 +404,7 @@ def calculate_next_occurrence(
         Next occurrence datetime
 
     """
+    logger.info("Calculating next occurrence for %s %s", refresh_time, interval_hours)
     hour, minute = parse_refresh_time(refresh_time)
     tz = ZoneInfo(timezone) if timezone else base_time.tzinfo
 
@@ -419,6 +432,7 @@ def validate_source_refresh_config(source: Source) -> list[str]:
         List of validation error messages (empty if valid)
 
     """
+    logger.info("Validating source refresh config for %s", source.name)
     errors = []
 
     if not source.refresh_every_hours:

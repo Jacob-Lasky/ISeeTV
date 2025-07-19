@@ -11,9 +11,9 @@ import tempfile
 from pathlib import Path
 from typing import Any
 
-from common.utils import log_function
+from common.log_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def atomic_write_json(file_path: str, data: Any) -> None:
@@ -31,7 +31,7 @@ def atomic_write_json(file_path: str, data: Any) -> None:
         json.JSONEncodeError: If data cannot be serialized to JSON
 
     """
-    log_function(f"Atomically writing JSON to {file_path}")
+    logger.info("Atomically writing JSON to %s", file_path)
 
     # Ensure parent directory exists
     parent_dir = Path(file_path).parent
@@ -50,7 +50,7 @@ def atomic_write_json(file_path: str, data: Any) -> None:
 
         # Atomically move temporary file to target location
         os.replace(temp_path, file_path)
-        log_function(f"Successfully wrote JSON to {file_path}")
+        logger.info("Successfully wrote JSON to %s", file_path)
 
     except Exception as e:
         # Clean up temporary file on error
@@ -72,20 +72,22 @@ def atomic_read_json(file_path: str, default: Any = None) -> Any:
         Parsed JSON data or default value
 
     """
-    log_function(f"Reading JSON from {file_path}")
+    logger.info("Reading JSON from %s", file_path)
 
     try:
         if not os.path.exists(file_path):
-            log_function(f"File {file_path} does not exist, returning default")
+            logger.info("File %s does not exist, returning default", file_path)
             return default
 
         with open(file_path, encoding="utf-8") as f:
             data = json.load(f)
-            log_function(f"Successfully read JSON from {file_path}")
+            logger.info("Successfully read JSON from %s", file_path)
             return data
 
     except (json.JSONDecodeError, OSError) as e:
-        logger.warning(f"Failed to read JSON from {file_path}: {e}, returning default")
+        logger.warning(
+            "Failed to read JSON from %s: %s, returning default", file_path, e
+        )
         return default
 
 
@@ -98,7 +100,7 @@ def ensure_file_exists(file_path: str, default_content: Any = None) -> None:
 
     """
     if not os.path.exists(file_path):
-        log_function(f"Creating file {file_path} with default content")
+        logger.info("Creating file %s with default content", file_path)
         if default_content is not None:
             atomic_write_json(file_path, default_content)
         else:

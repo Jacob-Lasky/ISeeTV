@@ -19,14 +19,14 @@ import pandas as pd
 from sqlalchemy import text
 
 from common.db import SessionLocal
-from common.utils import log_function
 from rules.ingestion_rules import (
     IngestionRule,
     IngestionRulesEngine,
     SourceRuleAssignment,
 )
+from common.log_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class PostLoadRulesEngine:
@@ -34,20 +34,23 @@ class PostLoadRulesEngine:
 
     def __init__(self):
         """Initialize the post-load rules engine"""
-        log_function("PostLoadRulesEngine initialized", level="debug")
+        logger.debug("PostLoadRulesEngine initialized")
         self.ingestion_engine = IngestionRulesEngine()
 
     def apply_rules_to_table(self, table_name: str, source_name: str) -> dict[str, Any]:
         """Apply rules to all records in a specific table for a source"""
-        log_function(
-            f"Applying post-load rules to {table_name} for source {source_name}"
+        logger.info(
+            "Applying post-load rules to %s for source %s",
+            table_name,
+            source_name,
         )
 
         # Get source assignment and applicable rules
         source_assignment = self.ingestion_engine.get_source_assignment(source_name)
         if not source_assignment:
-            log_function(
-                f"No source assignment found for {source_name}, skipping rule application"
+            logger.info(
+                "No source assignment found for %s, skipping rule application",
+                source_name,
             )
             return {"processed": 0, "filtered": 0, "passed": 0}
 
@@ -55,19 +58,28 @@ class PostLoadRulesEngine:
             table_name, source_name
         )
         if not applicable_rules:
-            log_function(
-                f"No applicable rules for {table_name}/{source_name}, skipping rule application"
+            logger.info(
+                "No applicable rules for %s/%s, skipping rule application",
+                table_name,
+                source_name,
             )
             return {"processed": 0, "filtered": 0, "passed": 0}
 
         # Load records from database
         records = self._load_records_from_db(table_name, source_name)
         if not records:
-            log_function(f"No records found in {table_name} for source {source_name}")
+            logger.info(
+                "No records found in %s for source %s",
+                table_name,
+                source_name,
+            )
             return {"processed": 0, "filtered": 0, "passed": 0}
 
-        log_function(
-            f"Loaded {len(records)} records from {table_name} for {source_name}"
+        logger.info(
+            "Loaded %s records from %s for %s",
+            len(records),
+            table_name,
+            source_name,
         )
 
         # Apply rules using vectorized processing
@@ -78,8 +90,13 @@ class PostLoadRulesEngine:
         # Update database with filter reasons
         self._update_records_in_db(table_name, results["updated_records"])
 
-        log_function(
-            f"Post-load rules applied to {table_name}/{source_name}: {results['processed']} processed, {results['filtered']} filtered, {results['passed']} passed"
+        logger.info(
+            "Post-load rules applied to %s/%s: %s processed, %s filtered, %s passed",
+            table_name,
+            source_name,
+            results["processed"],
+            results["filtered"],
+            results["passed"],
         )
 
         return results
@@ -88,9 +105,7 @@ class PostLoadRulesEngine:
         self, table_name: str, source_name: str
     ) -> list[dict[str, Any]]:
         """Load records from database for rule processing"""
-        log_function(
-            f"Loading records from {table_name} for source {source_name}", level="debug"
-        )
+        logger.debug("Loading records from %s for source %s", table_name, source_name)
         try:
             with SessionLocal() as session:
                 # Use raw SQL for direct database access
@@ -113,8 +128,8 @@ class PostLoadRulesEngine:
 
                 return records
 
-        except Exception as e:
-            logger.error(f"Error loading records from {table_name}: {e}")
+        except Exception:
+            logger.exception("Error loading records from %s", table_name)
             return []
 
     def _apply_rules_vectorized(
@@ -125,12 +140,14 @@ class PostLoadRulesEngine:
         table_name: str,
     ) -> dict[str, Any]:
         """Apply rules to records using vectorized operations"""
+        logger.debug("Applying rules to records using vectorized operations")
         try:
             # Create DataFrame for vectorized processing
             df = pd.DataFrame(records)
-            log_function(
-                f"Created DataFrame with {len(df)} rows and {len(df.columns)} columns",
-                level="debug",
+            logger.debug(
+                "Created DataFrame with %s rows and %s columns",
+                len(df),
+                len(df.columns),
             )
 
             # Initialize filter reason column as JSON array
@@ -143,7 +160,9 @@ class PostLoadRulesEngine:
             for rule in rules:
                 if rule.field not in df.columns:
                     logger.warning(
-                        f"Field '{rule.field}' not found in records, skipping rule '{rule.name}'"
+                        "Field '%s' not found in records, skipping rule '%s'",
+                        rule.field,
+                        rule.name,
                     )
                     continue
 
@@ -184,9 +203,11 @@ class PostLoadRulesEngine:
 
                     filtered_count += filtered_mask.sum()
 
-                except Exception as e:
-                    logger.error(
-                        f"Error applying rule '{rule.name}' with regex '{rule.regex}': {e}"
+                except Exception:
+                    logger.exception(
+                        "Error applying rule '%s' with regex '%s'",
+                        rule.name,
+                        rule.regex,
                     )
                     continue
 
@@ -202,8 +223,8 @@ class PostLoadRulesEngine:
 
             return results
 
-        except Exception as e:
-            logger.error(f"Error in vectorized rule application: {e}")
+        except Exception:
+            logger.exception("Error in vectorized rule application")
             return {
                 "processed": len(records),
                 "filtered": 0,
@@ -215,9 +236,7 @@ class PostLoadRulesEngine:
         self, table_name: str, records: list[dict[str, Any]]
     ) -> None:
         """Update records in database with filter reasons"""
-        log_function(
-            f"Updating records in {table_name} with filter reasons", level="debug"
-        )
+        logger.debug("Updating records in %s with filter reasons", table_name)
         try:
             with SessionLocal() as session:
                 # Update each record with its filter reason(s)
@@ -242,16 +261,18 @@ class PostLoadRulesEngine:
                     )
 
                 session.commit()
-                log_function(
-                    f"Updated {len(records)} records in {table_name} with filter reasons"
+                logger.info(
+                    "Updated %s records in %s with filter reasons",
+                    len(records),
+                    table_name,
                 )
 
-        except Exception as e:
-            logger.error(f"Error updating records in {table_name}: {e}")
+        except Exception:
+            logger.exception("Error updating records in %s", table_name)
 
     def apply_rules_to_all_sources(self, table_name: str) -> dict[str, Any]:
         """Apply rules to all sources in a table"""
-        log_function(f"Applying post-load rules to all sources in {table_name}")
+        logger.info("Applying post-load rules to all sources in %s", table_name)
 
         # Get all unique sources from the table
         sources = self._get_sources_from_table(table_name)
@@ -264,14 +285,16 @@ class PostLoadRulesEngine:
             total_results["filtered"] += results["filtered"]
             total_results["passed"] += results["passed"]
 
-        log_function(
-            f"Post-load rules applied to all sources in {table_name}: {total_results}"
+        logger.info(
+            "Post-load rules applied to all sources in %s: %s",
+            table_name,
+            total_results,
         )
         return total_results
 
     def _get_sources_from_table(self, table_name: str) -> list[str]:
         """Get all unique sources from a table"""
-        log_function(f"Getting sources from {table_name}", level="debug")
+        logger.debug("Getting sources from %s", table_name)
         try:
             with SessionLocal() as session:
                 result = session.execute(
@@ -280,22 +303,25 @@ class PostLoadRulesEngine:
                 sources = [row[0] for row in result.fetchall()]
                 return sources
 
-        except Exception as e:
-            logger.error(f"Error getting sources from {table_name}: {e}")
+        except Exception:
+            logger.exception("Error getting sources from %s", table_name)
             return []
 
     def apply_assignment_to_table(
         self, assignment_id: str, table_name: str, source_name: str
     ) -> dict[str, Any]:
         """Apply a specific assignment to a table (new multi-assignment architecture)"""
-        log_function(
-            f"Applying assignment '{assignment_id}' to {table_name} for source {source_name}"
+        logger.info(
+            "Applying assignment '%s' to %s for source %s",
+            assignment_id,
+            table_name,
+            source_name,
         )
 
         # Get the assignment by ID
         assignment = self.ingestion_engine.get_assignment_by_id(assignment_id)
         if not assignment:
-            log_function(f"Assignment '{assignment_id}' not found, skipping")
+            logger.warning("Assignment '%s' not found, skipping", assignment_id)
             return {"processed": 0, "filtered": 0, "passed": 0}
 
         # Get all rules for this assignment
@@ -309,31 +335,41 @@ class PostLoadRulesEngine:
             if rule:
                 assignment_rules.append(rule)
             else:
-                log_function(
-                    f"Rule '{rule_name}' not found or not applicable to {table_name}, skipping"
+                logger.warning(
+                    "Rule '%s' not found or not applicable to %s, skipping",
+                    rule_name,
+                    table_name,
                 )
 
         if not assignment_rules:
-            log_function(
-                f"No applicable rules found for assignment '{assignment_id}' on {table_name}"
+            logger.warning(
+                "No applicable rules found for assignment '%s' on %s",
+                assignment_id,
+                table_name,
             )
             return {"processed": 0, "filtered": 0, "passed": 0}
 
         # Load records from database
         records = self._load_records_from_db(table_name, source_name)
         if not records:
-            log_function(f"No records found in {table_name} for source {source_name}")
+            logger.warning(
+                "No records found in %s for source %s", table_name, source_name
+            )
             return {"processed": 0, "filtered": 0, "passed": 0}
 
-        log_function(
-            f"Loaded {len(records)} records from {table_name} for {source_name}"
+        logger.info(
+            "Loaded %s records from %s for %s",
+            len(records),
+            table_name,
+            source_name,
         )
 
         # Create DataFrame for vectorized processing
         df = pd.DataFrame(records)
-        log_function(
-            f"Created DataFrame with {len(df)} rows and {len(df.columns)} columns",
-            level="debug",
+        logger.debug(
+            "Created DataFrame with %s rows and %s columns",
+            len(df),
+            len(df.columns),
         )
 
         # Initialize assignment match tracking
@@ -343,7 +379,9 @@ class PostLoadRulesEngine:
         for rule in assignment_rules:
             if rule.field not in df.columns:
                 logger.warning(
-                    f"Field '{rule.field}' not found in records, skipping rule '{rule.name}'"
+                    "Field '%s' not found in records, skipping rule '%s'",
+                    rule.field,
+                    rule.name,
                 )
                 continue
 
@@ -355,8 +393,8 @@ class PostLoadRulesEngine:
                 # For assignments, if ANY rule matches, the assignment matches
                 assignment_matches = assignment_matches | rule_matches
 
-            except Exception as e:
-                logger.warning(f"Error applying rule '{rule.name}': {e}")
+            except Exception:
+                logger.exception("Error applying rule '%s'", rule.name)
                 continue
 
         processed_count = len(df)
@@ -395,12 +433,20 @@ class PostLoadRulesEngine:
 
         # Update records in database
         self._update_records_in_db(table_name, records)
-        log_function(
-            f"Updated {len(records)} records in {table_name} with filter reasons"
+        logger.info(
+            "Updated %s records in %s with filter reasons",
+            len(records),
+            table_name,
         )
 
-        log_function(
-            f"Assignment '{assignment_id}' applied to {table_name}/{source_name}: {processed_count} processed, {filtered_count} filtered, {passed_count} passed"
+        logger.info(
+            "Assignment '%s' applied to %s/%s: %s processed, %s filtered, %s passed",
+            assignment_id,
+            table_name,
+            source_name,
+            processed_count,
+            filtered_count,
+            passed_count,
         )
 
         return {
@@ -413,25 +459,33 @@ class PostLoadRulesEngine:
         self, assignment_id: str, table_name: str, source_name: str
     ) -> dict[str, Any]:
         """Unapply a specific assignment from a table (new multi-assignment architecture)"""
-        log_function(
-            f"Unapplying assignment '{assignment_id}' from {table_name} for source {source_name}"
+        logger.info(
+            "Unapplying assignment '%s' from %s for source %s",
+            assignment_id,
+            table_name,
+            source_name,
         )
 
         # Get the assignment by ID to validate it exists (including disabled ones for unapply)
         _, assignments = self.ingestion_engine.load_rules()
         assignment = next((a for a in assignments if a.id == assignment_id), None)
         if not assignment:
-            log_function(f"Assignment '{assignment_id}' not found, skipping")
+            logger.warning("Assignment '%s' not found, skipping", assignment_id)
             return {"processed": 0, "restored": 0, "passed": 0}
 
         # Load records from database
         records = self._load_records_from_db(table_name, source_name)
         if not records:
-            log_function(f"No records found in {table_name} for source {source_name}")
+            logger.warning(
+                "No records found in %s for source %s", table_name, source_name
+            )
             return {"processed": 0, "restored": 0, "passed": 0}
 
-        log_function(
-            f"Loaded {len(records)} records from {table_name} for {source_name}"
+        logger.info(
+            "Loaded %s records from %s for %s",
+            len(records),
+            table_name,
+            source_name,
         )
 
         processed_count = len(records)
@@ -459,21 +513,30 @@ class PostLoadRulesEngine:
                 # Always use empty array [] for "no filter reasons", never NULL
                 record["filter_reasons"] = json.dumps(current_filter_reasons)
                 restored_count += 1
-                log_function(
-                    f"Removed assignment '{assignment_id}' from record {record.get('id', 'unknown')}",
-                    level="debug",
+                logger.debug(
+                    "Removed assignment '%s' from record %s",
+                    assignment_id,
+                    record.get("id", "unknown"),
                 )
             else:
                 passed_count += 1
 
         # Update records in database
         self._update_records_in_db(table_name, records)
-        log_function(
-            f"Updated {len(records)} records in {table_name} after unapplying assignment"
+        logger.info(
+            "Updated %s records in %s after unapplying assignment",
+            len(records),
+            table_name,
         )
 
-        log_function(
-            f"Assignment '{assignment_id}' unapplied from {table_name}/{source_name}: {processed_count} processed, {restored_count} restored, {passed_count} passed"
+        logger.info(
+            "Assignment '%s' unapplied from %s/%s: %s processed, %s restored, %s passed",
+            assignment_id,
+            table_name,
+            source_name,
+            processed_count,
+            restored_count,
+            passed_count,
         )
 
         return {
@@ -486,22 +549,28 @@ class PostLoadRulesEngine:
         self, rule_name: str, table_name: str, source_name: str
     ) -> dict[str, Any]:
         """Apply a single rule to a specific table and source (atomic operation)"""
-        log_function(
-            f"Applying single rule '{rule_name}' to {table_name} for source {source_name}"
+        logger.info(
+            "Applying single rule '%s' to %s for source %s",
+            rule_name,
+            table_name,
+            source_name,
         )
 
         # Get source assignment and check if rule is assigned
         source_assignment = self.ingestion_engine.get_source_assignment(source_name)
         if not source_assignment:
-            log_function(
-                f"No source assignment found for {source_name}, skipping rule application"
+            logger.warning(
+                "No source assignment found for %s, skipping rule application",
+                source_name,
             )
             return {"processed": 0, "filtered": 0, "passed": 0}
 
         # Check if rule is assigned to this source
         if rule_name not in source_assignment.assigned_rules:
-            log_function(
-                f"Rule '{rule_name}' not assigned to source {source_name}, skipping"
+            logger.warning(
+                "Rule '%s' not assigned to source %s, skipping",
+                rule_name,
+                source_name,
             )
             return {"processed": 0, "filtered": 0, "passed": 0}
 
@@ -514,19 +583,26 @@ class PostLoadRulesEngine:
                 break
 
         if not target_rule:
-            log_function(
-                f"Rule '{rule_name}' not found or not applicable to {table_name}, skipping"
+            logger.warning(
+                "Rule '%s' not found or not applicable to %s, skipping",
+                rule_name,
+                table_name,
             )
             return {"processed": 0, "filtered": 0, "passed": 0}
 
         # Load records from database
         records = self._load_records_from_db(table_name, source_name)
         if not records:
-            log_function(f"No records found in {table_name} for source {source_name}")
+            logger.warning(
+                "No records found in %s for source %s", table_name, source_name
+            )
             return {"processed": 0, "filtered": 0, "passed": 0}
 
-        log_function(
-            f"Loaded {len(records)} records from {table_name} for {source_name}"
+        logger.info(
+            "Loaded %s records from %s for %s",
+            len(records),
+            table_name,
+            source_name,
         )
 
         # Apply single rule using vectorized processing
@@ -537,8 +613,14 @@ class PostLoadRulesEngine:
         # Update database with filter reasons
         self._update_records_in_db(table_name, results["updated_records"])
 
-        log_function(
-            f"Single rule '{rule_name}' applied to {table_name}/{source_name}: {results['processed']} processed, {results['filtered']} filtered, {results['passed']} passed"
+        logger.info(
+            "Single rule '%s' applied to %s/%s: %s processed, %s filtered, %s passed",
+            rule_name,
+            table_name,
+            source_name,
+            results["processed"],
+            results["filtered"],
+            results["passed"],
         )
 
         return results
@@ -547,8 +629,11 @@ class PostLoadRulesEngine:
         self, table_name: str, source_name: str, rule_names: list[str] = None
     ) -> dict[str, Any]:
         """Unapply (remove) rules from a specific table and source (atomic operation)"""
-        log_function(
-            f"Unapplying rules from {table_name} for source {source_name}: {rule_names or 'all rules'}"
+        logger.info(
+            "Unapplying rules from %s for source %s: %s",
+            table_name,
+            source_name,
+            rule_names or "all rules",
         )
 
         try:
@@ -568,8 +653,12 @@ class PostLoadRulesEngine:
                             },
                         )
                         affected_rows = result.rowcount
-                        log_function(
-                            f"Unapplied rule '{rule_name}' from {affected_rows} records in {table_name}/{source_name}"
+                        logger.info(
+                            "Unapplied rule '%s' from %s records in %s/%s",
+                            rule_name,
+                            affected_rows,
+                            table_name,
+                            source_name,
                         )
                 else:
                     # Unapply all rules by setting all filter_reasons to empty JSON array
@@ -581,8 +670,11 @@ class PostLoadRulesEngine:
                         {"source_name": source_name},
                     )
                     affected_rows = result.rowcount
-                    log_function(
-                        f"Unapplied all rules from {affected_rows} records in {table_name}/{source_name}"
+                    logger.info(
+                        "Unapplied all rules from %s records in %s/%s",
+                        affected_rows,
+                        table_name,
+                        source_name,
                     )
 
                 session.commit()
@@ -603,8 +695,12 @@ class PostLoadRulesEngine:
                     "unapplied_rules": rule_names or "all",
                 }
 
-        except Exception as e:
-            logger.error(f"Error unapplying rules from {table_name}/{source_name}: {e}")
+        except Exception:
+            logger.exception(
+                "Error unapplying rules from %s/%s",
+                table_name,
+                source_name,
+            )
             return {"processed": 0, "filtered": 0, "passed": 0}
 
     def apply_all_rules_to_source(
@@ -614,8 +710,10 @@ class PostLoadRulesEngine:
         if not table_names:
             table_names = ["m3u_channels", "epg_channels", "programs"]
 
-        log_function(
-            f"Applying all rules to source {source_name} across tables: {table_names}"
+        logger.info(
+            "Applying all rules to source %s across tables: %s",
+            source_name,
+            table_names,
         )
 
         total_results = {"processed": 0, "filtered": 0, "passed": 0, "tables": {}}
@@ -627,8 +725,12 @@ class PostLoadRulesEngine:
             total_results["passed"] += results["passed"]
             total_results["tables"][table_name] = results
 
-        log_function(
-            f"All rules applied to source {source_name}: {total_results['processed']} processed, {total_results['filtered']} filtered, {total_results['passed']} passed"
+        logger.info(
+            "All rules applied to source %s: %s processed, %s filtered, %s passed",
+            source_name,
+            total_results["processed"],
+            total_results["filtered"],
+            total_results["passed"],
         )
 
         return total_results
@@ -640,7 +742,7 @@ post_load_engine = PostLoadRulesEngine()
 
 def apply_post_load_rules(table_name: str, source_name: str = None) -> dict[str, Any]:
     """Apply post-load rules to a table (atomic operation)"""
-    log_function(f"Applying post-load rules to {table_name}")
+    logger.info("Applying post-load rules to %s", table_name)
     if source_name:
         return post_load_engine.apply_rules_to_table(table_name, source_name)
     return post_load_engine.apply_rules_to_all_sources(table_name)

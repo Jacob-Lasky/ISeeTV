@@ -10,13 +10,13 @@ from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session
 
 from common.task_manager import IngestTaskManager, TaskManager
-from common.utils import log_function
 from ingest.m3u_parser import parse_m3u
 from models.db_models import M3uChannelTable
 from models.models import M3uChannel
 from rules.post_load_rules import apply_post_load_rules
+from common.log_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class LoadResult:
@@ -36,6 +36,7 @@ class LoadResult:
 
 def _upsert_m3u_channel(session: Session, channel: M3uChannel) -> LoadResult:
     """Function to upsert a single M3U channel"""
+    logger.debug("Upserting M3U channel: %s", channel)
     try:
         stmt = insert(M3uChannelTable).values(
             source=channel.source,
@@ -75,8 +76,8 @@ def _upsert_m3u_channel(session: Session, channel: M3uChannel) -> LoadResult:
             "No changes detected",
         )
 
-    except Exception as e:
-        logger.error(f"Error upserting M3U channel {channel.tvg_id}: {e}")
+    except Exception:
+        logger.exception("Error upserting M3U channel %s", channel.tvg_id)
         return LoadResult(
             "M3U_CHANNEL", f"{channel.source}:{channel.tvg_id}", "error", str(e)
         )
@@ -86,6 +87,7 @@ async def _bulk_upsert_m3u_channels(
     session: Session, channels: list[M3uChannel]
 ) -> list[LoadResult]:
     """Bulk upsert M3U channels using efficient batch operations"""
+    logger.debug("Bulk upserting %s M3U channels", len(channels))
     if not channels:
         return []
 
@@ -133,11 +135,11 @@ async def _bulk_upsert_m3u_channels(
             for channel in channels
         ]
 
-        logger.debug(f"Bulk upserted {len(channels)} M3U channels")
+        logger.debug("Bulk upserted %s M3U channels", len(channels))
         return results
 
-    except Exception as e:
-        logger.error(f"Error in bulk upsert of M3U channels: {e}")
+    except Exception:
+        logger.exception("Error in bulk upsert of M3U channels")
         session.rollback()
 
         # Return error results for all channels
@@ -160,14 +162,14 @@ async def load_m3u_channels_async(
     batch_size: int = 1000,
 ) -> AsyncGenerator[LoadResult, None]:
     """Async generator that loads M3U channels using bulk operations for improved performance"""
-    log_function(
-        f"Starting async M3U channel load from {file_path} for source {source_name}"
+    logger.info(
+        "Starting async M3U channel load from %s for source %s", file_path, source_name
     )
 
     try:
         # Parse channels (this is synchronous but usually fast)
         channels = parse_m3u(file_path, source_name, task_id)
-        log_function(f"Parsed {len(channels)} M3U channels")
+        logger.info("Parsed %s M3U channels", len(channels))
 
         # Update task progress if task_id provided
         if task_id:
@@ -205,11 +207,13 @@ async def load_m3u_channels_async(
             await asyncio.sleep(0)
 
             logger.debug(
-                f"Committed batch {i // batch_size + 1} of M3U channels ({len(batch)} records)"
+                "Committed batch %s of M3U channels (%s records)",
+                i // batch_size + 1,
+                len(batch),
             )
 
-    except Exception as e:
-        logger.error(f"Error in async M3U channel loading: {e}")
+    except Exception:
+        logger.exception("Error in async M3U channel loading")
         session.rollback()
         yield LoadResult("M3U_CHANNEL", "BATCH", "error", str(e))
 
@@ -218,7 +222,7 @@ async def load_m3u_file_async(
     session: Session, file_path: str, source_name: str, task_id: str | None = None
 ) -> AsyncGenerator[LoadResult, None]:
     """Main async function to load complete M3U file"""
-    log_function(f"Starting complete M3U file load: {file_path} for {source_name}")
+    logger.info("Starting complete M3U file load: %s for %s", file_path, source_name)
 
     # Load all M3U channels
     async for result in load_m3u_channels_async(
@@ -226,14 +230,17 @@ async def load_m3u_file_async(
     ):
         yield result
 
-    log_function(f"Completed M3U file load for {source_name}")
+    logger.info("Completed M3U file load for %s", source_name)
 
     # Apply post-load rules for traceability
-    log_function(f"Applying post-load rules to M3U channels for {source_name}")
+    logger.info("Applying post-load rules to M3U channels for %s", source_name)
     try:
         rule_results = apply_post_load_rules("m3u_channels", source_name)
-        log_function(
-            f"Post-load rules applied: {rule_results['processed']} processed, {rule_results['filtered']} filtered, {rule_results['passed']} passed"
+        logger.info(
+            "Post-load rules applied: %s processed, %s filtered, %s passed",
+            rule_results["processed"],
+            rule_results["filtered"],
+            rule_results["passed"],
         )
 
         # Yield a result for rule application
@@ -243,6 +250,6 @@ async def load_m3u_file_async(
             "success",
             f"Applied rules: {rule_results['filtered']} filtered, {rule_results['passed']} passed",
         )
-    except Exception as e:
-        logger.error(f"Error applying post-load rules: {e}")
+    except Exception:
+        logger.exception("Error applying post-load rules")
         yield LoadResult("M3U_CHANNEL", "RULES", "error", str(e))

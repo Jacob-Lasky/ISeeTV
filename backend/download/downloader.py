@@ -10,10 +10,10 @@ from fastapi import HTTPException, status
 
 from common.state import get_progress, is_task_cancelled, remove_cancelled_task
 from common.task_manager import DownloadTaskManager
-from common.utils import log_function
 from models.models import Source
+from common.log_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 #  download utility functions
@@ -27,7 +27,7 @@ async def download_file_with_progress(
     fallback_size: int | None = None,
 ) -> tuple[bool, int, Literal["success", "failed", "cancelled"]]:
     """Download a single file with real-time progress tracking by bytes"""
-    log_function(f"Downloading {item_name} from {url}: {task_id}")
+    logger.info("Downloading %s from %s: %s", item_name, url, task_id)
     try:
         DownloadTaskManager.update_download_progress(
             task_id, current_item=item_name, status="downloading"
@@ -66,8 +66,8 @@ async def download_file_with_progress(
                     async for chunk in response.aiter_bytes(chunk_size=8192):
                         # Check for cancellation before processing each chunk
                         if is_task_cancelled(task_id):
-                            log_function(
-                                f"Download task {task_id} cancelled, stopping download"
+                            logger.info(
+                                "Download task %s cancelled, stopping download", task_id
                             )
                             # Clean up the partial file
                             f.close()
@@ -110,7 +110,9 @@ async def orchestrate_file_download_from_source(
     task_id: str | None = None,
 ) -> None:
     """Download function for any file type with optional progress tracking"""
-    log_function(f"Orchestrating download for {source_name} {download_type}: {task_id}")
+    logger.info(
+        "Orchestrating download for %s %s: %s", source_name, download_type, task_id
+    )
     if download_type == "m3u":
         extension = "m3u"
     elif download_type == "epg":
@@ -188,7 +190,7 @@ async def background_download_task(
     download_dir: str,
 ) -> None:
     """Background coroutine for downloading multiple files"""
-    log_function(f"Background download task {task_id}")
+    logger.info("Background download task %s", task_id)
     try:
         DownloadTaskManager.update_download_progress(task_id, status="downloading")
 
@@ -252,7 +254,7 @@ async def background_download_task(
 
 async def validate_url(url: str) -> bool:
     """Validate that the URL is accessible"""
-    log_function(f"Validating URL {url}")
+    logger.info("Validating URL %s", url)
     try:
         async with httpx.AsyncClient() as client:
             response = await client.head(url)
@@ -278,7 +280,7 @@ async def background_single_download_task(
     download_dir: str,
 ) -> None:
     """Background coroutine for downloading a single source with progress tracking"""
-    log_function(f"Background single download task {task_id}")
+    logger.info("Background single download task %s", task_id)
     try:
         DownloadTaskManager.update_download_progress(
             task_id,

@@ -3,19 +3,18 @@
 """
 
 import asyncio
-import logging
 from collections.abc import AsyncGenerator
 
 from sqlalchemy.dialects.sqlite import insert
 from sqlalchemy.orm import Session
 
 from common.task_manager import IngestTaskManager, TaskManager
-from common.utils import log_function
 from ingest.epg_parser import parse_epg_for_channels, parse_epg_for_programs
 from models.db_models import EpgChannelTable, ProgramTable
 from models.models import EpgChannel, Program
+from common.log_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 class LoadResult:
@@ -35,6 +34,7 @@ class LoadResult:
 
 def _upsert_epg_channel(session: Session, channel: EpgChannel) -> LoadResult:
     """Function to upsert a single EPG channel"""
+    logger.debug("Upserting EPG channel %s", channel.channel_id)
     try:
         stmt = insert(EpgChannelTable).values(
             source=channel.source,
@@ -81,6 +81,7 @@ async def _bulk_upsert_epg_channels(
     session: Session, channels: list[EpgChannel]
 ) -> list[LoadResult]:
     """Bulk upsert EPG channels using efficient batch operations"""
+    logger.debug("Bulk upserting %s EPG channels", len(channels))
     if not channels:
         return []
 
@@ -122,11 +123,11 @@ async def _bulk_upsert_epg_channels(
             for channel in channels
         ]
 
-        logger.debug(f"Bulk upserted {len(channels)} EPG channels")
+        logger.debug("Bulk upserted %s EPG channels", len(channels))
         return results
 
     except Exception as e:
-        logger.error(f"Error in bulk upsert of EPG channels: {e}")
+        logger.error("Error in bulk upsert of EPG channels: %s", e)
         session.rollback()
 
         # Return error results for all channels
@@ -143,6 +144,7 @@ async def _bulk_upsert_epg_channels(
 
 def _upsert_program(session: Session, program: Program) -> LoadResult:
     """Function to upsert a single program"""
+    logger.debug("Upserting program %s", program.program_id)
     try:
         stmt = insert(ProgramTable).values(
             source=program.source,
@@ -184,7 +186,7 @@ def _upsert_program(session: Session, program: Program) -> LoadResult:
         )
 
     except Exception as e:
-        logger.error(f"Error upserting program {program.program_id}: {e}")
+        logger.error("Error upserting program %s: %s", program.program_id, e)
         return LoadResult(
             "PROGRAM", f"{program.source}:{program.program_id}", "error", str(e)
         )
@@ -194,6 +196,7 @@ async def _bulk_upsert_programs(
     session: Session, programs: list[Program]
 ) -> list[LoadResult]:
     """Bulk upsert programs using efficient batch operations"""
+    logger.debug("Bulk upserting %s programs", len(programs))
     if not programs:
         return []
 
@@ -241,11 +244,11 @@ async def _bulk_upsert_programs(
             for program in programs
         ]
 
-        logger.debug(f"Bulk upserted {len(programs)} programs")
+        logger.debug("Bulk upserted %s programs", len(programs))
         return results
 
     except Exception as e:
-        logger.error(f"Error in bulk upsert of programs: {e}")
+        logger.exception("Error in bulk upsert of programs")
         session.rollback()
 
         # Return error results for all programs
@@ -268,14 +271,14 @@ async def load_epg_channels_async(
     batch_size: int = 1000,
 ) -> AsyncGenerator[LoadResult, None]:
     """Async generator that loads EPG channels using bulk operations for improved performance"""
-    log_function(
-        f"Starting async EPG channel load from {file_path} for source {source_name}"
+    logger.debug(
+        "Starting async EPG channel load from %s for source %s", file_path, source_name
     )
 
     try:
         # Parse channels (this is synchronous but usually fast)
         channels = parse_epg_for_channels(file_path, source_name, task_id)
-        log_function(f"Parsed {len(channels)} EPG channels")
+        logger.info("Parsed %s EPG channels", len(channels))
 
         # Update task progress if task_id provided
         if task_id:
@@ -316,11 +319,13 @@ async def load_epg_channels_async(
             await asyncio.sleep(0)
 
             logger.debug(
-                f"Committed batch {i // batch_size + 1} of EPG channels ({len(batch)} records)"
+                "Committed batch %s of EPG channels (%s records)",
+                i // batch_size + 1,
+                len(batch),
             )
 
     except Exception as e:
-        logger.error(f"Error in async EPG channel loading: {e}")
+        logger.exception("Error in async EPG channel loading")
         session.rollback()
         yield LoadResult("EPG_CHANNEL", "BATCH", "error", str(e))
 
@@ -333,14 +338,14 @@ async def load_programs_async(
     batch_size: int = 2000,
 ) -> AsyncGenerator[LoadResult, None]:
     """Async generator that loads programs using bulk operations for improved performance"""
-    log_function(
-        f"Starting async program load from {file_path} for source {source_name}"
+    logger.info(
+        "Starting async program load from %s for source %s", file_path, source_name
     )
 
     try:
         # Parse programs (this is synchronous but can be large)
         programs = parse_epg_for_programs(file_path, source_name, task_id)
-        log_function(f"Parsed {len(programs)} programs")
+        logger.info("Parsed %s programs", len(programs))
 
         # Update task progress if task_id provided
         if task_id:
@@ -379,11 +384,13 @@ async def load_programs_async(
             await asyncio.sleep(0)
 
             logger.debug(
-                f"Committed batch {i // batch_size + 1} of programs ({len(batch)} records)"
+                "Committed batch %s of programs (%s records)",
+                i // batch_size + 1,
+                len(batch),
             )
 
     except Exception as e:
-        logger.error(f"Error in async program loading: {e}")
+        logger.exception("Error in async program loading")
         session.rollback()
         yield LoadResult("PROGRAM", "BATCH", "error", str(e))
 
@@ -392,7 +399,7 @@ async def load_epg_file_async(
     session: Session, file_path: str, source_name: str, task_id: str | None = None
 ) -> AsyncGenerator[LoadResult, None]:
     """Main async function to load complete EPG file (channels + programs)"""
-    log_function(f"Starting complete EPG file load: {file_path} for {source_name}")
+    logger.info("Starting complete EPG file load: %s for %s", file_path, source_name)
 
     # Load channels first
     async for result in load_epg_channels_async(
@@ -404,4 +411,4 @@ async def load_epg_file_async(
     async for result in load_programs_async(session, file_path, source_name, task_id):
         yield result
 
-    log_function(f"Completed EPG file load for {source_name}")
+    logger.info("Completed EPG file load for %s", source_name)

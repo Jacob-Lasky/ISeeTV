@@ -1,14 +1,13 @@
 import datetime as dt
-import inspect
-import logging
 from typing import Any, Literal
 
 from fastapi import HTTPException, status
 
 from common.state import get_progress
 from models.models import DownloadProgress
+from common.log_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def create_task_id(
@@ -17,32 +16,15 @@ def create_task_id(
     task_type: Literal["download", "ingest"],
 ):
     """Create a unique task ID for a source and file type"""
-    log_function(f"Creating task for {source_name}, {file_type}, {task_type}")
+    logger.info("Creating task for %s, %s, %s", source_name, file_type, task_type)
     timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     return f"{task_type}_{file_type}_{source_name}_{timestamp}"
-
-
-def log_function(
-    message: str = "",
-    level: Literal["debug", "info", "warning", "error", "critical"] = "info",
-):
-    func_name = inspect.currentframe().f_back.f_code.co_name  # type: ignore
-    log_message = f"\t [{func_name}]: {message}"
-    if level == "debug":
-        logger.debug(log_message)
-    elif level == "info":
-        logger.info(log_message)
-    elif level == "warning":
-        logger.warning(log_message)
-    elif level == "error":
-        logger.error(log_message)
-    elif level == "critical":
-        logger.critical(log_message)
 
 
 def get_progress_response(task_id: str, task_type: Literal["download", "ingest"]):
     """Get progress data for a specific task by ID and type"""
     progress = get_progress(task_type)
+    logger.debug("Getting progress for %s", task_id)
     if task_id not in progress:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
@@ -53,6 +35,7 @@ def get_progress_response(task_id: str, task_type: Literal["download", "ingest"]
 
 def get_all_progress_response(task_type: Literal["download", "ingest"]):
     """Get all progress data for a specific task type"""
+    logger.debug("Getting all progress for %s", task_type)
     return get_progress(task_type)
 
 
@@ -60,6 +43,7 @@ def format_download_progress_response(
     progress_data: dict[str, dict],
 ) -> dict[str, "DownloadProgress"]:
     """Format raw progress data into DownloadProgress models"""
+    logger.debug("Formatting download progress response for %s", progress_data)
     return {
         task_id: DownloadProgress(**progress)
         for task_id, progress in progress_data.items()
@@ -68,6 +52,7 @@ def format_download_progress_response(
 
 def format_ingest_progress_response(progress_data: dict[str, dict]) -> dict[str, dict]:
     """Format raw progress data for ingest endpoints (legacy format)"""
+    logger.debug("Formatting ingest progress response for %s", progress_data)
     return {"ingest": progress_data}
 
 
@@ -77,6 +62,7 @@ def format_table_response(
     source_filter: str | None = None,
     filter_stats: dict[str, int] | None = None,
 ) -> dict[str, Any]:
+    logger.debug("Formatting table response for %s", table_name)
     # Use provided filter statistics or calculate from records
     if filter_stats and len(filter_stats) > 0:
         total_records = sum(filter_stats.values())

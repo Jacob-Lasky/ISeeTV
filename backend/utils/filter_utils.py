@@ -7,10 +7,10 @@ from typing import Any
 from sqlalchemy import text
 from sqlalchemy.orm import Session
 
-from common.utils import log_function
 from models.db_models import FilterValueTable
+from common.log_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 
 def precompute_filter_values(session: Session, table_name: str) -> None:
@@ -21,7 +21,7 @@ def precompute_filter_values(session: Session, table_name: str) -> None:
         table_name: Name of the table to process
 
     """
-    log_function(f"Precomputing filter values for table: {table_name}")
+    logger.info("Precomputing filter values for table: %s", table_name)
     # Define filterable columns for each table
     filterable_columns = {
         "epg_channels": ["source", "filter_reasons"],
@@ -30,10 +30,10 @@ def precompute_filter_values(session: Session, table_name: str) -> None:
     }
 
     if table_name not in filterable_columns:
-        logger.warning(f"No filterable columns defined for table: {table_name}")
+        logger.warning("No filterable columns defined for table: %s", table_name)
         return
 
-    log_function(f"Precomputing filter values for table: {table_name}")
+    logger.info("Precomputing filter values for table: %s", table_name)
 
     # Clear existing filter values for this table
     session.query(FilterValueTable).filter(
@@ -104,21 +104,26 @@ def precompute_filter_values(session: Session, table_name: str) -> None:
 
             if filter_values:
                 session.add_all(filter_values)
-                log_function(
-                    f"Added {len(filter_values)} unique values for {table_name}.{column_name}"
+                logger.info(
+                    "Added %s unique values for %s.%s",
+                    len(filter_values),
+                    table_name,
+                    column_name,
                 )
             else:
-                logger.warning(f"No unique values found for {table_name}.{column_name}")
+                logger.warning(
+                    "No unique values found for %s.%s", table_name, column_name
+                )
 
-        except Exception as e:
-            logger.error(
-                f"Error precomputing filter values for {table_name}.{column_name}: {e}"
+        except Exception:
+            logger.exception(
+                "Error precomputing filter values for %s.%s", table_name, column_name
             )
             raise
 
     # Commit the changes
     session.commit()
-    log_function(f"Successfully precomputed filter values for table: {table_name}")
+    logger.info("Successfully precomputed filter values for table: %s", table_name)
 
 
 def get_filter_values(
@@ -135,6 +140,7 @@ def get_filter_values(
         List of dictionaries with 'value' and 'count' keys
 
     """
+    logger.info("Getting filter values for %s.%s", table_name, column_name)
     try:
         filter_values = (
             session.query(FilterValueTable)
@@ -147,8 +153,10 @@ def get_filter_values(
         )
 
         return [{"value": fv.value, "count": fv.count} for fv in filter_values]
-    except Exception as e:
-        logger.error(f"Error getting filter values for {table_name}.{column_name}: {e}")
+    except Exception:
+        logger.exception(
+            "Error getting filter values for %s.%s", table_name, column_name
+        )
         return []
 
 
@@ -165,6 +173,7 @@ def get_all_filter_values(
         Dictionary mapping column names to lists of filter values
 
     """
+    logger.info("Getting all filter values for %s", table_name)
     try:
         filter_values = (
             session.query(FilterValueTable)
@@ -180,8 +189,8 @@ def get_all_filter_values(
             result[fv.column_name].append({"value": fv.value, "count": fv.count})
 
         return result
-    except Exception as e:
-        logger.error(f"Error getting all filter values for {table_name}: {e}")
+    except Exception:
+        logger.exception("Error getting all filter values for %s", table_name)
         return {}
 
 
@@ -196,9 +205,8 @@ def get_table_filter_statistics(session: Session, table_name: str) -> dict[str, 
         Dictionary mapping filter reason to count
 
     """
+    logger.info("Getting filter statistics for table: %s", table_name)
     try:
-        log_function(f"Getting filter statistics for table: {table_name}")
-
         query = text(
             f"""
             SELECT 
@@ -222,23 +230,22 @@ def get_table_filter_statistics(session: Session, table_name: str) -> dict[str, 
             count = row.count
             filter_stats[source][reason] = count
 
-        log_function(f"Filter statistics for {table_name}: {dict(filter_stats)}")
+        logger.info("Filter statistics for %s: %s", table_name, dict(filter_stats))
 
         return filter_stats
 
-    except Exception as e:
-        logger.error(f"Error getting filter statistics for table {table_name}: {e}")
+    except Exception:
+        logger.exception("Error getting filter statistics for table %s", table_name)
         return {}
 
 
 def get_table_filter_statistics_by_source(
     session: Session, table_name: str, source: str
 ) -> dict[str, int]:
+    logger.info(
+        "Getting filter statistics for table: %s and source: %s", table_name, source
+    )
     try:
-        log_function(
-            f"Getting filter statistics for table: {table_name} and source: {source}"
-        )
-
         # Query using filter_reasons field - handle JSON arrays of assignment IDs
         # The filter_reasons column now contains JSON arrays like ["alice_sports_content"]
         query = text(
@@ -285,7 +292,7 @@ def get_table_filter_statistics_by_source(
             total += count
             filter_stats[reason] = count
 
-        log_function(f"Filter statistics for {table_name}: {dict(filter_stats)}")
+        logger.info("Filter statistics for %s: %s", table_name, dict(filter_stats))
 
         return {
             "filter_stats": filter_stats,
@@ -294,8 +301,10 @@ def get_table_filter_statistics_by_source(
             "total": total,
         }
 
-    except Exception as e:
-        logger.error(
-            f"Error getting filter statistics for table {table_name} and source {source}: {e}"
+    except Exception:
+        logger.exception(
+            "Error getting filter statistics for table %s and source %s",
+            table_name,
+            source,
         )
         return {}

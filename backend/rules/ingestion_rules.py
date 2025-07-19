@@ -23,10 +23,10 @@ from typing import Any, Literal
 import pandas as pd
 
 from common.constants import DATA_PATH
-from common.utils import log_function
 from models.models import EpgChannel, M3uChannel, Program
+from common.log_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Directory for storing filtered-out records
 INGESTION_RULES_LOGS = os.path.join(DATA_PATH, "ingestion_rules_logs")
@@ -41,7 +41,7 @@ RULES_CONFIG_FILE = os.path.join(DATA_PATH, "rules.json")
 class IngestionRule:
     """Atomic representation of a single ingestion rule pattern"""
 
-    log_function("Creating ingestion rule")
+    logger.debug("Creating ingestion rule")
 
     name: str
     tables: list[
@@ -74,7 +74,7 @@ class IngestionRule:
 class SourceRuleAssignment:
     """Named assignment of rules to a source with unique identifier"""
 
-    log_function("Creating source rule assignment")
+    logger.debug("Creating source rule assignment")
 
     id: str
     assignment_name: str
@@ -101,7 +101,7 @@ class SourceRuleAssignment:
 class FilterResult:
     """Result of applying ingestion rules to a record"""
 
-    log_function("Creating filter result")
+    logger.debug("Creating filter result")
 
     passed: bool  # True if record passes all rules
     rejected_by: str | None = None  # Name of rule that rejected the record
@@ -111,7 +111,7 @@ class FilterResult:
 class IngestionRulesEngine:
     """Engine for loading and applying source-based ingestion rules with caching"""
 
-    log_function("Creating ingestion rules engine")
+    logger.debug("Creating ingestion rules engine")
 
     def __init__(self, rules_file: str = None):
         """Initialize the rules engine with optional rules file path"""
@@ -124,9 +124,7 @@ class IngestionRulesEngine:
 
     def _should_reload_rules(self) -> bool:
         """Check if rules file has been modified since last load"""
-        log_function(
-            "Checking if rules file has been modified since last load", level="debug"
-        )
+        logger.debug("Checking if rules file has been modified since last load")
         try:
             file_mtime = os.path.getmtime(self.rules_file)
             return self._cache_timestamp is None or file_mtime > self._cache_timestamp
@@ -150,8 +148,10 @@ class IngestionRulesEngine:
         latest_mtime = max(rules_mtime, assignments_mtime)
 
         if self._cache_timestamp is None or latest_mtime > self._cache_timestamp:
-            log_function(
-                f"Loading ingestion rules from {self.rules_file} and {assignments_file}"
+            logger.info(
+                "Loading ingestion rules from %s and %s",
+                self.rules_file,
+                assignments_file,
             )
             rules = []
             assignments = []
@@ -168,17 +168,17 @@ class IngestionRulesEngine:
                     else:
                         rules_list = rules_data.get("rules", [])
 
-                    log_function(f"Found {len(rules_list)} rules in configuration")
+                    logger.info("Found %s rules in configuration", len(rules_list))
                     for rule_data in rules_list:
                         try:
                             rule = IngestionRule(**rule_data)
                             rules.append(rule)
-                            log_function(f"Loaded rule: {rule.name}")
-                        except Exception as e:
-                            logger.error(f"Failed to parse rule {rule_data}: {e}")
+                            logger.info("Loaded rule: %s", rule.name)
+                        except Exception:
+                            logger.exception("Failed to parse rule %s", rule_data)
                             continue
                 else:
-                    logger.warning(f"Rules file not found: {self.rules_file}")
+                    logger.warning("Rules file not found: %s", self.rules_file)
 
                 # Load assignments from assignments.json
                 if os.path.exists(assignments_file):
@@ -193,39 +193,43 @@ class IngestionRulesEngine:
                             "source_assignments", []
                         )
 
-                    log_function(
-                        f"Found {len(assignments_list)} source assignments in configuration"
+                    logger.info(
+                        "Found %s source assignments in configuration",
+                        len(assignments_list),
                     )
                     for assignment_data in assignments_list:
                         try:
                             assignment = SourceRuleAssignment(**assignment_data)
                             assignments.append(assignment)
-                            logger.debug(
-                                f"Loaded assignment for source: {assignment.source_name}"
+                            logger.info(
+                                "Loaded assignment for source: %s",
+                                assignment.source_name,
                             )
-                        except Exception as e:
-                            logger.error(
-                                f"Failed to parse assignment {assignment_data}: {e}"
+                        except Exception:
+                            logger.exception(
+                                "Failed to parse assignment %s", assignment_data
                             )
                             continue
                 else:
-                    logger.warning(f"Assignments file not found: {assignments_file}")
+                    logger.warning("Assignments file not found: %s", assignments_file)
 
                 # Update cache
                 self._rules_cache = rules
                 self._assignments_cache = assignments
                 self._cache_timestamp = time.time()
-                log_function(
-                    f"Successfully loaded {len(rules)} rules and {len(assignments)} assignments"
+                logger.info(
+                    "Successfully loaded %s rules and %s assignments",
+                    len(rules),
+                    len(assignments),
                 )
 
             except json.JSONDecodeError as e:
-                logger.error(f"Invalid JSON in configuration files: {e}")
+                logger.error("Invalid JSON in configuration files: %s", e)
                 self._rules_cache = []
                 self._assignments_cache = []
                 self._cache_timestamp = time.time()
-            except Exception as e:
-                logger.error(f"Unexpected error loading rules: {e}")
+            except Exception:
+                logger.exception("Unexpected error loading rules")
                 self._rules_cache = []
                 self._assignments_cache = []
                 self._cache_timestamp = time.time()
@@ -236,7 +240,7 @@ class IngestionRulesEngine:
         self, table_name: str, source_name: str
     ) -> list[IngestionRule]:
         """Get rules that apply to a specific table and source (atomic operation)"""
-        log_function("Getting applicable rules for table and source", level="debug")
+        logger.debug("Getting applicable rules for table and source")
         rules, _ = self.load_rules()
 
         # Get ALL assignments for this source (supports multi-assignment architecture)
@@ -259,17 +263,18 @@ class IngestionRulesEngine:
             ):
                 applicable_rules.append(rule)
 
-        log_function(
-            f"Found {len(applicable_rules)} applicable rules for {table_name}/{source_name}: {[r.name for r in applicable_rules]}",
-            level="debug",
+        logger.debug(
+            "Found %s applicable rules for %s/%s: %s",
+            len(applicable_rules),
+            table_name,
+            source_name,
+            [r.name for r in applicable_rules],
         )
         return applicable_rules
 
     def get_source_assignments(self, source_name: str) -> list[SourceRuleAssignment]:
         """Get all assignments for a specific source (supports multi-assignment architecture)"""
-        log_function(
-            f"Getting all assignments for source: {source_name}", level="debug"
-        )
+        logger.debug("Getting all assignments for source: %s", source_name)
         _, assignments = self.load_rules()
 
         # Find all enabled assignments for this source
@@ -279,16 +284,18 @@ class IngestionRulesEngine:
             if assignment.source_name == source_name and assignment.enabled
         ]
 
-        log_function(
-            f"Found {len(source_assignments)} assignments for {source_name}: {[a.id for a in source_assignments]}",
-            level="debug",
+        logger.debug(
+            "Found %s assignments for %s: %s",
+            len(source_assignments),
+            source_name,
+            [a.id for a in source_assignments],
         )
 
         return source_assignments
 
     def get_assignment_by_id(self, assignment_id: str) -> SourceRuleAssignment | None:
         """Get a specific assignment by its ID"""
-        log_function(f"Getting assignment by ID: {assignment_id}", level="debug")
+        logger.debug("Getting assignment by ID: %s", assignment_id)
         _, assignments = self.load_rules()
 
         for assignment in assignments:
@@ -299,12 +306,13 @@ class IngestionRulesEngine:
 
     def get_source_assignment(self, source_name: str) -> SourceRuleAssignment | None:
         """Legacy method for backwards compatibility - returns first assignment for source"""
+        logger.debug("Getting source assignment for source: %s", source_name)
         assignments = self.get_source_assignments(source_name)
         return assignments[0] if assignments else None
 
     def get_all_source_assignments(self) -> list[SourceRuleAssignment]:
         """Get all enabled source assignments across all sources"""
-        log_function("Getting all source assignments", level="debug")
+        logger.debug("Getting all source assignments")
         _, assignments = self.load_rules()
 
         # Return all enabled assignments
@@ -312,9 +320,10 @@ class IngestionRulesEngine:
             assignment for assignment in assignments if assignment.enabled
         ]
 
-        log_function(
-            f"Found {len(enabled_assignments)} enabled assignments: {[a.id for a in enabled_assignments]}",
-            level="debug",
+        logger.debug(
+            "Found %s enabled assignments: %s",
+            len(enabled_assignments),
+            [a.id for a in enabled_assignments],
         )
 
         return enabled_assignments
@@ -329,20 +338,22 @@ class IngestionRulesEngine:
         if not records:
             return [], []
 
-        log_function(f"Applying batch rules to {len(records)} records")
+        logger.info("Applying batch rules to %s records", len(records))
 
         # Get source assignment and applicable rules
         source_assignment = self.get_source_assignment(source_name)
         if not source_assignment:
-            log_function(
-                f"No source assignment found for {source_name}, allowing all records"
+            logger.info(
+                "No source assignment found for %s, allowing all records", source_name
             )
             return records, []
 
         applicable_rules = self.get_applicable_rules(table_name, source_name)
         if not applicable_rules:
-            log_function(
-                f"No applicable rules for {table_name}/{source_name}, allowing all records"
+            logger.info(
+                "No applicable rules for %s/%s, allowing all records",
+                table_name,
+                source_name,
             )
             return records, []
 
@@ -350,11 +361,13 @@ class IngestionRulesEngine:
         try:
             records_data = [record.model_dump() for record in records]
             df = pd.DataFrame(records_data)
-            log_function(
-                f"Created DataFrame with {len(df)} rows and {len(df.columns)} columns"
+            logger.info(
+                "Created DataFrame with %s rows and %s columns",
+                len(df),
+                len(df.columns),
             )
-        except Exception as e:
-            logger.error(f"Failed to create DataFrame from records: {e}")
+        except Exception:
+            logger.exception("Failed to create DataFrame from records")
             # Fall back to single record processing
             return self._apply_rules_fallback(records, table_name, source_name)
 
@@ -365,7 +378,9 @@ class IngestionRulesEngine:
         for rule in applicable_rules:
             if rule.field not in df.columns:
                 logger.warning(
-                    f"Field '{rule.field}' not found in records, skipping rule '{rule.name}'"
+                    "Field '%s' not found in records, skipping rule '%s'",
+                    rule.field,
+                    rule.name,
                 )
                 continue
 
@@ -398,9 +413,11 @@ class IngestionRulesEngine:
                         }
                         rejected_records.append(rejected_record)
 
-            except Exception as e:
-                logger.error(
-                    f"Error applying rule '{rule.name}' with regex '{rule.regex}': {e}"
+            except Exception:
+                logger.exception(
+                    "Error applying rule '%s' with regex '%s'",
+                    rule.name,
+                    rule.regex,
                 )
                 continue
 
@@ -408,8 +425,10 @@ class IngestionRulesEngine:
         passed_indices = df[passed_mask].index.tolist()
         filtered_records = [records[i] for i in passed_indices]
 
-        log_function(
-            f"Batch processing complete: {len(filtered_records)} passed, {len(rejected_records)} rejected"
+        logger.info(
+            "Batch rule application complete: %s passed, %s rejected",
+            len(filtered_records),
+            len(rejected_records),
         )
         return filtered_records, rejected_records
 
@@ -449,41 +468,44 @@ class IngestionRulesEngine:
         source_name: str,
     ) -> FilterResult:
         """Apply source-based rules to a single record (atomic operation)"""
-        log_function("Applying rules to record", level="debug")
+        logger.debug("Applying rules to record")
 
         # Type safety checks
         if not isinstance(record, (M3uChannel, EpgChannel, Program)):
             logger.error(
-                f"Expected M3uChannel/EpgChannel/Program, got {type(record)}: {record}"
+                "Expected M3uChannel/EpgChannel/Program, got %s: %s",
+                type(record),
+                record,
             )
             return FilterResult(passed=True)  # Default to pass for unexpected types
 
         # Get source assignment to determine mode
         source_assignment = self.get_source_assignment(source_name)
-        log_function(
-            f"Source assignment for {source_name}: {source_assignment}", level="debug"
-        )
+        logger.debug("Source assignment for %s: %s", source_name, source_assignment)
 
         if not source_assignment:
             # No assignment for this source, default to pass (blacklist mode behavior)
-            log_function(
-                f"No source assignment found for {source_name}, defaulting to pass",
-                level="debug",
+            logger.debug(
+                "No source assignment found for %s, defaulting to pass", source_name
             )
             return FilterResult(passed=True)
 
         # Get applicable rules for this source and table
         applicable_rules = self.get_applicable_rules(table_name, source_name)
-        log_function(
-            f"Found {len(applicable_rules)} applicable rules for {table_name}/{source_name}",
-            level="debug",
+        logger.debug(
+            "Found %s applicable rules for %s/%s",
+            len(applicable_rules),
+            table_name,
+            source_name,
         )
 
         # Log rule details
         for rule in applicable_rules:
-            log_function(
-                f"Applicable rule: {rule.name}, field: {rule.field}, regex: {rule.regex}",
-                level="debug",
+            logger.debug(
+                "Applicable rule: %s, field: %s, regex: %s",
+                rule.name,
+                rule.field,
+                rule.regex,
             )
 
         # Convert record to dict for field access
@@ -491,34 +513,34 @@ class IngestionRulesEngine:
         # Pydantic v2 models
         try:
             record_dict = record.model_dump()
-            log_function(
-                f"Converted record using model_dump(): {record_dict}", level="debug"
-            )
-        except Exception as e:
-            logger.error(f"Failed to convert record using model_dump(): {e}")
+            logger.debug("Converted record using model_dump(): %s", record_dict)
+        except Exception:
+            logger.exception("Failed to convert record using model_dump()")
             return FilterResult(passed=True)
 
         # Validate record_dict is actually a dict
         if not isinstance(record_dict, dict):
             logger.error(
-                f"Record conversion failed - expected dict, got {type(record_dict)}: {record_dict}"
+                "Record conversion failed - expected dict, got %s: %s",
+                type(record_dict),
+                record_dict,
             )
             return FilterResult(passed=True)
 
         # Apply rules based on source mode
         if source_assignment.rule_mode == "whitelist":
             # Whitelist mode: start with rejected, rules can allow
-            log_function("Applying whitelist rules to record", level="debug")
+            logger.debug("Applying whitelist rules to record")
             return self._apply_whitelist_rules(record_dict, applicable_rules)
         # Blacklist mode: start with allowed, rules can reject
-        log_function("Applying blacklist rules to record", level="debug")
+        logger.debug("Applying blacklist rules to record")
         return self._apply_blacklist_rules(record_dict, applicable_rules)
 
     def _apply_whitelist_rules(
         self, record_dict: dict, rules: list[IngestionRule]
     ) -> FilterResult:
         """Apply rules in whitelist mode (start rejected, rules allow)"""
-        log_function("Applying whitelist rules")
+        logger.info("Applying whitelist rules")
         if not rules:
             # No rules in whitelist mode means reject everything
             return FilterResult(
@@ -538,7 +560,7 @@ class IngestionRulesEngine:
                 if re.search(rule.regex, field_str):
                     return FilterResult(passed=True)  # Rule matched, allow record
             except re.error as e:
-                logger.error(f"Regex error in rule '{rule.name}': {e}")
+                logger.error("Regex error in rule '%s': %s", rule.name, e)
                 continue
 
         # No rules matched in whitelist mode
@@ -552,7 +574,7 @@ class IngestionRulesEngine:
         self, record_dict: dict, rules: list[IngestionRule]
     ) -> FilterResult:
         """Apply rules in blacklist mode (start allowed, rules reject)"""
-        log_function("Applying blacklist rules", level="debug")
+        logger.debug("Applying blacklist rules")
         if not rules:
             # No rules in blacklist mode means allow everything
             return FilterResult(passed=True)
@@ -572,7 +594,7 @@ class IngestionRulesEngine:
                         reason=f"Blacklist rule '{rule.name}' matched field '{rule.field}': {field_str}",
                     )
             except re.error as e:
-                logger.error(f"Regex error in rule '{rule.name}': {e}")
+                logger.error("Regex error in rule '%s': %s", rule.name, e)
                 continue
 
         # No blacklist rules matched, allow record
@@ -582,6 +604,9 @@ class IngestionRulesEngine:
         self, rejected_records: list[dict[str, Any]], table_name: str, source_name: str
     ) -> None:
         """Save rejected records to JSON file (atomic operation)"""
+        logger.debug(
+            "Saving %s rejected records to %s", len(rejected_records), table_name
+        )
         if not rejected_records:
             return
 
@@ -593,12 +618,12 @@ class IngestionRulesEngine:
             with open(filepath, "w", encoding="utf-8") as f:
                 json.dump(rejected_records, f, indent=2, default=str)
 
-            log_function(
-                f"Saved {len(rejected_records)} rejected records to {filepath}"
+            logger.info(
+                "Saved %s rejected records to %s", len(rejected_records), filepath
             )
 
-        except Exception as e:
-            logger.error(f"Error saving rejected records to {filepath}: {e}")
+        except Exception:
+            logger.exception("Error saving rejected records to %s", filepath)
 
 
 # Global rules engine instance
@@ -611,23 +636,30 @@ def apply_ingestion_rules(
     source_name: str,
 ) -> tuple[list[M3uChannel | EpgChannel | Program], list[dict[str, Any]]]:
     """Apply ingestion rules to a list of records and return filtered and rejected records"""
-    log_function(
-        f"Applying ingestion rules to {len(records)} {table_name} records from {source_name}"
+    logger.info(
+        "Applying ingestion rules to %s %s records from %s",
+        len(records),
+        table_name,
+        source_name,
     )
 
     # Type safety checks
     if not records:
-        log_function("No records to process")
+        logger.info("No records to process")
         return [], []
 
     # Log first record for debugging
     first_record = records[0]
-    log_function(
-        f"First record type: {type(first_record)}, hasattr __dict__: {hasattr(first_record, '__dict__')}, hasattr model_dump: {hasattr(first_record, 'model_dump')}, hasattr dict: {hasattr(first_record, 'dict')}"
+    logger.info(
+        "First record type: %s, hasattr __dict__: %s, hasattr model_dump: %s, hasattr dict: %s",
+        type(first_record),
+        hasattr(first_record, "__dict__"),
+        hasattr(first_record, "model_dump"),
+        hasattr(first_record, "dict"),
     )
 
     if hasattr(first_record, "model_dump"):
-        log_function(f"First record model_dump: {first_record.model_dump()}")
+        logger.info("First record model_dump: %s", first_record.model_dump())
 
     # Initialize rules engine
     rules_engine = IngestionRulesEngine()
@@ -638,8 +670,10 @@ def apply_ingestion_rules(
             records, table_name, source_name
         )
 
-        log_function(
-            f"Batch ingestion rules applied: {len(filtered_records)} records passed, {len(rejected_records)} records rejected"
+        logger.info(
+            "Batch ingestion rules applied: %s records passed, %s records rejected",
+            len(filtered_records),
+            len(rejected_records),
         )
 
         # Save rejected records if any
@@ -650,9 +684,9 @@ def apply_ingestion_rules(
 
         return filtered_records, rejected_records
 
-    except Exception as e:
-        logger.error(
-            f"Batch processing failed, falling back to single record processing: {e}"
+    except Exception:
+        logger.exception(
+            "Batch processing failed, falling back to single record processing"
         )
 
         # Fallback to single record processing
@@ -661,7 +695,9 @@ def apply_ingestion_rules(
 
         for i, record in enumerate(records):
             if not isinstance(record, (M3uChannel, EpgChannel, Program)):
-                logger.error(f"Record {i} has unexpected type {type(record)}: {record}")
+                logger.error(
+                    "Record %s has unexpected type %s: %s", i, type(record), record
+                )
                 continue
 
             # Apply rules to individual record
@@ -673,8 +709,8 @@ def apply_ingestion_rules(
                 # Convert record to dict for rejected records log
                 try:
                     record_dict = record.model_dump()
-                except Exception as e:
-                    logger.error(f"Failed to convert rejected record to dict: {e}")
+                except Exception:
+                    logger.exception("Failed to convert rejected record to dict")
                     continue
 
                 rejected_record = {
@@ -687,8 +723,10 @@ def apply_ingestion_rules(
                 }
                 rejected_records.append(rejected_record)
 
-        log_function(
-            f"Fallback ingestion rules applied: {len(filtered_records)} records passed, {len(rejected_records)} records rejected"
+        logger.info(
+            "Fallback ingestion rules applied: %s records passed, %s records rejected",
+            len(filtered_records),
+            len(rejected_records),
         )
 
         # Save rejected records if any
@@ -704,8 +742,11 @@ def save_rejected_records(
     rejected_records: list[dict[str, Any]], table_name: str, source_name: str
 ) -> None:
     """Save rejected records to JSON file (atomic operation)"""
-    log_function(
-        f"Saving rejected records to JSON file for {table_name} ({source_name})"
+    logger.info(
+        "Saving %s rejected records to JSON file for %s (%s)",
+        len(rejected_records),
+        table_name,
+        source_name,
     )
     if not rejected_records:
         return
@@ -718,10 +759,10 @@ def save_rejected_records(
         with open(filepath, "w", encoding="utf-8") as f:
             json.dump(rejected_records, f, indent=2, default=str)
 
-        log_function(f"Saved {len(rejected_records)} rejected records to {filepath}")
+        logger.info("Saved %s rejected records to %s", len(rejected_records), filepath)
 
-    except Exception as e:
-        logger.error(f"Error saving rejected records to {filepath}: {e}")
+    except Exception:
+        logger.exception("Error saving rejected records to %s", filepath)
 
 
 def validate_rules_config(rules_data: list[dict[str, Any]]) -> tuple[bool, list[str]]:
@@ -734,7 +775,7 @@ def validate_rules_config(rules_data: list[dict[str, Any]]) -> tuple[bool, list[
         Tuple of (is_valid, error_messages)
 
     """
-    log_function("Validating rules configuration")
+    logger.info("Validating rules configuration")
     errors = []
 
     if not isinstance(rules_data, list):
@@ -783,7 +824,7 @@ def validate_rules_config(rules_data: list[dict[str, Any]]) -> tuple[bool, list[
 
 def get_ingestion_rules_status() -> dict[str, Any]:
     """Get current status of ingestion rules system (atomic operation)"""
-    log_function("Getting rules status")
+    logger.info("Getting rules status")
     rules_engine.load_rules()
 
     status = {

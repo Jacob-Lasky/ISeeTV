@@ -2,10 +2,10 @@
 accessed across multiple modules.
 """
 
-import logging
 from typing import Literal
+from common.log_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # Global state for tracking download progress
 # This is the single source of truth for all download progress data
@@ -46,11 +46,11 @@ def cancel_task(task_id: str, task_type: Literal["download", "ingest"]) -> bool:
         # Update the task status to 'failed' with cancellation message
         if task_id in get_progress(task_type):
             get_progress(task_type)[task_id]["status"] = "failed"
-            get_progress(task_type)[task_id]["error_message"] = (
-                f"{task_type.title()} task cancelled by user"
-            )
+            get_progress(task_type)[task_id][
+                "error_message"
+            ] = f"{task_type.title()} task cancelled by user"
 
-        log_function(f"{task_type.title()} task {task_id} marked for cancellation")
+        logger.info("%s task %s marked for cancellation", task_type.title(), task_id)
         return True
 
     return False

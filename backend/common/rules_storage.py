@@ -10,10 +10,10 @@ from typing import Any
 
 from common.constants import DATA_PATH
 from common.file_utils import atomic_read_json, atomic_write_json, ensure_file_exists
-from common.utils import log_function
 from rules.ingestion_rules import IngestionRule, SourceRuleAssignment
+from common.log_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 # File paths for rules and assignments
 RULES_FILE = os.path.join(DATA_PATH, "rules.json")
@@ -33,7 +33,7 @@ def save_rules(rules: list[dict[str, Any]]) -> dict[str, Any]:
         Exception: If file operations fail
 
     """
-    log_function(f"Saving {len(rules)} rules to {RULES_FILE}")
+    logger.info("Saving %s rules to %s", len(rules), RULES_FILE)
 
     try:
         # Validate rules structure
@@ -43,11 +43,11 @@ def save_rules(rules: list[dict[str, Any]]) -> dict[str, Any]:
         # Atomically write rules to file
         atomic_write_json(RULES_FILE, rules)
 
-        log_function(f"Successfully saved {len(rules)} rules")
+        logger.info("Successfully saved %s rules", len(rules))
         return {"success": True, "message": f"Successfully saved {len(rules)} rules"}
 
     except Exception as e:
-        logger.error(f"Error saving rules: {e}")
+        logger.error("Error saving rules: %s", e)
         raise e
 
 
@@ -64,7 +64,7 @@ def save_assignments(assignments: list[dict[str, Any]]) -> dict[str, Any]:
         Exception: If file operations fail
 
     """
-    log_function(f"Saving {len(assignments)} assignments to {ASSIGNMENTS_FILE}")
+    logger.info("Saving %s assignments to %s", len(assignments), ASSIGNMENTS_FILE)
 
     try:
         # Filter out unknown fields before validation and saving
@@ -100,14 +100,14 @@ def save_assignments(assignments: list[dict[str, Any]]) -> dict[str, Any]:
         # Atomically write assignments to file
         atomic_write_json(ASSIGNMENTS_FILE, cleaned_assignments)
 
-        log_function(f"Successfully saved {len(assignments)} assignments")
+        logger.info("Successfully saved %s assignments", len(assignments))
         return {
             "success": True,
             "message": f"Successfully saved {len(assignments)} assignments",
         }
 
     except Exception as e:
-        logger.error(f"Error saving assignments: {e}")
+        logger.error("Error saving assignments: %s", e)
         raise e
 
 
@@ -118,13 +118,13 @@ def load_rules() -> list[dict[str, Any]]:
         List of rule dictionaries, empty list if file doesn't exist
 
     """
-    log_function(f"Loading rules from {RULES_FILE}")
+    logger.info("Loading rules from %s", RULES_FILE)
 
     # Ensure file exists with empty array default
     ensure_file_exists(RULES_FILE, [])
 
     rules = atomic_read_json(RULES_FILE, [])
-    log_function(f"Loaded {len(rules)} rules")
+    logger.info("Loaded %s rules", len(rules))
     return rules
 
 
@@ -135,11 +135,11 @@ def load_assignments() -> list[dict[str, Any]]:
         List of assignment dictionaries, empty list if file doesn't exist
 
     """
-    log_function(f"Loading assignments from {ASSIGNMENTS_FILE}")
+    logger.info("Loading assignments from %s", ASSIGNMENTS_FILE)
 
     # Ensure file exists with empty array default
     ensure_file_exists(ASSIGNMENTS_FILE, [])
 
     assignments = atomic_read_json(ASSIGNMENTS_FILE, [])
-    log_function(f"Loaded {len(assignments)} assignments")
+    logger.info("Loaded %s assignments", len(assignments))
     return assignments
