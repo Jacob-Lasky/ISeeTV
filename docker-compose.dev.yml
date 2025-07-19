@@ -43,8 +43,7 @@ services:
       - ./data:/app/data
     environment:
       - PYTHONUNBUFFERED=1
-      - UV_LINK_MODE=copy
-      - UV_VENV_CREATE=0
+      - UV_PROJECT_ENVIRONMENT=/tmp/.venv
     develop:
       watch:
         # Sync backend source code changes
