@@ -44,8 +44,8 @@ If you're thinking about contributing to this repo in any way, I want you to! I 
 
 ## Linting
 - While in the frontend directory, run:
-  - to check linting issues: `npm run format-and-lint` (or, if you want to containerize npm: `docker run --rm -v $(pwd):/app -w /app node:22-slim npm run format-and-lint`)
-    - to fix most linting issues: `npm run format-and-lint -- --fix` (or, if you want to containerize npm: `docker run --rm -v $(pwd):/app -w /app node:22-slim npm run format-and-lint -- --fix`)
+  - to check linting issues: `pnpm run format-and-lint` (or, if you want to containerize pnpm: `docker run --rm -v $(pwd):/app -w /app node:22-slim pnpm run format-and-lint`)
+    - to fix most linting issues: `pnpm run format-and-lint -- --fix` (or, if you want to containerize pnpm: `docker run --rm -v $(pwd):/app -w /app node:22-slim pnpm run format-and-lint -- --fix`)
 - While in the backend directory, run:
   - check for type errors: `uv run pyright .` (or, if you want to containerize uv: `docker run --rm -v $(pwd):/app -w /app python:3.11-slim uv run pyright .`)
     - to fix most type errors, you'll need to manually edit the files

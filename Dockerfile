@@ -2,17 +2,20 @@
 
 # Stage 1: Build the Vue.js frontend
 FROM node:22-slim AS frontend-builder
+
+RUN corepack enable && corepack prepare pnpm@10.13.1 --activate
+
 WORKDIR /app/frontend
 
 # Copy frontend files
 COPY frontend/package*.json ./
-RUN npm install
+RUN pnpm install
 
 # Copy the rest of the frontend code
 COPY frontend/ ./
 
 # build the frontend
-RUN npm run build
+RUN pnpm run build
 
 # Stage 2: Set up the Python backend
 FROM python:3.11-slim-bookworm AS backend-builder
