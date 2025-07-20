@@ -41,7 +41,7 @@ def _get_rules_filter_condition(
         # Show all rows, ignoring filter status
         return None
 
-    logger.info("Applying rules filtering for filter_view: %s", filter_view)
+    logger.debug("Applying rules filtering for filter_view: %s", filter_view)
 
     if filter_view == "normal":
         # Normal: Shows intended result based on rule mode
@@ -82,7 +82,7 @@ def get_filter_view_counts(
         Dictionary with counts for normal, inverse, and all views
 
     """
-    logger.info("Getting filter view counts")
+    logger.debug("Getting filter view counts")
     try:
         # Single query with conditional counting for all filter views
         base_query = """
@@ -201,7 +201,7 @@ def get_streams_query(
         Tuple of (stream_channels, total_count)
 
     """
-    logger.info(
+    logger.debug(
         "Executing streams query: page=%s, size=%s, source=%s, group=%s",
         page,
         page_size,

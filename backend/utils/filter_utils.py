@@ -169,7 +169,7 @@ def get_all_filter_values(
         Dictionary mapping column names to lists of filter values
 
     """
-    logger.info("Getting all filter values for %s", table_name)
+    logger.debug("Getting all filter values for %s", table_name)
     try:
         filter_values = (
             session.query(FilterValueTable)
