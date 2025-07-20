@@ -1292,9 +1292,6 @@ async function refreshAllFilesForSource(sourceName: string) {
         // Refresh each file for this source
         for (const fileRow of sourceFiles) {
             if (fileRow && fileRow.fileType && fileRow.sourceName) {
-                console.log(
-                    `Refreshing ${fileRow.fileType.toUpperCase()} for ${sourceName}`
-                )
                 try {
                     await refreshFile(fileRow)
                 } catch (fileError) {
