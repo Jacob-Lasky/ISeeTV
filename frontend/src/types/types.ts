@@ -53,6 +53,11 @@ export interface IngestProgress {
     completed_at?: string | null
 }
 
+export interface TotalRecords {
+    channels: number
+    programs: number
+}
+
 /**
  * File metadata for downloadable resources, matches source.json
  */
@@ -62,6 +67,7 @@ export interface FileMetadata {
     last_size_bytes?: number
     last_refresh_status?: "success" | "failed" | "cancelled"
     last_refresh_finished_timestamp?: string
+    total_records: TotalRecords
 }
 
 /**
@@ -76,7 +82,7 @@ export interface Source {
     source_timezone?: string | null
     enabled: boolean
     rule_mode?: "whitelist" | "blacklist" // Default to blacklist (start with all channels)
-    file_metadata?: Record<string, FileMetadata>
+    file_metadata: Record<string, FileMetadata>
 }
 
 /**
@@ -129,7 +135,7 @@ export interface SourceFileRow {
     fileLastRefreshFinishedTimestamp?: string | null
     fileSizeBytes?: number
     fileStatus?: "active" | "inactive" | "error"
-    fileMetadata?: FileMetadata // complete file metadata for status tracking
+    fileMetadata: FileMetadata // complete file metadata for status tracking
 
     isFirstFileForSource?: boolean // for rowspan logic
     rowSpanCount?: number // number of files for this source

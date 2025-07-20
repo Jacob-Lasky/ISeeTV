@@ -338,6 +338,7 @@ def get_table_filter_statistics(session: Session, table_name: str) -> dict[str, 
 def get_table_filter_statistics_by_source(
     session: Session, table_name: str, source: str
 ) -> dict[str, int]:
+    """Get filter statistics for a specific table and source."""
     logger.debug(
         "Getting filter statistics for table: %s and source: %s", table_name, source
     )

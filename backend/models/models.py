@@ -2,7 +2,7 @@ import datetime as dt
 import logging
 from typing import Any, Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 logger = logging.getLogger(__name__)
 
@@ -26,8 +26,8 @@ class DownloadAllTasksResponse(BaseModel):
 
 
 class TotalRecords(BaseModel):
-    channels: int | None = 0
-    programs: int | None = 0
+    channels: int = 0
+    programs: int = 0
 
 
 class FileMetadata(BaseModel):
@@ -39,7 +39,7 @@ class FileMetadata(BaseModel):
     last_refresh_status: Literal["success", "failed", "cancelled"] | None = None
     last_refresh_finished_timestamp: str | None = ""
     local_path: str | None = ""
-    total_records: TotalRecords | None = None
+    total_records: TotalRecords = Field(default_factory=lambda: TotalRecords(channels=0, programs=0))
 
 
 class GlobalSettings(BaseModel):
@@ -105,10 +105,14 @@ class Source(BaseModel):
         status: Literal["success", "failed", "cancelled"] = "success",
         set_start_timestamp: bool = False,
         local_path: str | None = None,
+        channels: int | None = None,
+        programs: int | None = None,
     ) -> None:
         """Update file metadata during or after download operation."""
         if file_type not in self.file_metadata:
-            self.file_metadata[file_type] = FileMetadata(url=url)
+            self.file_metadata[file_type] = FileMetadata(
+                url=url, total_records=TotalRecords(channels=0, programs=0)
+            )
 
         metadata = self.file_metadata[file_type]
         metadata.url = url
@@ -128,6 +132,15 @@ class Source(BaseModel):
 
         if local_path is not None:
             metadata.local_path = local_path
+
+        # Update total_records if provided
+        if channels is not None or programs is not None:
+            if metadata.total_records is None:
+                metadata.total_records = TotalRecords(channels=0, programs=0)
+            if channels is not None:
+                metadata.total_records.channels = channels
+            if programs is not None:
+                metadata.total_records.programs = programs
 
 
 class EpgChannel(BaseModel):

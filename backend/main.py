@@ -626,7 +626,7 @@ async def load_file_to_db(
                 channels = file_metadata.total_records.channels or 0
                 programs = file_metadata.total_records.programs or 0
                 total_records = channels + programs
-                total_steps = 5  # download, parse channels, load channels, parse programs, load programs
+            total_steps = 5  # download, parse channels, load channels, parse programs, load programs
 
         IngestTaskManager.create_ingest_task(
             task_id, file_type, source_name, total_records, total_steps
@@ -654,6 +654,77 @@ async def load_file_to_db(
         logger.exception(f"Error starting load task: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
+
+
+def update_source_total_records(
+    source_name: str, file_type: Literal["m3u", "epg"], session: SessionLocal
+) -> None:
+    """Update source total_records using simple row counts from database."""
+    logger.info(
+        "Updating total_records for source %s after %s parsing", source_name, file_type
+    )
+
+    try:
+        # Load current sources
+        sources_file = os.path.join(DATA_PATH, "sources.json")
+        with open(sources_file, encoding="utf-8") as f:
+            sources = [Source(**source) for source in json.load(f)]
+
+        # Find the source to update
+        source_to_update = None
+        for source in sources:
+            if source.name == source_name:
+                source_to_update = source
+                break
+
+        if source_to_update is None:
+            logger.error("Source '%s' not found for total_records update", source_name)
+            return
+
+        # Get row counts by source using direct queries
+        with SessionLocal() as session:
+            if file_type == "m3u":
+                channel_count = session.execute(
+                    text("SELECT COUNT(*) FROM m3u_channels WHERE source = :source"),
+                    {"source": source_name},
+                ).scalar()
+                program_count = 0  # M3U files don't have programs
+            elif file_type == "epg":
+                channel_count = session.execute(
+                    text("SELECT COUNT(*) FROM epg_channels WHERE source = :source"),
+                    {"source": source_name},
+                ).scalar()
+                program_count = session.execute(
+                    text("SELECT COUNT(*) FROM programs WHERE source = :source"),
+                    {"source": source_name},
+                ).scalar()
+
+        # Update using existing method
+        file_metadata = source_to_update.get_file_metadata(file_type)
+        if file_metadata:
+            source_to_update.update_file_metadata(
+                file_type=file_type,
+                url=file_metadata.url,
+                channels=channel_count,
+                programs=program_count,
+            )
+            logger.debug(
+                "Updated %s total_records: channels=%s, programs=%s",
+                file_type,
+                channel_count,
+                program_count,
+            )
+
+        # Save updated sources back to JSON
+        with open(sources_file, "w", encoding="utf-8") as f:
+            json.dump([source.model_dump() for source in sources], f, indent=4)
+
+        logger.debug("Successfully updated total_records for source %s", source_name)
+
+    except Exception as e:
+        logger.exception(
+            "Error updating total_records for source %s: %s", source_name, e
         )
 
 
@@ -690,11 +761,11 @@ async def background_load_task(
                 if result.status == "error":
                     logger.warning(f"Load error in task {task_id}: {result.message}")
 
+        # Precompute all filter values
         precompute_all_filter_values(session)
-        logger.info("Precomputed filter values for all tables after task %s", task_id)
 
-        # Add a small delay to ensure frontend can display progress bars
-        await asyncio.sleep(2)
+        # Update source total_records with actual parsed counts
+        update_source_total_records(source_name, file_type, session=session)
 
         # Complete the task
         TaskManager.complete_task(
@@ -847,7 +918,9 @@ async def get_table_filtered_counts(table_name: str, source: str) -> dict[str, A
             }
 
     except Exception as e:
-        logger.exception("Error getting filter statistics for table %s: %s", table_name, e)
+        logger.exception(
+            "Error getting filter statistics for table %s: %s", table_name, e
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
@@ -1668,8 +1741,12 @@ async def get_assignments() -> dict[str, Any]:
     status_code=status.HTTP_200_OK,
 )
 async def apply_assignment(
-    assignment_id: Annotated[str, Body(description="ID of the assignment to apply")] = ...,
-    table_name: Annotated[str, Body(description="Name of the table to apply assignment to")] = ...,
+    assignment_id: Annotated[
+        str, Body(description="ID of the assignment to apply")
+    ] = ...,
+    table_name: Annotated[
+        str, Body(description="Name of the table to apply assignment to")
+    ] = ...,
 ) -> dict[str, Any]:
     """Apply a specific assignment by ID to a table (new multi-assignment architecture)."""
     logger.info("Applying assignment")
@@ -1740,8 +1817,15 @@ async def apply_assignment(
     status_code=status.HTTP_200_OK,
 )
 async def unapply_assignment(
-    assignment_id: Annotated[str, Body(description="ID of the assignment to unapply")] = ...,
-    table_name: Annotated[str | None, Body(description="Optional: specific table to unapply from. If not provided, unapplies from all relevant tables.")] = None,
+    assignment_id: Annotated[
+        str, Body(description="ID of the assignment to unapply")
+    ] = ...,
+    table_name: Annotated[
+        str | None,
+        Body(
+            description="Optional: specific table to unapply from. If not provided, unapplies from all relevant tables."
+        ),
+    ] = None,
 ) -> dict[str, Any]:
     """Unapply a specific assignment by ID from relevant tables (new multi-assignment architecture)."""
     logger.info("Unapplying assignment")
@@ -1911,7 +1995,11 @@ async def validate_rules(config_data: dict[str, Any]) -> dict[str, Any]:
         # Check that assigned rules exist
         rule_names = {rule_data.get("name") for rule_data in rules_data}
         for assignment_data in assignments_data:
-            errors.extend(f"Source '{assignment_data.get('source_name')}' references non-existent rule '{rule_name}'" for rule_name in assignment_data.get("assigned_rules", []) if rule_name not in rule_names)
+            errors.extend(
+                f"Source '{assignment_data.get('source_name')}' references non-existent rule '{rule_name}'"
+                for rule_name in assignment_data.get("assigned_rules", [])
+                if rule_name not in rule_names
+            )
 
         is_valid = len(errors) == 0
         return {
@@ -2013,7 +2101,9 @@ async def get_rules_log_content(filename: str) -> dict[str, Any]:
     tags=["Rules"],
     summary="Apply rule assignments to database records",
 )
-async def apply_rule_assignments(request: Annotated[dict[str, Any], Body()] = ...) -> dict[str, Any]:
+async def apply_rule_assignments(
+    request: Annotated[dict[str, Any], Body()] = ...
+) -> dict[str, Any]:
     """Apply rule assignments to database records for specified table and source."""
     logger.info("Applying rule assignments to database records")
 
@@ -2075,7 +2165,9 @@ async def apply_rule_assignments(request: Annotated[dict[str, Any], Body()] = ..
     tags=["Rules"],
     summary="Apply a single rule to a specific source and table",
 )
-async def apply_single_rule(request: Annotated[dict[str, Any], Body()] = ...) -> dict[str, Any]:
+async def apply_single_rule(
+    request: Annotated[dict[str, Any], Body()] = ...
+) -> dict[str, Any]:
     """Apply a single rule to a specific table and source."""
     logger.info("Applying single rule to database records")
 
@@ -2149,7 +2241,9 @@ async def apply_single_rule(request: Annotated[dict[str, Any], Body()] = ...) ->
     tags=["Rules"],
     summary="Apply all rules to a specific source",
 )
-async def apply_rules_to_source(request: Annotated[dict[str, Any], Body()] = ...) -> dict[str, Any]:
+async def apply_rules_to_source(
+    request: Annotated[dict[str, Any], Body()] = ...
+) -> dict[str, Any]:
     """Apply all assigned rules to a specific source across all tables."""
     logger.info("Applying all rules to source")
 
@@ -2208,7 +2302,9 @@ async def apply_rules_to_source(request: Annotated[dict[str, Any], Body()] = ...
     tags=["Rules"],
     summary="Unapply (remove) rules from database records",
 )
-async def unapply_rules(request: Annotated[dict[str, Any], Body()] = ...) -> dict[str, Any]:
+async def unapply_rules(
+    request: Annotated[dict[str, Any], Body()] = ...
+) -> dict[str, Any]:
     """Unapply (remove) rules from database records for specified table and source."""
     logger.info("Unapplying rules from database records")
 
