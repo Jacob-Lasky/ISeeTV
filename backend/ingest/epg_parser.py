@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 		<display-name>CHANNEL DISPLAY NAME 2</display-name>
 		<icon src="https://channel-icon-url-2.png" />
 	</channel>
-		
+
 	<programme start="20250702070000 +0000" stop="20250702110000 +0000" start_timestamp="1751439600" stop_timestamp="1751454000" channel="CHANNEL ID 1" >
 		<title>CHANNEL DISPLAY NAME 1</title>
 		<desc>CHANNEL DISPLAY NAME 1</desc>
@@ -62,7 +62,7 @@ As we parse the above XML, we would see something like this:
     root[2].attrib["stop"] --> '20250702110000 +0000'
     root[2].attrib["start_timestamp"] --> '1751439600'
     root[2].attrib["stop_timestamp"] --> '1751454000'
-    
+
 """
 # Expected structure definitions - configuration
 EXPECTED_ROOT_TAGS = {"channel", "programme"}  # Only these tags allowed under <tv>
@@ -93,7 +93,7 @@ EXPECTED_PROGRAMME_CHILD_TAGS = {
 
 
 class ValidationResults:
-    def __init__(self):
+    def __init__(self) -> None:
         self.unexpected_root_tags = defaultdict(int)
         self.unexpected_root_attrs = set()
         self.unexpected_channel_tags = defaultdict(int)
@@ -101,8 +101,8 @@ class ValidationResults:
         self.unexpected_programme_tags = defaultdict(int)
         self.unexpected_programme_attrs = defaultdict(set)
 
-    def log_results(self, context: str = ""):
-        """Log all validation results in a structured format"""
+    def log_results(self, context: str = "") -> None:
+        """Log all validation results in a structured format."""
         prefix = f"[{context}] " if context else ""
 
         if self.unexpected_root_tags:
@@ -142,20 +142,20 @@ validation_results = ValidationResults()
 
 
 def validate_root_element(root_elem: _Element) -> None:
-    """Function to validate root <tv> element attributes"""
+    """Function to validate root <tv> element attributes."""
     logger.debug("Validating root element attributes")
-    for attr in root_elem.attrib.keys():
+    for attr in root_elem.attrib:
         if attr not in EXPECTED_ROOT_ATTRS:
             validation_results.unexpected_root_attrs.add(attr)
 
 
 def validate_channel_element(channel_elem: _Element) -> str:
-    """Function to validate channel element structure and return channel_id"""
+    """Function to validate channel element structure and return channel_id."""
     logger.debug("Validating channel element attributes")
     channel_id = channel_elem.attrib.get("id", "Unknown")
 
     # Validate channel attributes
-    for attr in channel_elem.attrib.keys():
+    for attr in channel_elem.attrib:
         if attr not in EXPECTED_CHANNEL_ATTRS:
             validation_results.unexpected_channel_attrs[channel_id].add(attr)
 
@@ -168,14 +168,14 @@ def validate_channel_element(channel_elem: _Element) -> str:
 
 
 def validate_programme_element(programme_elem: _Element) -> str:
-    """Function to validate programme element structure and return programme_id"""
+    """Function to validate programme element structure and return programme_id."""
     logger.debug("Validating programme element attributes")
     programme_id = programme_elem.attrib.get("program-id") or programme_elem.attrib.get(
         "channel", "Unknown"
     )
 
     # Validate programme attributes
-    for attr in programme_elem.attrib.keys():
+    for attr in programme_elem.attrib:
         if attr not in EXPECTED_PROGRAMME_ATTRS:
             validation_results.unexpected_programme_attrs[programme_id].add(attr)
 
@@ -331,7 +331,8 @@ def get_required_text(elem: _Element, tag: str, context: str = "") -> str:
     value = elem.findtext(tag)
     if not value or not value.strip():
         line = getattr(elem, "sourceline", "unknown")
-        raise ValueError(f"Missing required <{tag}> at line {line}. Context: {context}")
+        msg = f"Missing required <{tag}> at line {line}. Context: {context}"
+        raise ValueError(msg)
     return value.strip()
 
 
@@ -341,7 +342,8 @@ def get_required_attr(elem: _Element, attr: str, context: str = "") -> str:
     value = elem.attrib.get(attr)
     if not value or not value.strip():
         line = getattr(elem, "sourceline", "unknown")
+        msg = f"Missing required attribute '{attr}' at line {line}. Context: {context}"
         raise ValueError(
-            f"Missing required attribute '{attr}' at line {line}. Context: {context}"
+            msg
         )
     return value.strip()

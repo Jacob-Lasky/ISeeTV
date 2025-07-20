@@ -15,15 +15,15 @@ def create_task_id(
     source_name: str,
     file_type: Literal["m3u", "epg"],
     task_type: Literal["download", "ingest"],
-):
-    """Create a unique task ID for a source and file type"""
+) -> str:
+    """Create a unique task ID for a source and file type."""
     logger.debug("Creating task for %s, %s, %s", source_name, file_type, task_type)
     timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     return f"{task_type}_{file_type}_{source_name}_{timestamp}"
 
 
 def get_progress_response(task_id: str, task_type: Literal["download", "ingest"]):
-    """Get progress data for a specific task by ID and type"""
+    """Get progress data for a specific task by ID and type."""
     progress = get_progress(task_type)
     logger.debug("Getting progress for %s", task_id)
     if task_id not in progress:
@@ -35,7 +35,7 @@ def get_progress_response(task_id: str, task_type: Literal["download", "ingest"]
 
 
 def get_all_progress_response(task_type: Literal["download", "ingest"]):
-    """Get all progress data for a specific task type"""
+    """Get all progress data for a specific task type."""
     logger.debug("Getting all progress for %s", task_type)
     return get_progress(task_type)
 
@@ -43,7 +43,7 @@ def get_all_progress_response(task_type: Literal["download", "ingest"]):
 def format_download_progress_response(
     progress_data: dict[str, dict],
 ) -> dict[str, "DownloadProgress"]:
-    """Format raw progress data into DownloadProgress models"""
+    """Format raw progress data into DownloadProgress models."""
     logger.debug("Formatting download progress response for %s", progress_data)
     return {
         task_id: DownloadProgress(**progress)
@@ -52,7 +52,7 @@ def format_download_progress_response(
 
 
 def format_ingest_progress_response(progress_data: dict[str, dict]) -> dict[str, dict]:
-    """Format raw progress data for ingest endpoints (legacy format)"""
+    """Format raw progress data for ingest endpoints (legacy format)."""
     logger.debug("Formatting ingest progress response for %s", progress_data)
     return {"ingest": progress_data}
 

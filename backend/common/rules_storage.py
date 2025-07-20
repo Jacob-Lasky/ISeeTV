@@ -1,4 +1,4 @@
-"""Atomic rules and assignments storage utilities following atomic design principles
+"""Atomic rules and assignments storage utilities following atomic design principles.
 
 This module provides atomic functions for saving and loading ingestion rules
 and source rule assignments to separate JSON files.
@@ -46,8 +46,8 @@ def save_rules(rules: list[dict[str, Any]]) -> dict[str, Any]:
         return {"success": True, "message": f"Successfully saved {len(rules)} rules"}
 
     except Exception as e:
-        logger.error("Error saving rules: %s", e)
-        raise e
+        logger.exception("Error saving rules: %s", e)
+        raise
 
 
 def save_assignments(assignments: list[dict[str, Any]]) -> dict[str, Any]:
@@ -106,8 +106,8 @@ def save_assignments(assignments: list[dict[str, Any]]) -> dict[str, Any]:
         }
 
     except Exception as e:
-        logger.error("Error saving assignments: %s", e)
-        raise e
+        logger.exception("Error saving assignments: %s", e)
+        raise
 
 
 def load_rules() -> list[dict[str, Any]]:

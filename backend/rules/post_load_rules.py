@@ -1,4 +1,4 @@
-"""Post-Load Rules System - Apply rules after data is loaded into database
+"""Post-Load Rules System - Apply rules after data is loaded into database.
 
 This module provides a post-load rule system that applies user-defined filters
 to data after it has been loaded into the database. Records are marked with
@@ -29,15 +29,15 @@ logger = get_logger(__name__)
 
 
 class PostLoadRulesEngine:
-    """Engine for applying rules to database records after loading"""
+    """Engine for applying rules to database records after loading."""
 
-    def __init__(self):
-        """Initialize the post-load rules engine"""
+    def __init__(self) -> None:
+        """Initialize the post-load rules engine."""
         logger.debug("PostLoadRulesEngine initialized")
         self.ingestion_engine = IngestionRulesEngine()
 
     def apply_rules_to_table(self, table_name: str, source_name: str) -> dict[str, Any]:
-        """Apply rules to all records in a specific table for a source"""
+        """Apply rules to all records in a specific table for a source."""
         logger.debug(
             "Applying post-load rules to %s for source %s",
             table_name,
@@ -103,7 +103,7 @@ class PostLoadRulesEngine:
     def _load_records_from_db(
         self, table_name: str, source_name: str
     ) -> list[dict[str, Any]]:
-        """Load records from database for rule processing"""
+        """Load records from database for rule processing."""
         logger.debug("Loading records from %s for source %s", table_name, source_name)
         try:
             with SessionLocal() as session:
@@ -138,7 +138,7 @@ class PostLoadRulesEngine:
         source_assignment: SourceRuleAssignment,
         table_name: str,
     ) -> dict[str, Any]:
-        """Apply rules to records using vectorized operations"""
+        """Apply rules to records using vectorized operations."""
         logger.debug("Applying rules to records")
         try:
             # Create DataFrame for vectorized processing
@@ -177,7 +177,7 @@ class PostLoadRulesEngine:
                     if source_assignment.rule_mode == "blacklist":
                         # Blacklist: matching records are filtered
                         filtered_mask = matches & passed_mask
-                        passed_mask = passed_mask & ~matches
+                        passed_mask &= ~matches
 
                         # Set filter reason for blacklisted records (JSON array with assignment ID)
                         assignment_id = source_assignment.id
@@ -190,7 +190,7 @@ class PostLoadRulesEngine:
                     else:
                         # Whitelist: only matching records pass
                         filtered_mask = ~matches & passed_mask
-                        passed_mask = passed_mask & matches
+                        passed_mask &= matches
 
                         # Set filter reason for non-whitelisted records (JSON array with assignment ID)
                         assignment_id = source_assignment.id
@@ -213,14 +213,12 @@ class PostLoadRulesEngine:
             # Convert back to list of dictionaries
             updated_records = df.to_dict("records")
 
-            results = {
+            return {
                 "processed": len(records),
                 "filtered": int(filtered_count),  # Convert numpy.int64 to native int
                 "passed": int(passed_mask.sum()),  # Convert numpy.int64 to native int
                 "updated_records": updated_records,
             }
-
-            return results
 
         except Exception:
             logger.exception("Error in vectorized rule application")
@@ -234,7 +232,7 @@ class PostLoadRulesEngine:
     def _update_records_in_db(
         self, table_name: str, records: list[dict[str, Any]]
     ) -> None:
-        """Update records in database with filter reasons"""
+        """Update records in database with filter reasons."""
         logger.debug("Updating records in %s with filter reasons", table_name)
         try:
             with SessionLocal() as session:
@@ -270,7 +268,7 @@ class PostLoadRulesEngine:
             logger.exception("Error updating records in %s", table_name)
 
     def apply_rules_to_all_sources(self, table_name: str) -> dict[str, Any]:
-        """Apply rules to all sources in a table"""
+        """Apply rules to all sources in a table."""
         logger.info("Applying post-load rules to all sources in %s", table_name)
 
         # Get all unique sources from the table
@@ -292,15 +290,14 @@ class PostLoadRulesEngine:
         return total_results
 
     def _get_sources_from_table(self, table_name: str) -> list[str]:
-        """Get all unique sources from a table"""
+        """Get all unique sources from a table."""
         logger.debug("Getting sources from %s", table_name)
         try:
             with SessionLocal() as session:
                 result = session.execute(
                     text(f"SELECT DISTINCT source FROM {table_name}")
                 )
-                sources = [row[0] for row in result.fetchall()]
-                return sources
+                return [row[0] for row in result.fetchall()]
 
         except Exception:
             logger.exception("Error getting sources from %s", table_name)
@@ -309,7 +306,7 @@ class PostLoadRulesEngine:
     def apply_assignment_to_table(
         self, assignment_id: str, table_name: str, source_name: str
     ) -> dict[str, Any]:
-        """Apply a specific assignment to a table (new multi-assignment architecture)"""
+        """Apply a specific assignment to a table (new multi-assignment architecture)."""
         logger.info(
             "Applying assignment '%s' to %s for source %s",
             assignment_id,
@@ -390,7 +387,7 @@ class PostLoadRulesEngine:
                 rule_matches = field_series.str.match(rule.regex, na=False)
 
                 # For assignments, if ANY rule matches, the assignment matches
-                assignment_matches = assignment_matches | rule_matches
+                assignment_matches |= rule_matches
 
             except Exception:
                 logger.exception("Error applying rule '%s'", rule.name)
@@ -457,7 +454,7 @@ class PostLoadRulesEngine:
     def unapply_assignment_from_table(
         self, assignment_id: str, table_name: str, source_name: str
     ) -> dict[str, Any]:
-        """Unapply a specific assignment from a table (new multi-assignment architecture)"""
+        """Unapply a specific assignment from a table (new multi-assignment architecture)."""
         logger.info(
             "Unapplying assignment '%s' from %s for source %s",
             assignment_id,
@@ -547,7 +544,7 @@ class PostLoadRulesEngine:
     def apply_single_rule_to_source(
         self, rule_name: str, table_name: str, source_name: str
     ) -> dict[str, Any]:
-        """Apply a single rule to a specific table and source (atomic operation)"""
+        """Apply a single rule to a specific table and source (atomic operation)."""
         logger.info(
             "Applying single rule '%s' to %s for source %s",
             rule_name,
@@ -625,9 +622,9 @@ class PostLoadRulesEngine:
         return results
 
     def unapply_rules_from_source(
-        self, table_name: str, source_name: str, rule_names: list[str] = None
+        self, table_name: str, source_name: str, rule_names: list[str] | None = None
     ) -> dict[str, Any]:
-        """Unapply (remove) rules from a specific table and source (atomic operation)"""
+        """Unapply (remove) rules from a specific table and source (atomic operation)."""
         logger.info(
             "Unapplying rules from %s for source %s: %s",
             table_name,
@@ -703,9 +700,9 @@ class PostLoadRulesEngine:
             return {"processed": 0, "filtered": 0, "passed": 0}
 
     def apply_all_rules_to_source(
-        self, source_name: str, table_names: list[str] = None
+        self, source_name: str, table_names: list[str] | None = None
     ) -> dict[str, Any]:
-        """Apply all assigned rules to a specific source across all or specified tables"""
+        """Apply all assigned rules to a specific source across all or specified tables."""
         if not table_names:
             table_names = ["m3u_channels", "epg_channels", "programs"]
 
@@ -739,8 +736,8 @@ class PostLoadRulesEngine:
 post_load_engine = PostLoadRulesEngine()
 
 
-def apply_post_load_rules(table_name: str, source_name: str = None) -> dict[str, Any]:
-    """Apply post-load rules to a table (atomic operation)"""
+def apply_post_load_rules(table_name: str, source_name: str | None = None) -> dict[str, Any]:
+    """Apply post-load rules to a table (atomic operation)."""
     logger.debug("Applying post-load rules to %s", table_name)
     if source_name:
         return post_load_engine.apply_rules_to_table(table_name, source_name)

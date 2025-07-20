@@ -4,7 +4,7 @@ import os
 
 
 class ContextualLogger(logging.Logger):
-    def _add_context(self, msg):
+    def _add_context(self, msg) -> str:
         func_name = inspect.currentframe().f_back.f_back.f_code.co_name
         return f"[{func_name}]: {msg}"
 

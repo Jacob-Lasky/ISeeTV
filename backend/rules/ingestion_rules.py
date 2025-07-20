@@ -1,4 +1,4 @@
-"""Ingestion Rules System - Prefilter for parsed data before database loading
+"""Ingestion Rules System - Prefilter for parsed data before database loading.
 
 This module provides a plugin-based rule system that applies user-defined filters
 to parsed data after parsing (epg_parser.py, m3u_parser.py) but before database
@@ -38,7 +38,7 @@ RULES_CONFIG_FILE = os.path.join(DATA_PATH, "rules.json")
 
 @dataclass
 class IngestionRule:
-    """Atomic representation of a single ingestion rule pattern"""
+    """Atomic representation of a single ingestion rule pattern."""
 
     logger.debug("Creating ingestion rule")
 
@@ -52,26 +52,31 @@ class IngestionRule:
     not_: bool = False  # If True, inverts the regex match (NOT matching the pattern)
 
     def __post_init__(self):
-        """Validate rule configuration"""
+        """Validate rule configuration."""
         if not self.name or not self.name.strip():
-            raise ValueError("Rule name cannot be empty")
+            msg = "Rule name cannot be empty"
+            raise ValueError(msg)
         if not self.tables:
-            raise ValueError("Rule must specify at least one table")
+            msg = "Rule must specify at least one table"
+            raise ValueError(msg)
         if not self.field or not self.field.strip():
-            raise ValueError("Rule field cannot be empty")
+            msg = "Rule field cannot be empty"
+            raise ValueError(msg)
         if not self.regex or not self.regex.strip():
-            raise ValueError("Rule regex cannot be empty")
+            msg = "Rule regex cannot be empty"
+            raise ValueError(msg)
 
         # Validate regex pattern
         try:
             re.compile(self.regex)
         except re.error as e:
-            raise ValueError(f"Invalid regex pattern '{self.regex}': {e}")
+            msg = f"Invalid regex pattern '{self.regex}': {e}"
+            raise ValueError(msg)
 
 
 @dataclass
 class SourceRuleAssignment:
-    """Named assignment of rules to a source with unique identifier"""
+    """Named assignment of rules to a source with unique identifier."""
 
     logger.debug("Creating source rule assignment")
 
@@ -85,20 +90,24 @@ class SourceRuleAssignment:
     enabled: bool = True
 
     def __post_init__(self):
-        """Validate source rule assignment"""
+        """Validate source rule assignment."""
         if not self.id or not self.id.strip():
-            raise ValueError("Assignment ID cannot be empty")
+            msg = "Assignment ID cannot be empty"
+            raise ValueError(msg)
         if not self.assignment_name or not self.assignment_name.strip():
-            raise ValueError("Assignment name cannot be empty")
+            msg = "Assignment name cannot be empty"
+            raise ValueError(msg)
         if not self.source_name or not self.source_name.strip():
-            raise ValueError("Source name cannot be empty")
-        if self.rule_mode not in ["whitelist", "blacklist"]:
-            raise ValueError("Rule mode must be 'whitelist' or 'blacklist'")
+            msg = "Source name cannot be empty"
+            raise ValueError(msg)
+        if self.rule_mode not in {"whitelist", "blacklist"}:
+            msg = "Rule mode must be 'whitelist' or 'blacklist'"
+            raise ValueError(msg)
 
 
 @dataclass
 class FilterResult:
-    """Result of applying ingestion rules to a record"""
+    """Result of applying ingestion rules to a record."""
 
     logger.debug("Creating filter result")
 
@@ -108,12 +117,12 @@ class FilterResult:
 
 
 class IngestionRulesEngine:
-    """Engine for loading and applying source-based ingestion rules with caching"""
+    """Engine for loading and applying source-based ingestion rules with caching."""
 
     logger.debug("Creating ingestion rules engine")
 
-    def __init__(self, rules_file: str = None):
-        """Initialize the rules engine with optional rules file path"""
+    def __init__(self, rules_file: str | None = None) -> None:
+        """Initialize the rules engine with optional rules file path."""
         self.rules_file = rules_file or os.path.join(DATA_PATH, "rules.json")
         self.assignments_file = os.path.join(DATA_PATH, "assignments.json")
         self._rules_cache: list[IngestionRule] = []
@@ -122,7 +131,7 @@ class IngestionRulesEngine:
         self._compiled_patterns: dict[str, re.Pattern] = {}
 
     def _should_reload_rules(self) -> bool:
-        """Check if rules file has been modified since last load"""
+        """Check if rules file has been modified since last load."""
         logger.debug("Checking if rules file has been modified since last load")
         try:
             file_mtime = os.path.getmtime(self.rules_file)
@@ -131,7 +140,7 @@ class IngestionRulesEngine:
             return True
 
     def load_rules(self) -> tuple[list[IngestionRule], list[SourceRuleAssignment]]:
-        """Load rules and source assignments from separate configuration files with caching"""
+        """Load rules and source assignments from separate configuration files with caching."""
         # Define paths for separate files
         assignments_file = self.assignments_file
 
@@ -223,7 +232,7 @@ class IngestionRulesEngine:
                 )
 
             except json.JSONDecodeError as e:
-                logger.error("Invalid JSON in configuration files: %s", e)
+                logger.exception("Invalid JSON in configuration files: %s", e)
                 self._rules_cache = []
                 self._assignments_cache = []
                 self._cache_timestamp = time.time()
@@ -238,7 +247,7 @@ class IngestionRulesEngine:
     def get_applicable_rules(
         self, table_name: str, source_name: str
     ) -> list[IngestionRule]:
-        """Get rules that apply to a specific table and source (atomic operation)"""
+        """Get rules that apply to a specific table and source (atomic operation)."""
         logger.debug("Getting applicable rules for table and source")
         rules, _ = self.load_rules()
 
@@ -253,14 +262,9 @@ class IngestionRulesEngine:
             all_assigned_rule_names.update(assignment.assigned_rules)
 
         # Get applicable rules for this source and table
-        applicable_rules = []
-        for rule in rules:
-            if (
-                rule.enabled
+        applicable_rules = [rule for rule in rules if rule.enabled
                 and table_name in rule.tables
-                and rule.name in all_assigned_rule_names
-            ):
-                applicable_rules.append(rule)
+                and rule.name in all_assigned_rule_names]
 
         logger.debug(
             "Found %s applicable rules for %s/%s: %s",
@@ -272,7 +276,7 @@ class IngestionRulesEngine:
         return applicable_rules
 
     def get_source_assignments(self, source_name: str) -> list[SourceRuleAssignment]:
-        """Get all assignments for a specific source (supports multi-assignment architecture)"""
+        """Get all assignments for a specific source (supports multi-assignment architecture)."""
         logger.debug("Getting all assignments for source: %s", source_name)
         _, assignments = self.load_rules()
 
@@ -293,7 +297,7 @@ class IngestionRulesEngine:
         return source_assignments
 
     def get_assignment_by_id(self, assignment_id: str) -> SourceRuleAssignment | None:
-        """Get a specific assignment by its ID"""
+        """Get a specific assignment by its ID."""
         logger.debug("Getting assignment by ID: %s", assignment_id)
         _, assignments = self.load_rules()
 
@@ -304,13 +308,13 @@ class IngestionRulesEngine:
         return None
 
     def get_source_assignment(self, source_name: str) -> SourceRuleAssignment | None:
-        """Legacy method for backwards compatibility - returns first assignment for source"""
+        """Legacy method for backwards compatibility - returns first assignment for source."""
         logger.debug("Getting source assignment for source: %s", source_name)
         assignments = self.get_source_assignments(source_name)
         return assignments[0] if assignments else None
 
     def get_all_source_assignments(self) -> list[SourceRuleAssignment]:
-        """Get all enabled source assignments across all sources"""
+        """Get all enabled source assignments across all sources."""
         logger.debug("Getting all source assignments")
         _, assignments = self.load_rules()
 
@@ -333,7 +337,7 @@ class IngestionRulesEngine:
         table_name: str,
         source_name: str,
     ) -> tuple[list[M3uChannel | EpgChannel | Program], list[dict[str, Any]]]:
-        """Apply rules to a batch of records using vectorized operations for performance"""
+        """Apply rules to a batch of records using vectorized operations for performance."""
         if not records:
             return [], []
 
@@ -391,10 +395,10 @@ class IngestionRulesEngine:
                 if source_assignment.rule_mode == "blacklist":
                     # Blacklist: matching records are rejected
                     rejected_mask = matches & passed_mask
-                    passed_mask = passed_mask & ~matches
+                    passed_mask &= ~matches
                 else:
                     # Whitelist: only matching records are allowed
-                    passed_mask = passed_mask & matches
+                    passed_mask &= matches
                     rejected_mask = ~matches & passed_mask
 
                 # Collect rejected records
@@ -437,7 +441,7 @@ class IngestionRulesEngine:
         table_name: str,
         source_name: str,
     ) -> tuple[list[M3uChannel | EpgChannel | Program], list[dict[str, Any]]]:
-        """Fallback to single record processing if batch processing fails"""
+        """Fallback to single record processing if batch processing fails."""
         logger.warning("Falling back to single record processing")
         filtered_records = []
         rejected_records = []
@@ -466,7 +470,7 @@ class IngestionRulesEngine:
         table_name: str,
         source_name: str,
     ) -> FilterResult:
-        """Apply source-based rules to a single record (atomic operation)"""
+        """Apply source-based rules to a single record (atomic operation)."""
         logger.debug("Applying rules to record")
 
         # Type safety checks
@@ -538,7 +542,7 @@ class IngestionRulesEngine:
     def _apply_whitelist_rules(
         self, record_dict: dict, rules: list[IngestionRule]
     ) -> FilterResult:
-        """Apply rules in whitelist mode (start rejected, rules allow)"""
+        """Apply rules in whitelist mode (start rejected, rules allow)."""
         logger.info("Applying whitelist rules")
         if not rules:
             # No rules in whitelist mode means reject everything
@@ -559,7 +563,7 @@ class IngestionRulesEngine:
                 if re.search(rule.regex, field_str):
                     return FilterResult(passed=True)  # Rule matched, allow record
             except re.error as e:
-                logger.error("Regex error in rule '%s': %s", rule.name, e)
+                logger.exception("Regex error in rule '%s': %s", rule.name, e)
                 continue
 
         # No rules matched in whitelist mode
@@ -572,7 +576,7 @@ class IngestionRulesEngine:
     def _apply_blacklist_rules(
         self, record_dict: dict, rules: list[IngestionRule]
     ) -> FilterResult:
-        """Apply rules in blacklist mode (start allowed, rules reject)"""
+        """Apply rules in blacklist mode (start allowed, rules reject)."""
         logger.debug("Applying blacklist rules")
         if not rules:
             # No rules in blacklist mode means allow everything
@@ -593,7 +597,7 @@ class IngestionRulesEngine:
                         reason=f"Blacklist rule '{rule.name}' matched field '{rule.field}': {field_str}",
                     )
             except re.error as e:
-                logger.error("Regex error in rule '%s': %s", rule.name, e)
+                logger.exception("Regex error in rule '%s': %s", rule.name, e)
                 continue
 
         # No blacklist rules matched, allow record
@@ -602,7 +606,7 @@ class IngestionRulesEngine:
     def save_rejected_records(
         self, rejected_records: list[dict[str, Any]], table_name: str, source_name: str
     ) -> None:
-        """Save rejected records to JSON file (atomic operation)"""
+        """Save rejected records to JSON file (atomic operation)."""
         logger.debug(
             "Saving %s rejected records to %s", len(rejected_records), table_name
         )
@@ -634,7 +638,7 @@ def apply_ingestion_rules(
     table_name: str,
     source_name: str,
 ) -> tuple[list[M3uChannel | EpgChannel | Program], list[dict[str, Any]]]:
-    """Apply ingestion rules to a list of records and return filtered and rejected records"""
+    """Apply ingestion rules to a list of records and return filtered and rejected records."""
     logger.info(
         "Applying ingestion rules to %s %s records from %s",
         len(records),
@@ -694,7 +698,7 @@ def apply_ingestion_rules(
 
         for i, record in enumerate(records):
             if not isinstance(record, (M3uChannel, EpgChannel, Program)):
-                logger.error(
+                logger.exception(
                     "Record %s has unexpected type %s: %s", i, type(record), record
                 )
                 continue
@@ -740,7 +744,7 @@ def apply_ingestion_rules(
 def save_rejected_records(
     rejected_records: list[dict[str, Any]], table_name: str, source_name: str
 ) -> None:
-    """Save rejected records to JSON file (atomic operation)"""
+    """Save rejected records to JSON file (atomic operation)."""
     logger.info(
         "Saving %s rejected records to JSON file for %s (%s)",
         len(rejected_records),
@@ -765,7 +769,7 @@ def save_rejected_records(
 
 
 def validate_rules_config(rules_data: list[dict[str, Any]]) -> tuple[bool, list[str]]:
-    """Validate rules configuration data (atomic operation)
+    """Validate rules configuration data (atomic operation).
 
     Args:
         rules_data: List of rule dictionaries to validate
@@ -789,20 +793,14 @@ def validate_rules_config(rules_data: list[dict[str, Any]]) -> tuple[bool, list[
 
         # Required fields
         required_fields = ["name", "tables", "field", "regex"]
-        for field in required_fields:
-            if field not in rule_data:
-                errors.append(f"Rule {i}: Missing required field '{field}'")
+        errors.extend(f"Rule {i}: Missing required field '{field}'" for field in required_fields if field not in rule_data)
 
         # Validate tables
         if "tables" in rule_data:
             if not isinstance(rule_data["tables"], list):
                 errors.append(f"Rule {i}: 'tables' must be a list")
             else:
-                for table in rule_data["tables"]:
-                    if table not in valid_tables:
-                        errors.append(
-                            f"Rule {i}: Invalid table '{table}'. Valid tables: {valid_tables}"
-                        )
+                errors.extend(f"Rule {i}: Invalid table '{table}'. Valid tables: {valid_tables}" for table in rule_data["tables"] if table not in valid_tables)
 
         # Validate regex
         if "regex" in rule_data:
@@ -814,15 +812,13 @@ def validate_rules_config(rules_data: list[dict[str, Any]]) -> tuple[bool, list[
                 )
 
         # Validate boolean fields
-        for bool_field in ["is_whitelist", "enabled"]:
-            if bool_field in rule_data and not isinstance(rule_data[bool_field], bool):
-                errors.append(f"Rule {i}: '{bool_field}' must be a boolean")
+        errors.extend(f"Rule {i}: '{bool_field}' must be a boolean" for bool_field in ["is_whitelist", "enabled"] if bool_field in rule_data and not isinstance(rule_data[bool_field], bool))
 
     return len(errors) == 0, errors
 
 
 def get_ingestion_rules_status() -> dict[str, Any]:
-    """Get current status of ingestion rules system (atomic operation)"""
+    """Get current status of ingestion rules system (atomic operation)."""
     logger.info("Getting rules status")
     rules_engine.load_rules()
 

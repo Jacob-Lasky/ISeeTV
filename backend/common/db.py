@@ -14,8 +14,8 @@ SessionLocal = sessionmaker(bind=engine)
 Base = declarative_base()
 
 
-def init_db():
-    """Initialize database and create all tables"""
+def init_db() -> None:
+    """Initialize database and create all tables."""
     logger.info("Initializing database...")
 
     # Import table models to ensure they're registered with Base

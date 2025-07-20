@@ -25,7 +25,7 @@ async def download_file_with_progress(
     item_name: str,
     fallback_size: int | None = None,
 ) -> tuple[bool, int, Literal["success", "failed", "cancelled"]]:
-    """Download a single file with real-time progress tracking by bytes"""
+    """Download a single file with real-time progress tracking by bytes."""
     logger.debug("Downloading %s from %s: %s", item_name, url, task_id)
     try:
         DownloadTaskManager.update_download_progress(
@@ -108,7 +108,7 @@ async def orchestrate_file_download_from_source(
     download_dir: str,
     task_id: str | None = None,
 ) -> None:
-    """Download function for any file type with optional progress tracking"""
+    """Download function for any file type with optional progress tracking."""
     logger.debug(
         "Orchestrating download for %s %s: %s", source_name, download_type, task_id
     )
@@ -117,7 +117,7 @@ async def orchestrate_file_download_from_source(
     elif download_type == "epg":
         extension = "xml"
 
-    with open(sources_file) as f:
+    with open(sources_file, encoding="utf-8") as f:
         sources = [Source(**source) for source in json.load(f)]
 
     if source_name not in [source.name for source in sources]:
@@ -155,7 +155,7 @@ async def orchestrate_file_download_from_source(
                     )
 
                     # Use progress tracking for background tasks
-                    success, size, download_status = await download_file_with_progress(
+                    _success, size, download_status = await download_file_with_progress(
                         url, filepath, task_id, source_name, fallback_size
                     )
                     # Update source metadata with actual downloaded size and status
@@ -168,7 +168,7 @@ async def orchestrate_file_download_from_source(
                     )
 
                     # Save updated sources back to file
-                    with open(sources_file, "w") as f:
+                    with open(sources_file, "w", encoding="utf-8") as f:
                         json.dump([s.dict() for s in sources], f, indent=2)
                 else:
                     # Simple download for direct API calls
@@ -176,7 +176,7 @@ async def orchestrate_file_download_from_source(
                     async with httpx.AsyncClient() as client:
                         response = await client.get(url)
                         response.raise_for_status()
-                        with open(filepath, "w") as f:
+                        with open(filepath, "w", encoding="utf-8") as f:
                             f.write(response.text)
             break
 
@@ -188,7 +188,7 @@ async def background_download_task(
     sources_file: str,
     download_dir: str,
 ) -> None:
-    """Background coroutine for downloading multiple files"""
+    """Background coroutine for downloading multiple files."""
     logger.info("Background download task %s", task_id)
     try:
         DownloadTaskManager.update_download_progress(task_id, status="downloading")
@@ -231,7 +231,7 @@ async def background_download_task(
                 return
 
         # Update sources file with refresh times
-        with open(sources_file, "w") as f:
+        with open(sources_file, "w", encoding="utf-8") as f:
             json.dump([source.dict() for source in sources], f, indent=2)
 
         # Mark as completed
@@ -252,7 +252,7 @@ async def background_download_task(
 
 
 async def validate_url(url: str) -> bool:
-    """Validate that the URL is accessible"""
+    """Validate that the URL is accessible."""
     logger.debug("Validating URL %s", url)
     try:
         async with httpx.AsyncClient() as client:
@@ -278,7 +278,7 @@ async def background_single_download_task(
     sources_file: str,
     download_dir: str,
 ) -> None:
-    """Background coroutine for downloading a single source with progress tracking"""
+    """Background coroutine for downloading a single source with progress tracking."""
     logger.debug("Background single download task %s", task_id)
     try:
         DownloadTaskManager.update_download_progress(

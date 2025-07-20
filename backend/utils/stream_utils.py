@@ -85,20 +85,20 @@ def get_filter_view_counts(
     try:
         # Single query with conditional counting for all filter views
         base_query = """
-            SELECT 
+            SELECT
                 COUNT(CASE WHEN m.filter_reasons = '[]' THEN 1 END) as normal_count,
                 COUNT(CASE WHEN m.filter_reasons != '[]' THEN 1 END) as inverse_count,
                 COUNT(*) as all_count
             FROM m3u_channels m
             LEFT JOIN epg_channels e ON m.source = e.source AND m.tvg_id = e.channel_id
             LEFT JOIN (
-                SELECT 
+                SELECT
                     source,
                     channel_id,
                     COUNT(*) as program_count,
                     MIN(CASE WHEN start_time > datetime('now') THEN start_time END) as next_program_start,
                     MIN(CASE WHEN start_time > datetime('now') THEN title END) as next_program_title
-                FROM programs 
+                FROM programs
                 GROUP BY source, channel_id
             ) p ON m.source = p.source AND m.tvg_id = p.channel_id
         """
@@ -124,7 +124,7 @@ def get_filter_view_counts(
         # Apply column filters
         if column_filters:
             for column, value in column_filters.items():
-                if value and column in ["name", "tvg_id", "group", "source"]:
+                if value and column in {"name", "tvg_id", "group", "source"}:
                     if column == "name":
                         where_conditions.append("m.name LIKE :name_filter")
                         params["name_filter"] = f"%{value}%"
@@ -213,7 +213,7 @@ def get_streams_query(
         # Build the base query with LEFT JOINs
         # M3U channels as primary table, EPG channels and programs as supplementary
         base_query = """
-        SELECT 
+        SELECT
             m.id as m3u_id,
             m.source,
             m.tvg_id,
@@ -234,7 +234,7 @@ def get_streams_query(
         FROM m3u_channels m
         LEFT JOIN epg_channels e ON m.source = e.source AND m.tvg_id = e.channel_id
         LEFT JOIN (
-            SELECT 
+            SELECT
                 source,
                 channel_id,
                 COUNT(*) as program_count,
@@ -260,9 +260,9 @@ def get_streams_query(
         if global_filter:
             where_conditions.append(
                 """
-                (m.name LIKE :global_filter 
-                OR m.tvg_id LIKE :global_filter 
-                OR e.display_name LIKE :global_filter 
+                (m.name LIKE :global_filter
+                OR m.tvg_id LIKE :global_filter
+                OR e.display_name LIKE :global_filter
                 OR m.`group` LIKE :global_filter)
             """
             )
@@ -312,7 +312,7 @@ def get_streams_query(
         ]
         if sort_field not in valid_sort_fields:
             sort_field = "name"
-        if sort_order.lower() not in ["asc", "desc"]:
+        if sort_order.lower() not in {"asc", "desc"}:
             sort_order = "asc"
 
         # Map sort fields to actual column names
@@ -429,7 +429,7 @@ def get_stream_programs_query(
     try:
         # Build the base query with JOINs to get channel context
         base_query = """
-        SELECT 
+        SELECT
             p.id as program_id,
             p.source,
             p.program_id as program_uid,
@@ -460,9 +460,9 @@ def get_stream_programs_query(
         if global_filter:
             where_conditions.append(
                 """
-                (p.title LIKE :global_filter 
-                OR p.description LIKE :global_filter 
-                OR m.name LIKE :global_filter 
+                (p.title LIKE :global_filter
+                OR p.description LIKE :global_filter
+                OR m.name LIKE :global_filter
                 OR e.display_name LIKE :global_filter)
             """
             )
@@ -494,7 +494,7 @@ def get_stream_programs_query(
         ]
         if sort_field not in valid_sort_fields:
             sort_field = "start_time"
-        if sort_order.lower() not in ["asc", "desc"]:
+        if sort_order.lower() not in {"asc", "desc"}:
             sort_order = "asc"
 
         base_query += f" ORDER BY p.{sort_field} {sort_order.upper()}"

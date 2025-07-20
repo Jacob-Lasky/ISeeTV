@@ -38,7 +38,7 @@ class RefreshScheduler:
         download_callback: Callable[[str, Literal["m3u", "epg"]], Any],
         ingest_callback: Callable[[str, Literal["m3u", "epg"]], Any],
         sources_file: str = os.path.join(DATA_PATH, "sources.json"),
-    ):
+    ) -> None:
         """Initialize the refresh scheduler.
 
         Args:
@@ -78,7 +78,7 @@ class RefreshScheduler:
         """
         logger.info("Loading sources from %s", self.sources_file)
         try:
-            with open(self.sources_file) as f:
+            with open(self.sources_file, encoding="utf-8") as f:
                 sources_data = json.load(f)
             return [Source(**source) for source in sources_data]
         except (FileNotFoundError, json.JSONDecodeError, ValueError):
@@ -163,7 +163,7 @@ class RefreshScheduler:
             trigger = self._create_cron_trigger(source)
 
             # Schedule the job
-            job = self.scheduler.add_job(
+            self.scheduler.add_job(
                 func=self._refresh_file_job,
                 trigger=trigger,
                 args=[source.name, file_type],
@@ -241,7 +241,7 @@ class RefreshScheduler:
 
         """
         logger.debug("Creating cron trigger for %s", source.name)
-        hour, minute = map(int, source.refresh_time.split(":"))
+        _hour, minute = map(int, source.refresh_time.split(":"))
         tz = (
             ZoneInfo(source.source_timezone)
             if source.source_timezone
@@ -258,9 +258,7 @@ class RefreshScheduler:
             hour_expr = "*"
         elif 24 % source.refresh_every_hours == 0:
             # Evenly divisible intervals (2, 3, 4, 6, 8, 12 hours)
-            hour_values = []
-            for h in range(0, 24, source.refresh_every_hours):
-                hour_values.append(str(h))
+            hour_values = [str(h) for h in range(0, 24, source.refresh_every_hours)]
             hour_expr = ",".join(hour_values)
         else:
             # Non-evenly divisible intervals, use IntervalTrigger
@@ -336,19 +334,14 @@ class RefreshScheduler:
 
         """
         logger.info("Getting scheduled jobs")
-        jobs = []
-        for job in self.scheduler.get_jobs():
-            jobs.append(
-                {
+        return [{
                     "id": job.id,
                     "name": job.name,
                     "next_run_time": (
                         job.next_run_time.isoformat() if job.next_run_time else None
                     ),
                     "trigger": str(job.trigger),
-                }
-            )
-        return jobs
+                } for job in self.scheduler.get_jobs()]
 
     def _on_job_executed(self, event: JobExecutionEvent) -> None:
         """Handle successful job execution."""
@@ -379,10 +372,12 @@ def parse_refresh_time(refresh_time: str) -> tuple[int, int]:
     try:
         hour, minute = map(int, refresh_time.split(":"))
         if not (0 <= hour <= 23) or not (0 <= minute <= 59):
-            raise ValueError("Invalid time values")
+            msg = "Invalid time values"
+            raise ValueError(msg)
         return hour, minute
     except (ValueError, AttributeError) as e:
-        raise ValueError(f"Invalid refresh_time format '{refresh_time}': {e}")
+        msg = f"Invalid refresh_time format '{refresh_time}': {e}"
+        raise ValueError(msg)
 
 
 def calculate_next_occurrence(

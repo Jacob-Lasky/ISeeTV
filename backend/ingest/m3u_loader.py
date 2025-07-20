@@ -19,22 +19,22 @@ logger = get_logger(__name__)
 
 
 class LoadResult:
-    """result container for load operations"""
+    """result container for load operations."""
 
     def __init__(
         self, record_type: str, record_id: str, status: str, message: str = ""
-    ):
+    ) -> None:
         self.record_type = record_type
         self.record_id = record_id
         self.status = status  # 'inserted', 'updated', 'skipped', 'error'
         self.message = message
 
-    def __str__(self):
+    def __str__(self) -> str:
         return f"{self.record_type}[{self.record_id}]: {self.status} - {self.message}"
 
 
 def _upsert_m3u_channel(session: Session, channel: M3uChannel) -> LoadResult:
-    """Function to upsert a single M3U channel"""
+    """Function to upsert a single M3U channel."""
     logger.debug("Upserting M3U channel: %s", channel)
     try:
         stmt = insert(M3uChannelTable).values(
@@ -85,7 +85,7 @@ def _upsert_m3u_channel(session: Session, channel: M3uChannel) -> LoadResult:
 async def _bulk_upsert_m3u_channels(
     session: Session, channels: list[M3uChannel]
 ) -> list[LoadResult]:
-    """Bulk upsert M3U channels using efficient batch operations"""
+    """Bulk upsert M3U channels using efficient batch operations."""
     logger.debug("Bulk upserting %s M3U channels", len(channels))
     if not channels:
         return []
@@ -160,7 +160,7 @@ async def load_m3u_channels_async(
     task_id: str | None = None,
     batch_size: int = 1000,
 ) -> AsyncGenerator[LoadResult, None]:
-    """Async generator that loads M3U channels using bulk operations for improved performance"""
+    """Async generator that loads M3U channels using bulk operations for improved performance."""
     logger.info(
         "Starting async M3U channel load from %s for source %s", file_path, source_name
     )
@@ -220,7 +220,7 @@ async def load_m3u_channels_async(
 async def load_m3u_file_async(
     session: Session, file_path: str, source_name: str, task_id: str | None = None
 ) -> AsyncGenerator[LoadResult, None]:
-    """Main async function to load complete M3U file"""
+    """Main async function to load complete M3U file."""
     logger.debug("Starting complete M3U file load: %s for %s", file_path, source_name)
 
     # Load all M3U channels

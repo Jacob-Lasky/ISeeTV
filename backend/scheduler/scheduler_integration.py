@@ -29,7 +29,7 @@ class SchedulerManager:
     - Scalable: handles unlimited sources efficiently
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.scheduler: RefreshScheduler = None
         self._is_running = False
         logger.debug("SchedulerManager initialized")
@@ -53,7 +53,8 @@ class SchedulerManager:
     def start(self) -> None:
         """Start the scheduler."""
         if not self.scheduler:
-            raise RuntimeError("Scheduler not initialized")
+            msg = "Scheduler not initialized"
+            raise RuntimeError(msg)
 
         if self._is_running:
             logger.warning("Scheduler already running")
@@ -193,7 +194,7 @@ async def download_callback_wrapper(source_name: str, file_type: str) -> None:
         logger.info("Scheduler download completed: %s %s", source_name, file_type)
 
     except Exception as e:
-        logger.error(
+        logger.exception(
             "Scheduler download failed for %s %s: %s", source_name, file_type, e
         )
         raise
@@ -215,7 +216,7 @@ async def ingest_callback_wrapper(source_name: str, file_type: str) -> None:
     try:
         # Load sources configuration
         sources_file = os.path.join(DATA_PATH, "sources.json")
-        with open(sources_file) as f:
+        with open(sources_file, encoding="utf-8") as f:
             sources = [Source(**source) for source in json.load(f)]
 
         # Find the source
@@ -223,19 +224,22 @@ async def ingest_callback_wrapper(source_name: str, file_type: str) -> None:
             (source for source in sources if source.name == source_name), None
         )
         if not source:
-            raise ValueError(f"Source '{source_name}' not found")
+            msg = f"Source '{source_name}' not found"
+            raise ValueError(msg)
 
         # Get file metadata
         file_metadata = source.get_file_metadata(file_type)
         if not file_metadata or not file_metadata.local_path:
+            msg = f"No {file_type.upper()} file defined for source '{source_name}'"
             raise ValueError(
-                f"No {file_type.upper()} file defined for source '{source_name}'"
+                msg
             )
 
         file_path = file_metadata.local_path
 
         if not os.path.exists(file_path):
-            raise ValueError(f"File '{file_path}' not found for source '{source_name}'")
+            msg = f"File '{file_path}' not found for source '{source_name}'"
+            raise ValueError(msg)
 
         # Create task ID and initialize task
         task_id = create_task_id(source_name, file_type, "ingest")

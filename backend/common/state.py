@@ -19,15 +19,16 @@ cancelled_tasks: set = set()
 
 
 def get_progress(task_type: Literal["download", "ingest"]) -> dict[str, dict]:
-    """Get the global download progress dictionary"""
+    """Get the global download progress dictionary."""
     if task_type == "download":
         return download_progress
     if task_type == "ingest":
         return ingest_progress
+    return None
 
 
 def clear_progress(task_type: Literal["download", "ingest"]) -> None:
-    """Clear all download progress (useful for testing)"""
+    """Clear all download progress (useful for testing)."""
     if task_type == "download":
         global download_progress
         download_progress.clear()
@@ -37,7 +38,7 @@ def clear_progress(task_type: Literal["download", "ingest"]) -> None:
 
 
 def cancel_task(task_id: str, task_type: Literal["download", "ingest"]) -> bool:
-    """Cancel a download task by adding it to the cancelled tasks set"""
+    """Cancel a download task by adding it to the cancelled tasks set."""
     global cancelled_tasks
 
     # Check if task exists in progress
@@ -58,11 +59,11 @@ def cancel_task(task_id: str, task_type: Literal["download", "ingest"]) -> bool:
 
 
 def is_task_cancelled(task_id: str) -> bool:
-    """Check if a task has been cancelled"""
+    """Check if a task has been cancelled."""
     return task_id in cancelled_tasks
 
 
 def remove_cancelled_task(task_id: str) -> None:
-    """Remove a task from the cancelled tasks set (cleanup)"""
+    """Remove a task from the cancelled tasks set (cleanup)."""
     global cancelled_tasks
     cancelled_tasks.discard(task_id)

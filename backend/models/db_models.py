@@ -9,7 +9,7 @@ from common.db import Base
 
 
 class EpgChannelTable(Base):
-    """SQLAlchemy table model for EPG channels"""
+    """SQLAlchemy table model for EPG channels."""
 
     __tablename__ = "epg_channels"
 
@@ -32,7 +32,7 @@ class EpgChannelTable(Base):
 
 
 class M3uChannelTable(Base):
-    """SQLAlchemy table model for M3U channels"""
+    """SQLAlchemy table model for M3U channels."""
 
     __tablename__ = "m3u_channels"
 
@@ -59,7 +59,7 @@ class M3uChannelTable(Base):
 
 
 class ProgramTable(Base):
-    """SQLAlchemy table model for EPG programs"""
+    """SQLAlchemy table model for EPG programs."""
 
     __tablename__ = "programs"
 
@@ -87,7 +87,7 @@ class ProgramTable(Base):
 
 
 class FilterValueTable(Base):
-    """SQLAlchemy table model for precomputed filter values"""
+    """SQLAlchemy table model for precomputed filter values."""
 
     __tablename__ = "filter_values"
 

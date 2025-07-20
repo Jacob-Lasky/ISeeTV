@@ -37,7 +37,7 @@ async def refresh_job_callback_wrapper(
     try:
         # Load sources configuration
         sources_file = os.path.join(DATA_PATH, "sources.json")
-        with open(sources_file) as f:
+        with open(sources_file, encoding="utf-8") as f:
             sources = [Source(**source) for source in json.load(f)]
 
         # Find the source
@@ -45,13 +45,15 @@ async def refresh_job_callback_wrapper(
             (source for source in sources if source.name == source_name), None
         )
         if not source:
-            raise ValueError(f"Source '{source_name}' not found")
+            msg = f"Source '{source_name}' not found"
+            raise ValueError(msg)
 
         # Get file metadata
         file_metadata = source.get_file_metadata(file_type)
         if not file_metadata or not file_metadata.url:
+            msg = f"No {file_type.upper()} URL defined for source '{source_name}'"
             raise ValueError(
-                f"No {file_type.upper()} URL defined for source '{source_name}'"
+                msg
             )
 
         # Create task IDs for both download and ingest
@@ -140,26 +142,29 @@ async def _execute_refresh_job(
         logger.info("Download completed for %s %s", source_name, file_type)
 
         # Step 2: Load sources to get file path
-        with open(sources_file) as f:
+        with open(sources_file, encoding="utf-8") as f:
             sources = [Source(**source) for source in json.load(f)]
 
         source = next(
             (source for source in sources if source.name == source_name), None
         )
         if not source:
-            raise ValueError(f"Source '{source_name}' not found")
+            msg = f"Source '{source_name}' not found"
+            raise ValueError(msg)
 
         file_metadata = source.get_file_metadata(file_type)
         if not file_metadata or not file_metadata.local_path:
+            msg = f"No {file_type.upper()} file path found for source '{source_name}'"
             raise ValueError(
-                f"No {file_type.upper()} file path found for source '{source_name}'"
+                msg
             )
 
         file_path = file_metadata.local_path
 
         if not os.path.exists(file_path):
+            msg = f"Downloaded file '{file_path}' not found for source '{source_name}'"
             raise ValueError(
-                f"Downloaded file '{file_path}' not found for source '{source_name}'"
+                msg
             )
 
         # Step 3: Ingest the file

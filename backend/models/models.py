@@ -12,14 +12,14 @@ class Message(BaseModel):
 
 
 class DownloadTaskResponse(BaseModel):
-    """Response model for download operations that includes task ID for progress tracking"""
+    """Response model for download operations that includes task ID for progress tracking."""
 
     message: str
     task_id: str
 
 
 class DownloadAllTasksResponse(BaseModel):
-    """Response model for download all operations that includes multiple task IDs"""
+    """Response model for download all operations that includes multiple task IDs."""
 
     message: str
     task_ids: list[str]
@@ -31,7 +31,7 @@ class TotalRecords(BaseModel):
 
 
 class FileMetadata(BaseModel):
-    """file metadata for downloadable resources"""
+    """file metadata for downloadable resources."""
 
     url: str
     last_refresh_started_timestamp: str | None = ""
@@ -77,7 +77,7 @@ class IngestProgress(BaseModel):
 
 
 class Source(BaseModel):
-    """Source model with file metadata for scalable download tracking"""
+    """Source model with file metadata for scalable download tracking."""
 
     name: str
     number_of_connections: int | None
@@ -94,7 +94,7 @@ class Source(BaseModel):
     def get_file_metadata(
         self, file_type: Literal["m3u", "epg"]
     ) -> FileMetadata | None:
-        """Get file metadata for a specific file type"""
+        """Get file metadata for a specific file type."""
         return self.file_metadata.get(file_type)
 
     def update_file_metadata(
@@ -106,7 +106,7 @@ class Source(BaseModel):
         set_start_timestamp: bool = False,
         local_path: str | None = None,
     ) -> None:
-        """Update file metadata during or after download operation"""
+        """Update file metadata during or after download operation."""
         if file_type not in self.file_metadata:
             self.file_metadata[file_type] = FileMetadata(url=url)
 
@@ -131,7 +131,7 @@ class Source(BaseModel):
 
 
 class EpgChannel(BaseModel):
-    """Channel model from EPG data"""
+    """Channel model from EPG data."""
 
     source: str  # where the EPG came from
     channel_id: str
@@ -141,7 +141,7 @@ class EpgChannel(BaseModel):
 
 
 class M3uChannel(BaseModel):
-    """Channel model from M3U playlist data"""
+    """Channel model from M3U playlist data."""
 
     source: str
     tvg_id: str
@@ -154,7 +154,7 @@ class M3uChannel(BaseModel):
 
 
 class Channel(BaseModel):
-    """Unified channel model combining EPG and M3U data"""
+    """Unified channel model combining EPG and M3U data."""
 
     source_epg: str | None
     source_m3u: str | None
@@ -166,7 +166,7 @@ class Channel(BaseModel):
 
 
 class Program(BaseModel):
-    """Program model, from an EPG (only from an EPG)"""
+    """Program model, from an EPG (only from an EPG)."""
 
     source: str
     program_id: str

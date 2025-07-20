@@ -1,4 +1,4 @@
-"""Atomic file operations utilities following atomic design principles
+"""Atomic file operations utilities following atomic design principles.
 
 This module provides atomic file operations that ensure data integrity
 through temporary file writes and atomic moves.
@@ -51,13 +51,13 @@ def atomic_write_json(file_path: str, data: Any) -> None:
         os.replace(temp_path, file_path)
         logger.info("Successfully wrote JSON to %s", file_path)
 
-    except Exception as e:
+    except Exception:
         # Clean up temporary file on error
         try:
             os.unlink(temp_path)
         except OSError:
             pass  # Ignore cleanup errors
-        raise e
+        raise
 
 
 def atomic_read_json(file_path: str, default: Any = None) -> Any:

@@ -1,8 +1,9 @@
 import asyncio
 import json
 import logging
+import operator
 import os
-from typing import Any, Literal
+from typing import Annotated, Any, Literal
 
 import httpx
 import uvicorn
@@ -161,7 +162,7 @@ initialize_scheduler(sources_file)
     status_code=status.HTTP_308_PERMANENT_REDIRECT,
 )
 async def root() -> RedirectResponse:
-    """Redirect to the Swagger docs"""
+    """Redirect to the Swagger docs."""
     logger.info("Redirecting to Swagger docs")
     return RedirectResponse(url="/api/docs")
 
@@ -173,7 +174,7 @@ async def root() -> RedirectResponse:
     status_code=status.HTTP_308_PERMANENT_REDIRECT,
 )
 async def docs() -> RedirectResponse:
-    """Redirect to the Swagger docs"""
+    """Redirect to the Swagger docs."""
     logger.info("Redirecting to Swagger docs")
     return RedirectResponse(url="/api/docs")
 
@@ -185,7 +186,7 @@ async def docs() -> RedirectResponse:
     status_code=status.HTTP_308_PERMANENT_REDIRECT,
 )
 async def api() -> RedirectResponse:
-    """Redirect to the Swagger docs"""
+    """Redirect to the Swagger docs."""
     logger.info("Redirecting to Swagger docs")
     return RedirectResponse(url="/api/docs")
 
@@ -211,10 +212,10 @@ async def get_health() -> Message:
 async def get_settings(
     settings_file: str = os.path.join(DATA_PATH, "settings.json"),
 ) -> GlobalSettings:
-    """Return settings from the provided file"""
+    """Return settings from the provided file."""
     logger.debug("Getting settings")
     try:
-        with open(settings_file) as f:
+        with open(settings_file, encoding="utf-8") as f:
             return GlobalSettings(**json.load(f))
     except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
         raise HTTPException(
@@ -232,10 +233,10 @@ async def set_settings(
     settings: GlobalSettings,
     settings_file: str = os.path.join(DATA_PATH, "settings.json"),
 ):
-    """Set settings in the provided file"""
+    """Set settings in the provided file."""
     logger.info("Setting settings")
     try:
-        with open(settings_file, "w") as f:
+        with open(settings_file, "w", encoding="utf-8") as f:
             json.dump(settings.dict(), f, indent=4)
         return Message(message="Settings saved successfully")
     except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
@@ -253,10 +254,10 @@ async def set_settings(
 async def get_sources(
     sources_file: str = os.path.join(DATA_PATH, "sources.json"),
 ) -> list[Source]:
-    """Return sources from the provided file"""
+    """Return sources from the provided file."""
     logger.debug("Getting sources")
     try:
-        with open(sources_file) as f:
+        with open(sources_file, encoding="utf-8") as f:
             return [Source(**source) for source in json.load(f)]
     except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
         raise HTTPException(
@@ -273,10 +274,10 @@ async def get_sources(
 async def set_sources(
     sources: list[Source], sources_file: str = os.path.join(DATA_PATH, "sources.json")
 ) -> Message:
-    """Set sources in the provided file"""
+    """Set sources in the provided file."""
     logger.debug("Setting sources")
     try:
-        with open(sources_file, "w") as f:
+        with open(sources_file, "w", encoding="utf-8") as f:
             json.dump([source.dict() for source in sources], f, indent=4)
         return Message(message="Sources saved successfully")
     except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
@@ -292,7 +293,7 @@ async def set_sources(
     status_code=status.HTTP_200_OK,
 )
 async def get_ingest_progress_by_id(task_id: str) -> IngestProgress:
-    """Get ingest progress for a specific task"""
+    """Get ingest progress for a specific task."""
     logger.info("Getting ingest progress for: %s", task_id)
     return IngestProgress(**get_progress_response(task_id, "ingest"))
 
@@ -304,7 +305,7 @@ async def get_ingest_progress_by_id(task_id: str) -> IngestProgress:
     status_code=status.HTTP_200_OK,
 )
 async def get_ingest_progress() -> dict[str, dict]:
-    """Get all ingest progress"""
+    """Get all ingest progress."""
     logger.debug("Getting ingest progress")
     progress_data = get_all_progress_response("ingest")
     return format_ingest_progress_response(progress_data)
@@ -317,7 +318,7 @@ async def get_ingest_progress() -> dict[str, dict]:
     status_code=status.HTTP_200_OK,
 )
 async def get_download_progress_by_id(task_id: str) -> DownloadProgress:
-    """Get download progress for a specific task"""
+    """Get download progress for a specific task."""
     logger.debug("Getting download progress for: %s", task_id)
     return DownloadProgress(**get_progress_response(task_id, "download"))
 
@@ -329,7 +330,7 @@ async def get_download_progress_by_id(task_id: str) -> DownloadProgress:
     status_code=status.HTTP_200_OK,
 )
 async def get_all_download_progress() -> dict[str, DownloadProgress]:
-    """Get all download progress tasks"""
+    """Get all download progress tasks."""
     logger.debug("Getting all download progress")
     progress_data = get_all_progress_response("download")
     return format_download_progress_response(progress_data)
@@ -342,7 +343,7 @@ async def get_all_download_progress() -> dict[str, DownloadProgress]:
     status_code=status.HTTP_200_OK,
 )
 async def cancel_download(task_id: str) -> Message:
-    """Cancel a download task by task ID"""
+    """Cancel a download task by task ID."""
     logger.info("Canceling download task %s", task_id)
     try:
         success = cancel_task(task_id, "download")
@@ -369,10 +370,10 @@ async def download_all_files(
     sources_file: str = os.path.join(DATA_PATH, "sources.json"),
     download_dir: str = os.path.join(DATA_PATH, "sources"),
 ) -> DownloadAllTasksResponse:
-    """Start background download of all files of a specific type - one task per source"""
+    """Start background download of all files of a specific type - one task per source."""
     logger.info("Downloading all %s files", file_type)
     try:
-        with open(sources_file) as f:
+        with open(sources_file, encoding="utf-8") as f:
             sources = [Source(**source) for source in json.load(f)]
 
         # Filter sources with file_type URLs in file_metadata
@@ -433,7 +434,7 @@ async def queue_file_for_download(
     sources_file: str = os.path.join(DATA_PATH, "sources.json"),
     download_dir: str = os.path.join(DATA_PATH, "sources"),
 ) -> DownloadTaskResponse:
-    """Queue file download for a specific source through the job queue"""
+    """Queue file download for a specific source through the job queue."""
     logger.info("Queuing %s file download for source %s", file_type, source_name)
     try:
         # Create unique task ID for each source
@@ -473,18 +474,18 @@ async def download_file_stream(
     file_type: str,
     sources_file: str = os.path.join(DATA_PATH, "sources.json"),
 ) -> StreamingResponse:
-    """Stream a file directly to the browser for download"""
+    """Stream a file directly to the browser for download."""
     logger.info("Downloading %s file for source %s", file_type, source_name)
     try:
         # Validate file type
-        if file_type not in ["m3u", "epg"]:
+        if file_type not in {"m3u", "epg"}:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid file type. Must be 'm3u' or 'epg'",
             )
 
         # Load sources to get the file URL
-        with open(sources_file) as f:
+        with open(sources_file, encoding="utf-8") as f:
             sources_data = json.load(f)
 
         # Find the source
@@ -560,7 +561,7 @@ async def download_file_stream(
         # Re-raise HTTP exceptions as-is
         raise
     except Exception as e:
-        logger.error(f"Unexpected error in download_file_stream: {e!s}")
+        logger.exception(f"Unexpected error in download_file_stream: {e!s}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Internal server error: {e!s}",
@@ -578,11 +579,11 @@ async def load_file_to_db(
     source_name: str,
     sources_file: str = os.path.join(DATA_PATH, "sources.json"),
 ) -> dict[str, str]:
-    """Start async database loading task for parsed file data"""
+    """Start async database loading task for parsed file data."""
     logger.info("Loading %s file to database for %s", file_type, source_name)
     try:
         # Load sources configuration
-        with open(sources_file) as f:
+        with open(sources_file, encoding="utf-8") as f:
             sources = [Source(**source) for source in json.load(f)]
 
         # Find the source
@@ -650,7 +651,7 @@ async def load_file_to_db(
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Error starting load task: {e}")
+        logger.exception(f"Error starting load task: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
@@ -659,7 +660,7 @@ async def load_file_to_db(
 async def background_load_task(
     task_id: str, file_type: str, file_path: str, source_name: str
 ) -> None:
-    """Background task to load file data into database with multi-step progress tracking"""
+    """Background task to load file data into database with multi-step progress tracking."""
     logger.debug(
         "Started background load task %s for %s file: %s", task_id, file_type, file_path
     )
@@ -720,7 +721,7 @@ async def background_load_task(
     status_code=status.HTTP_200_OK,
 )
 async def get_db_table_head(table: str) -> dict[str, Any]:
-    """Return the first 10 rows of a table"""
+    """Return the first 10 rows of a table."""
     logger.info("Fetching head of table %s", table)
     try:
         with SessionLocal() as session:
@@ -728,7 +729,7 @@ async def get_db_table_head(table: str) -> dict[str, Any]:
             records = [dict(row._mapping) for row in result.fetchall()]
             return format_table_response(records, table)
     except Exception as e:
-        logger.error("Error fetching head of table %s: %s", table, e)
+        logger.exception("Error fetching head of table %s: %s", table, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch head of table: {e!s}",
@@ -745,7 +746,7 @@ async def get_table_data(
     table_name: str,
     source: str | None = None,
 ) -> dict[str, Any]:
-    """Return paginated table data with optional source filtering"""
+    """Return paginated table data with optional source filtering."""
     logger.info("Fetching table data for %s", table_name)
     # Validate table name to prevent SQL injection
     validate_table_name(table_name, include_streams=False)
@@ -770,7 +771,7 @@ async def get_table_data(
             return format_table_response(records, table_name, source)
 
     except Exception as e:
-        logger.error("Error fetching table data for %s: %s", table_name, e)
+        logger.exception("Error fetching table data for %s: %s", table_name, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch table data: {e!s}",
@@ -784,7 +785,7 @@ async def get_table_data(
     status_code=status.HTTP_200_OK,
 )
 async def get_db_summary() -> dict[str, Any]:
-    """Return a summary of the database"""
+    """Return a summary of the database."""
     logger.info("Fetching database summary")
     inspector = inspect(engine)
     summary = []
@@ -830,7 +831,7 @@ async def get_db_summary() -> dict[str, Any]:
     status_code=status.HTTP_200_OK,
 )
 async def get_table_filtered_counts(table_name: str, source: str) -> dict[str, Any]:
-    """Get filter statistics for an entire table"""
+    """Get filter statistics for an entire table."""
     logger.info(
         "Fetching filter statistics for table %s in source %s", table_name, source
     )
@@ -846,7 +847,7 @@ async def get_table_filtered_counts(table_name: str, source: str) -> dict[str, A
             }
 
     except Exception as e:
-        logger.error("Error getting filter statistics for table %s: %s", table_name, e)
+        logger.exception("Error getting filter statistics for table %s: %s", table_name, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
@@ -861,7 +862,7 @@ async def get_table_filtered_counts(table_name: str, source: str) -> dict[str, A
 async def get_table_filtered_counts_by_rule(
     table_name: str, source: str, rule: str
 ) -> dict[str, Any]:
-    """Get filter statistics for a specific rule on a specific table and source"""
+    """Get filter statistics for a specific rule on a specific table and source."""
     logger.info(
         "Fetching filter statistics for table %s in source %s", table_name, source
     )
@@ -888,7 +889,7 @@ async def get_table_filtered_counts_by_rule(
 
             # If no match found, check if there are any non-"Passed" entries (rule has been run but no matches)
             if not has_been_run and any(
-                reason != "Passed" for reason in filter_stats_dict.keys()
+                reason != "Passed" for reason in filter_stats_dict
             ):
                 # Rule may have been run but produced no filtered results
                 rule_count = 0
@@ -907,7 +908,7 @@ async def get_table_filtered_counts_by_rule(
             }
 
     except Exception as e:
-        logger.error(
+        logger.exception(
             "Error getting filter statistics for rule %s on table %s: %s",
             rule,
             table_name,
@@ -925,7 +926,7 @@ async def get_table_filtered_counts_by_rule(
     status_code=status.HTTP_200_OK,
 )
 async def get_table_filter_values(table_name: str) -> dict[str, Any]:
-    """Get precomputed filter values for a table's filterable columns"""
+    """Get precomputed filter values for a table's filterable columns."""
     logger.info("Fetching filter values for table %s", table_name)
     # Validate table name to prevent SQL injection
     validate_table_name(table_name, include_streams=False)
@@ -941,7 +942,7 @@ async def get_table_filter_values(table_name: str) -> dict[str, Any]:
             }
 
     except Exception as e:
-        logger.error("Error getting filter values for table %s: %s", table_name, e)
+        logger.exception("Error getting filter values for table %s: %s", table_name, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
@@ -954,7 +955,7 @@ async def get_table_filter_values(table_name: str) -> dict[str, Any]:
     status_code=status.HTTP_200_OK,
 )
 async def get_table_columns(table_name: str) -> dict[str, Any]:
-    """Get column names for a specific table"""
+    """Get column names for a specific table."""
     logger.info("Fetching columns for table %s", table_name)
     # Validate table name to prevent SQL injection
     validate_table_name(table_name, include_streams=False)
@@ -970,7 +971,7 @@ async def get_table_columns(table_name: str) -> dict[str, Any]:
         }
 
     except Exception as e:
-        logger.error("Error getting columns for table %s: %s", table_name, e)
+        logger.exception("Error getting columns for table %s: %s", table_name, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
@@ -985,7 +986,7 @@ async def get_table_columns(table_name: str) -> dict[str, Any]:
 async def get_table_filter_counts_by_assignment(
     table_name: str, source: str
 ) -> dict[str, Any]:
-    """Get filter statistics organized by assignment for a specific table and source"""
+    """Get filter statistics organized by assignment for a specific table and source."""
     logger.info(
         "Fetching filter statistics organized by assignment for table %s in source %s",
         table_name,
@@ -1020,13 +1021,12 @@ async def get_table_filter_counts_by_assignment(
 
             for assignment in source_assignments:
                 assignment_id = assignment.id
-                assignment_name = assignment.assignment_name
                 assigned_rules = assignment.assigned_rules
 
                 # With new JSON array format, assignment IDs are returned directly as keys in filter statistics
                 total_filtered_count = filter_stats_dict.get(assignment_id, 0)
                 has_been_run = assignment_id in filter_stats_dict or any(
-                    reason != "Passed" for reason in filter_stats_dict.keys()
+                    reason != "Passed" for reason in filter_stats_dict
                 )
                 matched_rules = assigned_rules.copy() if has_been_run else []
 
@@ -1051,7 +1051,7 @@ async def get_table_filter_counts_by_assignment(
             }
 
     except Exception as e:
-        logger.error(
+        logger.exception(
             "Error getting filter counts by assignment for table %s, source %s: %s",
             table_name,
             source,
@@ -1175,7 +1175,7 @@ async def get_streams(
             )
 
     except Exception as e:
-        logger.error("Error getting streams: %s", e)
+        logger.exception("Error getting streams: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get streams: {e!s}",
@@ -1266,7 +1266,7 @@ async def get_stream_programs(
             )
 
     except Exception as e:
-        logger.error("Error getting stream programs: %s", e)
+        logger.exception("Error getting stream programs: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get stream programs: {e!s}",
@@ -1299,7 +1299,7 @@ async def get_streams_filters() -> dict[str, Any]:
             }
 
     except Exception as e:
-        logger.error("Error getting streams filter values: %s", e)
+        logger.exception("Error getting streams filter values: %s", e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get streams filter values: {e!s}",
@@ -1396,7 +1396,7 @@ async def precompute_all_table_filters() -> dict[str, Any]:
     status_code=status.HTTP_200_OK,
 )
 async def get_scheduler_status() -> dict[str, Any]:
-    """Get current scheduler status and job information"""
+    """Get current scheduler status and job information."""
     logger.info("Getting scheduler status")
     scheduler_manager = get_scheduler_manager()
     return scheduler_manager.get_scheduler_status()
@@ -1409,7 +1409,7 @@ async def get_scheduler_status() -> dict[str, Any]:
     status_code=status.HTTP_200_OK,
 )
 async def start_scheduler_endpoint() -> dict[str, str]:
-    """Start the refresh scheduler"""
+    """Start the refresh scheduler."""
     logger.info("Starting scheduler via API")
     try:
         start_scheduler()
@@ -1429,7 +1429,7 @@ async def start_scheduler_endpoint() -> dict[str, str]:
     status_code=status.HTTP_200_OK,
 )
 async def stop_scheduler_endpoint() -> dict[str, str]:
-    """Stop the refresh scheduler"""
+    """Stop the refresh scheduler."""
     logger.info("Stopping scheduler via API")
     try:
         stop_scheduler()
@@ -1449,7 +1449,7 @@ async def stop_scheduler_endpoint() -> dict[str, str]:
     status_code=status.HTTP_200_OK,
 )
 async def restart_scheduler_endpoint() -> dict[str, str]:
-    """Restart the refresh scheduler"""
+    """Restart the refresh scheduler."""
     logger.info("Restarting scheduler via API")
     try:
         scheduler_manager = get_scheduler_manager()
@@ -1473,12 +1473,12 @@ async def update_source_schedule(
     source_name: str,
     sources_file: str = os.path.join(DATA_PATH, "sources.json"),
 ) -> dict[str, str]:
-    """Update schedule for a specific source"""
+    """Update schedule for a specific source."""
     logger.info("Updating schedule for source: %s", source_name)
     try:
         scheduler_manager = get_scheduler_manager()
         # Load sources configuration
-        with open(sources_file) as f:
+        with open(sources_file, encoding="utf-8") as f:
             sources = [Source(**source) for source in json.load(f)]
 
         # Find the source
@@ -1515,7 +1515,7 @@ async def update_source_schedule(
     status_code=status.HTTP_200_OK,
 )
 async def delete_source_schedule(source_name: str) -> dict[str, str]:
-    """Delete/remove schedule for a specific source"""
+    """Delete/remove schedule for a specific source."""
     logger.info("Deleting schedule for source: %s", source_name)
     try:
         scheduler_manager = get_scheduler_manager()
@@ -1544,11 +1544,11 @@ async def delete_source_schedule(source_name: str) -> dict[str, str]:
 async def validate_scheduler_config(
     sources_file: str = os.path.join(DATA_PATH, "sources.json"),
 ) -> dict[str, Any]:
-    """Validate scheduler configuration for all sources"""
+    """Validate scheduler configuration for all sources."""
     logger.info("Validating scheduler configuration")
     try:
         # Load sources configuration
-        with open(sources_file) as f:
+        with open(sources_file, encoding="utf-8") as f:
             sources = [Source(**source) for source in json.load(f)]
 
         # Validate and get results
@@ -1577,7 +1577,7 @@ async def validate_scheduler_config(
     status_code=status.HTTP_200_OK,
 )
 async def get_rules_status() -> dict[str, Any]:
-    """Get current status of ingestion rules system"""
+    """Get current status of ingestion rules system."""
     logger.info("Getting ingestion rules status")
     try:
         status_info = get_ingestion_rules_status()
@@ -1597,7 +1597,7 @@ async def get_rules_status() -> dict[str, Any]:
     status_code=status.HTTP_200_OK,
 )
 async def get_rules() -> dict[str, Any]:
-    """Get all ingestion rules and source assignments"""
+    """Get all ingestion rules and source assignments."""
     logger.info("Getting ingestion rules and source assignments")
     try:
         rules = load_rules()
@@ -1622,7 +1622,7 @@ async def get_rules() -> dict[str, Any]:
     status_code=status.HTTP_200_OK,
 )
 async def save_rules_only(rules_data: list[dict[str, Any]]) -> dict[str, Any]:
-    """Save only ingestion rules to rules.json file"""
+    """Save only ingestion rules to rules.json file."""
     logger.info("Saving ingestion rules only")
     try:
         result = save_rules(rules_data)
@@ -1648,7 +1648,7 @@ async def save_rules_only(rules_data: list[dict[str, Any]]) -> dict[str, Any]:
     status_code=status.HTTP_200_OK,
 )
 async def get_assignments() -> dict[str, Any]:
-    """Get all source rule assignments"""
+    """Get all source rule assignments."""
     logger.info("Getting source rule assignments")
     try:
         assignments = load_assignments()
@@ -1668,10 +1668,10 @@ async def get_assignments() -> dict[str, Any]:
     status_code=status.HTTP_200_OK,
 )
 async def apply_assignment(
-    assignment_id: str = Body(..., description="ID of the assignment to apply"),
-    table_name: str = Body(..., description="Name of the table to apply assignment to"),
+    assignment_id: Annotated[str, Body(description="ID of the assignment to apply")] = ...,
+    table_name: Annotated[str, Body(description="Name of the table to apply assignment to")] = ...,
 ) -> dict[str, Any]:
-    """Apply a specific assignment by ID to a table (new multi-assignment architecture)"""
+    """Apply a specific assignment by ID to a table (new multi-assignment architecture)."""
     logger.info("Applying assignment")
     try:
         logger.info(
@@ -1740,13 +1740,10 @@ async def apply_assignment(
     status_code=status.HTTP_200_OK,
 )
 async def unapply_assignment(
-    assignment_id: str = Body(..., description="ID of the assignment to unapply"),
-    table_name: str = Body(
-        None,
-        description="Optional: specific table to unapply from. If not provided, unapplies from all relevant tables.",
-    ),
+    assignment_id: Annotated[str, Body(description="ID of the assignment to unapply")] = ...,
+    table_name: Annotated[str | None, Body(description="Optional: specific table to unapply from. If not provided, unapplies from all relevant tables.")] = None,
 ) -> dict[str, Any]:
-    """Unapply a specific assignment by ID from relevant tables (new multi-assignment architecture)"""
+    """Unapply a specific assignment by ID from relevant tables (new multi-assignment architecture)."""
     logger.info("Unapplying assignment")
     try:
         logger.info(
@@ -1857,7 +1854,7 @@ async def unapply_assignment(
 async def save_assignments_only(
     assignments_data: list[dict[str, Any]],
 ) -> dict[str, Any]:
-    """Save only source rule assignments to assignments.json file"""
+    """Save only source rule assignments to assignments.json file."""
     logger.info("Saving source rule assignments only")
     try:
         result = save_assignments(assignments_data)
@@ -1883,7 +1880,7 @@ async def save_assignments_only(
     status_code=status.HTTP_200_OK,
 )
 async def validate_rules(config_data: dict[str, Any]) -> dict[str, Any]:
-    """Validate ingestion rules configuration without saving"""
+    """Validate ingestion rules configuration without saving."""
     logger.info("Validating ingestion rules configuration")
     try:
         rules_data = config_data.get("rules", [])
@@ -1914,11 +1911,7 @@ async def validate_rules(config_data: dict[str, Any]) -> dict[str, Any]:
         # Check that assigned rules exist
         rule_names = {rule_data.get("name") for rule_data in rules_data}
         for assignment_data in assignments_data:
-            for rule_name in assignment_data.get("assigned_rules", []):
-                if rule_name not in rule_names:
-                    errors.append(
-                        f"Source '{assignment_data.get('source_name')}' references non-existent rule '{rule_name}'"
-                    )
+            errors.extend(f"Source '{assignment_data.get('source_name')}' references non-existent rule '{rule_name}'" for rule_name in assignment_data.get("assigned_rules", []) if rule_name not in rule_names)
 
         is_valid = len(errors) == 0
         return {
@@ -1942,7 +1935,7 @@ async def validate_rules(config_data: dict[str, Any]) -> dict[str, Any]:
     status_code=status.HTTP_200_OK,
 )
 async def get_rules_logs() -> dict[str, Any]:
-    """Get list of ingestion rules log files"""
+    """Get list of ingestion rules log files."""
     logger.info("Getting ingestion rules log files")
     try:
         if not os.path.exists(INGESTION_RULES_LOGS):
@@ -1963,7 +1956,7 @@ async def get_rules_logs() -> dict[str, Any]:
                 )
 
         # Sort by modification time (newest first)
-        log_files.sort(key=lambda x: x["modified"], reverse=True)
+        log_files.sort(key=operator.itemgetter("modified"), reverse=True)
 
         return {"success": True, "data": log_files}
 
@@ -1982,7 +1975,7 @@ async def get_rules_logs() -> dict[str, Any]:
     status_code=status.HTTP_200_OK,
 )
 async def get_rules_log_content(filename: str) -> dict[str, Any]:
-    """Get content of a specific ingestion rules log file"""
+    """Get content of a specific ingestion rules log file."""
     logger.info("Getting content of rules log file: %s", filename)
     try:
         # Validate filename to prevent directory traversal
@@ -2020,8 +2013,8 @@ async def get_rules_log_content(filename: str) -> dict[str, Any]:
     tags=["Rules"],
     summary="Apply rule assignments to database records",
 )
-async def apply_rule_assignments(request: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    """Apply rule assignments to database records for specified table and source"""
+async def apply_rule_assignments(request: Annotated[dict[str, Any], Body()] = ...) -> dict[str, Any]:
+    """Apply rule assignments to database records for specified table and source."""
     logger.info("Applying rule assignments to database records")
 
     try:
@@ -2082,8 +2075,8 @@ async def apply_rule_assignments(request: dict[str, Any] = Body(...)) -> dict[st
     tags=["Rules"],
     summary="Apply a single rule to a specific source and table",
 )
-async def apply_single_rule(request: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    """Apply a single rule to a specific table and source"""
+async def apply_single_rule(request: Annotated[dict[str, Any], Body()] = ...) -> dict[str, Any]:
+    """Apply a single rule to a specific table and source."""
     logger.info("Applying single rule to database records")
 
     try:
@@ -2156,8 +2149,8 @@ async def apply_single_rule(request: dict[str, Any] = Body(...)) -> dict[str, An
     tags=["Rules"],
     summary="Apply all rules to a specific source",
 )
-async def apply_rules_to_source(request: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    """Apply all assigned rules to a specific source across all tables"""
+async def apply_rules_to_source(request: Annotated[dict[str, Any], Body()] = ...) -> dict[str, Any]:
+    """Apply all assigned rules to a specific source across all tables."""
     logger.info("Applying all rules to source")
 
     try:
@@ -2215,8 +2208,8 @@ async def apply_rules_to_source(request: dict[str, Any] = Body(...)) -> dict[str
     tags=["Rules"],
     summary="Unapply (remove) rules from database records",
 )
-async def unapply_rules(request: dict[str, Any] = Body(...)) -> dict[str, Any]:
-    """Unapply (remove) rules from database records for specified table and source"""
+async def unapply_rules(request: Annotated[dict[str, Any], Body()] = ...) -> dict[str, Any]:
+    """Unapply (remove) rules from database records for specified table and source."""
     logger.info("Unapplying rules from database records")
 
     try:
@@ -2283,7 +2276,7 @@ async def unapply_rules(request: dict[str, Any] = Body(...)) -> dict[str, Any]:
     status_code=status.HTTP_200_OK,
 )
 async def get_job_queue_status() -> dict[str, Any]:
-    """Get current job queue status and information"""
+    """Get current job queue status and information."""
     logger.info("Getting job queue status")
     try:
         status = await get_queue_status()
@@ -2303,7 +2296,7 @@ async def get_job_queue_status() -> dict[str, Any]:
     status_code=status.HTTP_200_OK,
 )
 async def get_job_status_by_id(job_id: str) -> dict[str, Any]:
-    """Get status of a specific job"""
+    """Get status of a specific job."""
     logger.info("Getting status for job %s", job_id)
     try:
         job_status = await get_job_status(job_id)
@@ -2329,7 +2322,7 @@ async def get_job_status_by_id(job_id: str) -> dict[str, Any]:
     status_code=status.HTTP_200_OK,
 )
 async def cancel_job_by_id(job_id: str) -> dict[str, Any]:
-    """Cancel a queued job"""
+    """Cancel a queued job."""
     logger.info("Cancelling job %s", job_id)
     try:
         cancelled = await cancel_job(job_id)
@@ -2504,8 +2497,8 @@ async def get_source_epg(source: str):
 
 
 @app.on_event("startup")
-async def startup_event():
-    """Initialize job queue and scheduler on application startup"""
+async def startup_event() -> None:
+    """Initialize job queue and scheduler on application startup."""
     logger.info("Application startup - initializing job queue and scheduler")
     try:
         # Initialize job queue first
@@ -2521,8 +2514,8 @@ async def startup_event():
 
 
 @app.on_event("shutdown")
-async def shutdown_event():
-    """Stop the scheduler and job queue on application shutdown"""
+async def shutdown_event() -> None:
+    """Stop the scheduler and job queue on application shutdown."""
     logger.info("Application shutdown - stopping scheduler and job queue")
     try:
         # Stop scheduler first

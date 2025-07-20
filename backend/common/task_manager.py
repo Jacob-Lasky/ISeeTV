@@ -213,7 +213,7 @@ class DownloadTaskManager:
 
     @staticmethod
     def create_download_task(
-        task_id: str, total_items: int, file_type: str = None
+        task_id: str, total_items: int, file_type: str | None = None
     ) -> None:
         """Create a new download task with download-specific fields."""
         logger.debug("Creating download task %s", task_id)

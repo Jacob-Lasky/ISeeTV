@@ -44,14 +44,14 @@ SPECIAL_FILTER_QUERIES = {
         """,
         "filter_reasons": """
             WITH filter_values AS (
-                SELECT 
-                    CASE 
+                SELECT
+                    CASE
                         WHEN filter_reasons IS NULL OR filter_reasons = '' OR filter_reasons = '[]' THEN 'Passed'
                         ELSE TRIM(REPLACE(REPLACE(filter_reasons, '["', ''), '"]', ''))
                     END as value
                 FROM m3u_channels
             )
-            SELECT 
+            SELECT
                 value,
                 COUNT(*) as count
             FROM filter_values
@@ -85,14 +85,14 @@ def _get_filter_query(table_name: str, column_name: str) -> str:
     if column_name == "filter_reasons":
         return f"""
             WITH filter_values AS (
-                SELECT 
-                    CASE 
+                SELECT
+                    CASE
                         WHEN filter_reasons IS NULL OR filter_reasons = '' OR filter_reasons = '[]' THEN 'Passed'
                         ELSE TRIM(REPLACE(REPLACE(filter_reasons, '["', ''), '"]', ''))
                     END as value
                 FROM {table_name}
             )
-            SELECT 
+            SELECT
                 value,
                 COUNT(*) as count
             FROM filter_values
@@ -304,11 +304,11 @@ def get_table_filter_statistics(session: Session, table_name: str) -> dict[str, 
     try:
         query = text(
             f"""
-            SELECT 
+            SELECT
                 source,
-                CASE 
+                CASE
                     WHEN filter_reasons = '[]' THEN 'Passed'
-                    ELSE json_extract(filter_reasons, '$[0]') 
+                    ELSE json_extract(filter_reasons, '$[0]')
                 END as reason,
                 COUNT(*) as count
             FROM {table_name}
@@ -347,27 +347,27 @@ def get_table_filter_statistics_by_source(
         query = text(
             f"""
             WITH expanded_reasons AS (
-                SELECT 
+                SELECT
                     t.id as table_id,
                     j.value as assignment_id
                 FROM {table_name} t, json_each(t.filter_reasons) j
                 WHERE t.source = :source
                     AND t.filter_reasons != '[]'
             )
-            SELECT 
+            SELECT
                 assignment_id as reason,
                 COUNT(*) as count
             FROM expanded_reasons
             WHERE assignment_id IS NOT NULL AND assignment_id != ''
             GROUP BY assignment_id
-            
+
             UNION ALL
-            
+
             SELECT 'Passed' as reason, COUNT(*) as count
             FROM {table_name}
             WHERE source = :source
                 AND filter_reasons = '[]'
-            
+
             ORDER BY count DESC
         """
         )

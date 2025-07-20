@@ -40,15 +40,15 @@ EXPECTED_EXTINF_KEYS = {
 
 
 class M3uValidationResults:
-    """Container for M3U validation results and logging"""
+    """Container for M3U validation results and logging."""
 
-    def __init__(self):
+    def __init__(self) -> None:
         self.unhandled_tags = defaultdict(int)
         self.unhandled_extinf_keys = defaultdict(int)
         self.channels_without_urls = []
 
-    def log_results(self, context: str = ""):
-        """Log all validation results"""
+    def log_results(self, context: str = "") -> None:
+        """Log all validation results."""
         prefix = f"[{context}] " if context else ""
 
         if self.unhandled_tags:
@@ -112,7 +112,7 @@ def detect_stream_mode(stream_url: str) -> str:
 
 
 def parse_extinf_line(line: str) -> tuple[dict, str]:
-    """Parse an EXTINF line and return attributes dict and channel name"""
+    """Parse an EXTINF line and return attributes dict and channel name."""
     # EXTINF format: #EXTINF:duration attr1="val1" attr2="val2",Channel Name
     # Remove #EXTINF: prefix and split on comma to separate attributes from name
     logger.debug("Parsing EXTINF line: %s", line)
@@ -150,7 +150,7 @@ def parse_extinf_line(line: str) -> tuple[dict, str]:
 def validate_m3u_channel(
     attrs: dict, channel_name: str, stream_url: str | None
 ) -> M3uChannel | None:
-    """Validate and create M3uChannel from parsed data"""
+    """Validate and create M3uChannel from parsed data."""
     logger.debug("Validating M3U channel: %s", channel_name)
     # Warn if no stream URL
     if not stream_url or not stream_url.strip():
@@ -185,7 +185,7 @@ def validate_m3u_channel(
 def parse_m3u(
     m3u_file: str, source: str = "m3u", task_id: str | None = None
 ) -> list[M3uChannel]:
-    """Parse an M3U file and return a list of M3uChannel objects"""
+    """Parse an M3U file and return a list of M3uChannel objects."""
     logger.info("Parsing M3U file: %s", m3u_file)
 
     if task_id:

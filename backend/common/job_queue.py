@@ -5,6 +5,7 @@ only one job runs at a time across the entire application.
 """
 
 import asyncio
+import contextlib
 import uuid
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -84,7 +85,7 @@ class JobQueue:
     - Scalable: handles unlimited job types and sources
     """
 
-    def __init__(self):
+    def __init__(self) -> None:
         self._queue: asyncio.Queue = asyncio.Queue()
         self._jobs: dict[str, JobInfo] = {}
         self._current_job: JobInfo | None = None
@@ -114,10 +115,8 @@ class JobQueue:
 
         if self._worker_task:
             self._worker_task.cancel()
-            try:
+            with contextlib.suppress(asyncio.CancelledError):
                 await self._worker_task
-            except asyncio.CancelledError:
-                pass
 
     async def enqueue_job(
         self,
@@ -251,7 +250,7 @@ class JobQueue:
                 logger.debug("Job queue worker cancelled")
                 break
             except Exception as e:
-                logger.error(f"Unexpected error in job queue worker: {e}")
+                logger.exception(f"Unexpected error in job queue worker: {e}")
                 # Continue processing other jobs
                 continue
 
