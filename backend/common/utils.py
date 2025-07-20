@@ -105,6 +105,7 @@ def validate_table_name(table_name: str, include_streams: bool = True) -> None:
 
     Raises:
         HTTPException: If table name is invalid
+
     """
     valid_tables = list(FILTERABLE_COLUMNS_CONFIG.keys())
     if not include_streams:

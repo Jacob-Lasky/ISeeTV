@@ -9,7 +9,6 @@ from sqlalchemy.orm import Session
 from common.log_utils import get_logger
 
 # Clear existing filter values for streams
-from models.db_models import FilterValueTable
 from models.stream_models import StreamChannel, StreamProgram
 from utils.filter_utils import get_all_filter_values
 

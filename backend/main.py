@@ -86,8 +86,8 @@ from utils.filter_utils import (
     get_all_filter_values,
     get_table_filter_statistics,
     get_table_filter_statistics_by_source,
-    precompute_filter_values,
     precompute_all_filter_values,
+    precompute_filter_values,
 )
 from utils.stream_utils import (
     get_filter_view_counts,
@@ -1366,8 +1366,8 @@ async def precompute_all_table_filters() -> dict[str, Any]:
     try:
         with SessionLocal() as session:
             from utils.filter_utils import (
-                precompute_all_filter_values,
                 FILTERABLE_COLUMNS_CONFIG,
+                precompute_all_filter_values,
             )
 
             precompute_all_filter_values(session)

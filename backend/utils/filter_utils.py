@@ -1,7 +1,7 @@
 """Utility functions for precomputing and managing filter values."""
 
 from collections import defaultdict
-from typing import Any, Dict, List
+from typing import Any
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -72,6 +72,7 @@ def _get_filter_query(table_name: str, column_name: str) -> str:
 
     Returns:
         SQL query string
+
     """
     # Check if there's a special query for this table/column combination
     if (
@@ -113,7 +114,7 @@ def _get_filter_query(table_name: str, column_name: str) -> str:
 
 def _precompute_column_values(
     session: Session, table_name: str, column_name: str
-) -> List[FilterValueTable]:
+) -> list[FilterValueTable]:
     """Precompute filter values for a specific column.
 
     Args:
@@ -123,6 +124,7 @@ def _precompute_column_values(
 
     Returns:
         List of FilterValueTable objects
+
     """
     try:
         query = _get_filter_query(table_name, column_name)
@@ -203,10 +205,11 @@ def precompute_all_filter_values(session: Session) -> None:
 
     Args:
         session: SQLAlchemy session
+
     """
     logger.info("Precomputing filter values for all tables")
 
-    for table_name in FILTERABLE_COLUMNS_CONFIG.keys():
+    for table_name in FILTERABLE_COLUMNS_CONFIG:
         try:
             precompute_filter_values(session, table_name)
         except Exception:
