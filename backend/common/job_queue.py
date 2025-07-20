@@ -162,7 +162,7 @@ class JobQueue:
             self._jobs[job_id] = job_info
             await self._queue.put((job_info, job_function, kwargs))
 
-        logger.info("Enqueued %s job for %s: %s", job_type.value, source_name, job_id)
+        logger.debug("Enqueued %s job for %s: %s", job_type.value, source_name, job_id)
         return job_id
 
     async def cancel_job(self, job_id: str) -> bool:
@@ -273,7 +273,7 @@ class JobQueue:
             job_info.status = JobStatus.RUNNING
             job_info.started_at = datetime.now()
 
-        logger.info(
+        logger.debug(
             "Executing %s job for %s: %s",
             job_info.job_type.value,
             job_info.source_name,
@@ -290,7 +290,7 @@ class JobQueue:
                 job_info.completed_at = datetime.now()
                 self._current_job = None
 
-            logger.info(
+            logger.debug(
                 "Completed %s job for %s: %s",
                 job_info.job_type.value,
                 job_info.source_name,
@@ -305,12 +305,11 @@ class JobQueue:
                 job_info.error_message = str(e)
                 self._current_job = None
 
-            logger.error(
-                "Failed %s job for %s: %s - %s",
+            logger.exception(
+                "Failed %s job for %s: %s",
                 job_info.job_type.value,
                 job_info.source_name,
                 job_info.job_id,
-                e,
             )
 
 

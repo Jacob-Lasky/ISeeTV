@@ -1033,11 +1033,9 @@ async function preserveActiveDownloadsAndReload() {
 
 // Auto-detect active downloads on component mount (for tab navigation persistence)
 async function detectAndRestoreActiveDownloads() {
-    console.log("Starting auto-detection of active downloads...")
     try {
         // Get all active downloads from the backend
         const response = await fetch("/api/download/progress")
-        console.log("Fetch response status:", response.status, response.ok)
 
         if (!response.ok) {
             console.log("No active downloads to restore (response not ok)")
@@ -1045,7 +1043,6 @@ async function detectAndRestoreActiveDownloads() {
         }
 
         const allProgress = await response.json()
-        console.log("All progress data from backend:", allProgress)
         console.log("Number of tasks found:", Object.keys(allProgress).length)
 
         // For each active download, find the corresponding file and restore progress polling
@@ -2430,13 +2427,6 @@ onMounted(async () => {
             `Sources loaded, checking sourceFileRows:`,
             sourceFileRows.value.length,
             "rows"
-        )
-        console.log(
-            `First few rows:`,
-            sourceFileRows.value.slice(0, 3).map((r) => ({
-                sourceName: r.sourceName,
-                fileType: r.fileType,
-            }))
         )
 
         // Auto-detect and restore any active downloads after component mount

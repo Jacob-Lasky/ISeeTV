@@ -168,7 +168,7 @@ async def load_m3u_channels_async(
     try:
         # Parse channels (this is synchronous but usually fast)
         channels = parse_m3u(file_path, source_name, task_id)
-        logger.info("Parsed %s M3U channels", len(channels))
+        logger.debug("Parsed %s M3U channels", len(channels))
 
         # Update task progress if task_id provided
         if task_id:
@@ -211,7 +211,7 @@ async def load_m3u_channels_async(
                 len(batch),
             )
 
-    except Exception:
+    except Exception as e:
         logger.exception("Error in async M3U channel loading")
         session.rollback()
         yield LoadResult("M3U_CHANNEL", "BATCH", "error", str(e))
@@ -221,7 +221,7 @@ async def load_m3u_file_async(
     session: Session, file_path: str, source_name: str, task_id: str | None = None
 ) -> AsyncGenerator[LoadResult, None]:
     """Main async function to load complete M3U file"""
-    logger.info("Starting complete M3U file load: %s for %s", file_path, source_name)
+    logger.debug("Starting complete M3U file load: %s for %s", file_path, source_name)
 
     # Load all M3U channels
     async for result in load_m3u_channels_async(
@@ -229,18 +229,11 @@ async def load_m3u_file_async(
     ):
         yield result
 
-    logger.info("Completed M3U file load for %s", source_name)
+    logger.debug("Completed M3U file load for %s", source_name)
 
-    # Apply post-load rules for traceability
     logger.info("Applying post-load rules to M3U channels for %s", source_name)
     try:
         rule_results = apply_post_load_rules("m3u_channels", source_name)
-        logger.info(
-            "Post-load rules applied: %s processed, %s filtered, %s passed",
-            rule_results["processed"],
-            rule_results["filtered"],
-            rule_results["passed"],
-        )
 
         # Yield a result for rule application
         yield LoadResult(
@@ -249,6 +242,6 @@ async def load_m3u_file_async(
             "success",
             f"Applied rules: {rule_results['filtered']} filtered, {rule_results['passed']} passed",
         )
-    except Exception:
+    except Exception as e:
         logger.exception("Error applying post-load rules")
         yield LoadResult("M3U_CHANNEL", "RULES", "error", str(e))

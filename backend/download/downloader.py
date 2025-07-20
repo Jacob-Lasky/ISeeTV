@@ -26,7 +26,7 @@ async def download_file_with_progress(
     fallback_size: int | None = None,
 ) -> tuple[bool, int, Literal["success", "failed", "cancelled"]]:
     """Download a single file with real-time progress tracking by bytes"""
-    logger.info("Downloading %s from %s: %s", item_name, url, task_id)
+    logger.debug("Downloading %s from %s: %s", item_name, url, task_id)
     try:
         DownloadTaskManager.update_download_progress(
             task_id, current_item=item_name, status="downloading"
@@ -109,7 +109,7 @@ async def orchestrate_file_download_from_source(
     task_id: str | None = None,
 ) -> None:
     """Download function for any file type with optional progress tracking"""
-    logger.info(
+    logger.debug(
         "Orchestrating download for %s %s: %s", source_name, download_type, task_id
     )
     if download_type == "m3u":
@@ -253,7 +253,7 @@ async def background_download_task(
 
 async def validate_url(url: str) -> bool:
     """Validate that the URL is accessible"""
-    logger.info("Validating URL %s", url)
+    logger.debug("Validating URL %s", url)
     try:
         async with httpx.AsyncClient() as client:
             response = await client.head(url)
@@ -279,7 +279,7 @@ async def background_single_download_task(
     download_dir: str,
 ) -> None:
     """Background coroutine for downloading a single source with progress tracking"""
-    logger.info("Background single download task %s", task_id)
+    logger.debug("Background single download task %s", task_id)
     try:
         DownloadTaskManager.update_download_progress(
             task_id,

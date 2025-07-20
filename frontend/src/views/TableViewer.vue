@@ -984,10 +984,6 @@ const loadTableData = async () => {
     error.value = ""
 
     try {
-        console.log(
-            `Loading table data for: ${tableName.value}, source: ${sourceName.value}`
-        )
-
         const response = await apiGet(
             `/api/tables/${tableName.value}?source=${encodeURIComponent(sourceName.value)}`
         )

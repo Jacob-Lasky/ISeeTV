@@ -32,7 +32,7 @@ class TaskManager:
             **additional_fields: Task-type-specific fields
 
         """
-        logger.info("Creating %s task %s", task_type, task_id)
+        logger.debug("Creating %s task %s", task_type, task_id)
 
         # Base task structure shared by all task types
         task_data = {
@@ -83,7 +83,7 @@ class TaskManager:
 
         """
         status = status_name or f"{task_type}ing"
-        logger.info("Starting %s task %s", task_type, task_id)
+        logger.debug("Starting %s task %s", task_type, task_id)
 
         TaskManager.update_task_progress(
             task_id,
@@ -167,7 +167,7 @@ class TaskManager:
             total_items: Actual total number of items to process
 
         """
-        logger.info(
+        logger.debug(
             "Updating %s task %s total_items to %s", task_type, task_id, total_items
         )
 
@@ -192,11 +192,10 @@ class TaskManager:
 
         """
         logger.debug(
-            "Updating %s task %s item progress: %s/%s",
+            "Updating %s task %s item progress: %s",
             task_type,
             task_id,
             completed_items,
-            total_items,
         )
         TaskManager.update_task_progress(
             task_id,

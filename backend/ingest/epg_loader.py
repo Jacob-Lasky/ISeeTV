@@ -294,6 +294,7 @@ async def load_epg_channels_async(
             )
 
         # Process in batches using bulk operations
+        logger.info("Loading channels into table")
         completed_count = 0
         for i in range(0, len(channels), batch_size):
             batch = channels[i : i + batch_size]
@@ -359,6 +360,7 @@ async def load_programs_async(
             IngestTaskManager.update_step_progress(task_id, 5, "Loading programs", 0)
 
         # Process in batches using bulk operations
+        logger.info("Loading programs into table")
         completed_count = 0
         for i in range(0, len(programs), batch_size):
             batch = programs[i : i + batch_size]

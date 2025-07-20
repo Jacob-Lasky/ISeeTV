@@ -39,6 +39,7 @@ from common.utils import (
     format_table_response,
     get_all_progress_response,
     get_progress_response,
+    validate_table_name,
 )
 from download.downloader import (
     background_single_download_task,
@@ -86,13 +87,13 @@ from utils.filter_utils import (
     get_table_filter_statistics,
     get_table_filter_statistics_by_source,
     precompute_filter_values,
+    precompute_all_filter_values,
 )
 from utils.stream_utils import (
     get_filter_view_counts,
     get_stream_programs_query,
     get_streams_filter_values,
     get_streams_query,
-    precompute_streams_filter_values,
 )
 
 logger = get_logger(__name__)
@@ -659,7 +660,7 @@ async def background_load_task(
     task_id: str, file_type: str, file_path: str, source_name: str
 ) -> None:
     """Background task to load file data into database with multi-step progress tracking"""
-    logger.info(
+    logger.debug(
         "Started background load task %s for %s file: %s", task_id, file_type, file_path
     )
     session = SessionLocal()
@@ -667,7 +668,7 @@ async def background_load_task(
         # Start the task (Step 1: Download already completed)
         TaskManager.start_task(task_id, "ingest", "ingesting")
 
-        logger.info(
+        logger.debug(
             "Started background load task %s for %s file: %s",
             task_id,
             file_type,
@@ -688,23 +689,8 @@ async def background_load_task(
                 if result.status == "error":
                     logger.warning(f"Load error in task {task_id}: {result.message}")
 
-        # Precompute filter values for the affected tables
-        if file_type == "m3u":
-            precompute_filter_values(session, "m3u_channels")
-            logger.info(
-                "Precomputed filter values for m3u_channels after task %s", task_id
-            )
-        elif file_type == "epg":
-            precompute_filter_values(session, "epg_channels")
-            precompute_filter_values(session, "programs")
-            logger.info(
-                "Precomputed filter values for epg_channels and programs after task %s",
-                task_id,
-            )
-
-        # Precompute streams filter values (combines M3U and EPG data)
-        precompute_streams_filter_values(session)
-        logger.info("Precomputed streams filter values after task %s", task_id)
+        precompute_all_filter_values(session)
+        logger.info("Precomputed filter values for all tables after task %s", task_id)
 
         # Add a small delay to ensure frontend can display progress bars
         await asyncio.sleep(2)
@@ -719,8 +705,8 @@ async def background_load_task(
             "Completed background load task %s: filter values precomputed", task_id
         )
 
-    except Exception as e:
-        logger.error("Background load task %s failed: %s", task_id, e)
+    except Exception:
+        logger.exception("Background load task %s failed", task_id)
         TaskManager.fail_task(task_id, "ingest", str(e))
         session.rollback()
     finally:
@@ -762,12 +748,7 @@ async def get_table_data(
     """Return paginated table data with optional source filtering"""
     logger.info("Fetching table data for %s", table_name)
     # Validate table name to prevent SQL injection
-    valid_tables = ["epg_channels", "m3u_channels", "programs"]
-    if table_name not in valid_tables:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid table name. Must be one of: {', '.join(valid_tables)}",
-        )
+    validate_table_name(table_name, include_streams=False)
 
     try:
         with SessionLocal() as session:
@@ -947,12 +928,7 @@ async def get_table_filter_values(table_name: str) -> dict[str, Any]:
     """Get precomputed filter values for a table's filterable columns"""
     logger.info("Fetching filter values for table %s", table_name)
     # Validate table name to prevent SQL injection
-    valid_tables = ["epg_channels", "m3u_channels", "programs"]
-    if table_name not in valid_tables:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid table name. Must be one of: {valid_tables}",
-        )
+    validate_table_name(table_name, include_streams=False)
 
     try:
         with SessionLocal() as session:
@@ -981,12 +957,7 @@ async def get_table_columns(table_name: str) -> dict[str, Any]:
     """Get column names for a specific table"""
     logger.info("Fetching columns for table %s", table_name)
     # Validate table name to prevent SQL injection
-    valid_tables = ["epg_channels", "m3u_channels", "programs"]
-    if table_name not in valid_tables:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail=f"Invalid table name. Must be one of: {valid_tables}",
-        )
+    validate_table_name(table_name, include_streams=False)
 
     try:
         inspector = inspect(engine)
@@ -1336,36 +1307,82 @@ async def get_streams_filters() -> dict[str, Any]:
 
 
 @app.post(
-    "/api/streams/precompute-filters",
+    "/api/tables/{table_name}/precompute-filters",
     response_model=dict[str, str],
-    tags=["Streams"],
+    tags=["Database"],
     status_code=status.HTTP_200_OK,
 )
-async def precompute_streams_filters() -> dict[str, str]:
-    """Precompute filter values for streams view.
+async def precompute_table_filters(table_name: str) -> dict[str, str]:
+    """Precompute filter values for any table or view.
 
     This is typically called after data ingestion to update filter options.
+
+    Args:
+        table_name: Name of the table/view to precompute filters for
 
     Returns:
         Success message
 
     """
-    logger.info("Precomputing streams filter values")
+    logger.info("Precomputing filter values for table: %s", table_name)
+
+    validate_table_name(table_name)
 
     try:
         with SessionLocal() as session:
-            precompute_streams_filter_values(session)
+            precompute_filter_values(session, table_name)
 
             return {
-                "message": "Successfully precomputed streams filter values",
-                "table_name": "streams",
+                "message": f"Successfully precomputed filter values for {table_name}",
+                "table_name": table_name,
             }
 
-    except Exception as e:
-        logger.error("Error precomputing streams filter values: %s", e)
+    except Exception:
+        logger.exception("Error precomputing filter values for %s", table_name)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to precompute streams filter values: {e!s}",
+            detail=f"Failed to precompute filter values for {table_name}",
+        )
+
+
+@app.post(
+    "/api/tables/precompute-all-filters",
+    response_model=dict[str, Any],
+    tags=["Database"],
+    status_code=status.HTTP_200_OK,
+)
+async def precompute_all_table_filters() -> dict[str, Any]:
+    """Precompute filter values for all configured tables and views.
+
+    This is a convenience endpoint that precomputes filters for all tables at once.
+    Useful after bulk data ingestion.
+
+    Returns:
+        Success message with details of processed tables
+
+    """
+    logger.info("Precomputing filter values for all tables")
+
+    try:
+        with SessionLocal() as session:
+            from utils.filter_utils import (
+                precompute_all_filter_values,
+                FILTERABLE_COLUMNS_CONFIG,
+            )
+
+            precompute_all_filter_values(session)
+
+            return {
+                "message": "Successfully precomputed filter values for all tables",
+                "processed_tables": list(FILTERABLE_COLUMNS_CONFIG.keys()),
+                "success": True,
+            }
+
+    except Exception:
+        logger.exception("Error precomputing all filter values")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to precompute all filter values",
         )
 
 
@@ -1397,11 +1414,11 @@ async def start_scheduler_endpoint() -> dict[str, str]:
     try:
         start_scheduler()
         return {"message": "Scheduler started successfully", "status": "running"}
-    except Exception as e:
-        logger.error("Error starting scheduler: %s", e)
+    except Exception:
+        logger.exception("Error starting scheduler")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to start scheduler: {e!s}",
+            detail="Failed to start scheduler",
         )
 
 
@@ -1417,11 +1434,11 @@ async def stop_scheduler_endpoint() -> dict[str, str]:
     try:
         stop_scheduler()
         return {"message": "Scheduler stopped successfully", "status": "stopped"}
-    except Exception as e:
-        logger.error("Error stopping scheduler: %s", e)
+    except Exception:
+        logger.exception("Error stopping scheduler")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to stop scheduler: {e!s}",
+            detail="Failed to stop scheduler",
         )
 
 
@@ -1438,11 +1455,11 @@ async def restart_scheduler_endpoint() -> dict[str, str]:
         scheduler_manager = get_scheduler_manager()
         scheduler_manager.restart()
         return {"message": "Scheduler restarted successfully", "status": "running"}
-    except Exception as e:
-        logger.error("Error restarting scheduler: %s", e)
+    except Exception:
+        logger.exception("Error restarting scheduler")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to restart scheduler: {e!s}",
+            detail="Failed to restart scheduler",
         )
 
 
@@ -1483,11 +1500,11 @@ async def update_source_schedule(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error("Error updating schedule for %s: %s", source_name, e)
+    except Exception:
+        logger.exception("Error updating schedule for %s", source_name)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to update schedule: {e!s}",
+            detail="Failed to update schedule",
         )
 
 
@@ -1510,11 +1527,11 @@ async def delete_source_schedule(source_name: str) -> dict[str, str]:
             "source_name": source_name,
         }
 
-    except Exception as e:
-        logger.error("Error deleting schedule for %s: %s", source_name, e)
+    except Exception:
+        logger.exception("Error deleting schedule for %s", source_name)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to delete schedule: {e!s}",
+            detail="Failed to delete schedule",
         )
 
 
@@ -1545,11 +1562,11 @@ async def validate_scheduler_config(
             "enabled_sources": len([s for s in sources if s.enabled]),
         }
 
-    except Exception as e:
-        logger.error("Error validating scheduler configuration: %s", e)
+    except Exception:
+        logger.exception("Error validating scheduler configuration")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to validate configuration: {e!s}",
+            detail="Failed to validate configuration",
         )
 
 
@@ -1565,11 +1582,11 @@ async def get_rules_status() -> dict[str, Any]:
     try:
         status_info = get_ingestion_rules_status()
         return {"success": True, "data": status_info}
-    except Exception as e:
-        logger.error("Error getting rules status: %s", e)
+    except Exception:
+        logger.exception("Error getting rules status")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get rules status: {e!s}",
+            detail="Failed to get rules status",
         )
 
 
@@ -1590,11 +1607,11 @@ async def get_rules() -> dict[str, Any]:
             "rules": rules,
             "source_assignments": assignments,
         }
-    except Exception as e:
-        logger.error("Error getting rules: %s", e)
+    except Exception:
+        logger.exception("Error getting rules")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get rules: {e!s}",
+            detail="Failed to get rules",
         )
 
 
@@ -1616,11 +1633,11 @@ async def save_rules_only(rules_data: list[dict[str, Any]]) -> dict[str, Any]:
         logger.info("Successfully saved rules")
         return result
 
-    except Exception as e:
-        logger.error("Error saving rules: %s", e)
+    except Exception:
+        logger.exception("Error saving rules")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to save rules: {e!s}",
+            detail="Failed to save rules",
         )
 
 
@@ -1636,11 +1653,11 @@ async def get_assignments() -> dict[str, Any]:
     try:
         assignments = load_assignments()
         return {"success": True, "data": assignments}
-    except Exception as e:
-        logger.error("Error getting assignments: %s", e)
+    except Exception:
+        logger.exception("Error getting assignments")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get assignments: {e!s}",
+            detail="Failed to get assignments",
         )
 
 
@@ -1708,11 +1725,11 @@ async def apply_assignment(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error("Error applying assignment: %s", e)
+    except Exception:
+        logger.exception("Error applying assignment")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to apply assignment: {e!s}",
+            detail="Failed to apply assignment",
         )
 
 
@@ -1823,11 +1840,11 @@ async def unapply_assignment(
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error("Error unapplying assignment: %s", e)
+    except Exception:
+        logger.exception("Error unapplying assignment")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to unapply assignment: {e!s}",
+            detail="Failed to unapply assignment",
         )
 
 
@@ -1851,11 +1868,11 @@ async def save_assignments_only(
         logger.info("Successfully saved assignments")
         return result
 
-    except Exception as e:
-        logger.error("Error saving assignments: %s", e)
+    except Exception:
+        logger.exception("Error saving assignments")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to save assignments: {e!s}",
+            detail="Failed to save assignments",
         )
 
 
@@ -1910,11 +1927,11 @@ async def validate_rules(config_data: dict[str, Any]) -> dict[str, Any]:
             "errors": errors,
         }
 
-    except Exception as e:
-        logger.error("Error validating rules: %s", e)
+    except Exception:
+        logger.exception("Error validating rules")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to validate rules: {e!s}",
+            detail="Failed to validate rules",
         )
 
 
@@ -1950,11 +1967,11 @@ async def get_rules_logs() -> dict[str, Any]:
 
         return {"success": True, "data": log_files}
 
-    except Exception as e:
-        logger.error("Error getting rules logs: %s", e)
+    except Exception:
+        logger.exception("Error getting rules logs")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get rules logs: {e!s}",
+            detail="Failed to get rules logs",
         )
 
 
@@ -1989,11 +2006,11 @@ async def get_rules_log_content(filename: str) -> dict[str, Any]:
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error("Error getting rules log content: %s", e)
+    except Exception:
+        logger.exception("Error getting rules log content")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get log content: {e!s}",
+            detail="Failed to get log content",
         )
 
 
@@ -2051,11 +2068,11 @@ async def apply_rule_assignments(request: dict[str, Any] = Body(...)) -> dict[st
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error("Error applying rule assignments: %s", e)
+    except Exception:
+        logger.exception("Error applying rule assignments")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to apply rule assignments: {e!s}",
+            detail="Failed to apply rule assignments",
         )
 
 
@@ -2125,11 +2142,11 @@ async def apply_single_rule(request: dict[str, Any] = Body(...)) -> dict[str, An
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error("Error applying single rule: %s", e)
+    except Exception:
+        logger.exception("Error applying single rule")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to apply single rule: {e!s}",
+            detail="Failed to apply single rule",
         )
 
 
@@ -2184,11 +2201,11 @@ async def apply_rules_to_source(request: dict[str, Any] = Body(...)) -> dict[str
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error("Error applying rules to source: %s", e)
+    except Exception:
+        logger.exception("Error applying rules to source")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to apply rules to source: {e!s}",
+            detail="Failed to apply rules to source",
         )
 
 
@@ -2248,11 +2265,11 @@ async def unapply_rules(request: dict[str, Any] = Body(...)) -> dict[str, Any]:
 
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error("Error unapplying rules: %s", e)
+    except Exception:
+        logger.exception("Error unapplying rules")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to unapply rules: {e!s}",
+            detail="Failed to unapply rules",
         )
 
 
@@ -2271,11 +2288,11 @@ async def get_job_queue_status() -> dict[str, Any]:
     try:
         status = await get_queue_status()
         return {"success": True, "data": status}
-    except Exception as e:
-        logger.error("Error getting job queue status: %s", e)
+    except Exception:
+        logger.exception("Error getting job queue status")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get job queue status: {e!s}",
+            detail="Failed to get job queue status",
         )
 
 
@@ -2297,11 +2314,11 @@ async def get_job_status_by_id(job_id: str) -> dict[str, Any]:
         return {"success": True, "data": job_status}
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error("Error getting job status: %s", e)
+    except Exception:
+        logger.exception("Error getting job status")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get job status: {e!s}",
+            detail="Failed to get job status",
         )
 
 
@@ -2324,11 +2341,11 @@ async def cancel_job_by_id(job_id: str) -> dict[str, Any]:
         return {"success": True, "message": f"Job {job_id} cancelled successfully"}
     except HTTPException:
         raise
-    except Exception as e:
-        logger.error("Error cancelling job: %s", e)
+    except Exception:
+        logger.exception("Error cancelling job")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to cancel job: {e!s}",
+            detail="Failed to cancel job",
         )
 
 
@@ -2363,9 +2380,9 @@ async def get_global_m3u():
                 "Cache-Control": "no-cache",
             },
         )
-    except Exception as e:
-        logger.error("Error generating global M3U: %s", e)
-        raise HTTPException(status_code=500, detail=f"Error generating M3U: {e!s}")
+    except Exception:
+        logger.exception("Error generating global M3U")
+        raise HTTPException(status_code=500, detail="Error generating M3U")
 
 
 @app.get("/api/iseetv.xml", tags=["File Generation"])
@@ -2396,9 +2413,9 @@ async def get_global_epg():
                 "Cache-Control": "no-cache",
             },
         )
-    except Exception as e:
-        logger.error("Error generating global EPG: %s", e)
-        raise HTTPException(status_code=500, detail=f"Error generating EPG: {e!s}")
+    except Exception:
+        logger.exception("Error generating global EPG")
+        raise HTTPException(status_code=500, detail="Error generating EPG")
 
 
 @app.get("/api/{source}.m3u", tags=["File Generation"])
@@ -2434,11 +2451,11 @@ async def get_source_m3u(source: str):
                 "Cache-Control": "no-cache",
             },
         )
-    except Exception as e:
-        logger.error("Error generating M3U for source %s: %s", source, e)
+    except Exception:
+        logger.exception("Error generating M3U for source %s", source)
         raise HTTPException(
             status_code=500,
-            detail=f"Error generating M3U for source {source}: {e!s}",
+            detail=f"Error generating M3U for source {source}",
         )
 
 
@@ -2475,11 +2492,11 @@ async def get_source_epg(source: str):
                 "Cache-Control": "no-cache",
             },
         )
-    except Exception as e:
-        logger.error("Error generating EPG for source %s: %s", source, e)
+    except Exception:
+        logger.exception("Error generating EPG for source %s", source)
         raise HTTPException(
             status_code=500,
-            detail=f"Error generating EPG for source {source}: {e!s}",
+            detail=f"Error generating EPG for source {source}",
         )
 
 
@@ -2493,13 +2510,13 @@ async def startup_event():
     try:
         # Initialize job queue first
         await initialize_job_queue()
-        logger.info("Job queue initialized successfully")
+        logger.debug("Job queue initialized successfully")
 
         # Start the scheduler
         start_scheduler()
         logger.debug("Scheduler started successfully on application startup")
-    except Exception as e:
-        logger.error("Failed to start job queue and scheduler on startup: %s", e)
+    except Exception:
+        logger.exception("Failed to start job queue and scheduler on startup")
         # Don't fail the entire application if startup fails
 
 
@@ -2510,13 +2527,13 @@ async def shutdown_event():
     try:
         # Stop scheduler first
         stop_scheduler()
-        logger.info("Scheduler stopped successfully")
+        logger.debug("Scheduler stopped successfully")
 
         # Shutdown job queue
         await shutdown_job_queue()
-        logger.info("Job queue shutdown successfully on application shutdown")
-    except Exception as e:
-        logger.error("Error stopping scheduler and job queue on shutdown: %s", e)
+        logger.debug("Job queue shutdown successfully on application shutdown")
+    except Exception:
+        logger.exception("Error stopping scheduler and job queue on shutdown")
 
 
 if __name__ == "__main__":

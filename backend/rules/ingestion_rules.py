@@ -167,12 +167,12 @@ class IngestionRulesEngine:
                     else:
                         rules_list = rules_data.get("rules", [])
 
-                    logger.info("Found %s rules in configuration", len(rules_list))
+                    logger.debug("Found %s rules in configuration", len(rules_list))
                     for rule_data in rules_list:
                         try:
                             rule = IngestionRule(**rule_data)
                             rules.append(rule)
-                            logger.info("Loaded rule: %s", rule.name)
+                            logger.debug("Loaded rule: %s", rule.name)
                         except Exception:
                             logger.exception("Failed to parse rule %s", rule_data)
                             continue
@@ -192,7 +192,7 @@ class IngestionRulesEngine:
                             "source_assignments", []
                         )
 
-                    logger.info(
+                    logger.debug(
                         "Found %s source assignments in configuration",
                         len(assignments_list),
                     )
@@ -200,7 +200,7 @@ class IngestionRulesEngine:
                         try:
                             assignment = SourceRuleAssignment(**assignment_data)
                             assignments.append(assignment)
-                            logger.info(
+                            logger.debug(
                                 "Loaded assignment for source: %s",
                                 assignment.source_name,
                             )

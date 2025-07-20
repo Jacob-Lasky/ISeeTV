@@ -38,7 +38,7 @@ class PostLoadRulesEngine:
 
     def apply_rules_to_table(self, table_name: str, source_name: str) -> dict[str, Any]:
         """Apply rules to all records in a specific table for a source"""
-        logger.info(
+        logger.debug(
             "Applying post-load rules to %s for source %s",
             table_name,
             source_name,
@@ -139,7 +139,7 @@ class PostLoadRulesEngine:
         table_name: str,
     ) -> dict[str, Any]:
         """Apply rules to records using vectorized operations"""
-        logger.debug("Applying rules to records using vectorized operations")
+        logger.debug("Applying rules to records")
         try:
             # Create DataFrame for vectorized processing
             df = pd.DataFrame(records)
@@ -260,7 +260,7 @@ class PostLoadRulesEngine:
                     )
 
                 session.commit()
-                logger.info(
+                logger.debug(
                     "Updated %s records in %s with filter reasons",
                     len(records),
                     table_name,
@@ -741,7 +741,7 @@ post_load_engine = PostLoadRulesEngine()
 
 def apply_post_load_rules(table_name: str, source_name: str = None) -> dict[str, Any]:
     """Apply post-load rules to a table (atomic operation)"""
-    logger.info("Applying post-load rules to %s", table_name)
+    logger.debug("Applying post-load rules to %s", table_name)
     if source_name:
         return post_load_engine.apply_rules_to_table(table_name, source_name)
     return post_load_engine.apply_rules_to_all_sources(table_name)

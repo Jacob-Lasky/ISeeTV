@@ -1,7 +1,7 @@
 """Utility functions for precomputing and managing filter values."""
 
 from collections import defaultdict
-from typing import Any
+from typing import Any, Dict, List
 
 from sqlalchemy import text
 from sqlalchemy.orm import Session
@@ -10,6 +10,148 @@ from common.log_utils import get_logger
 from models.db_models import FilterValueTable
 
 logger = get_logger(__name__)
+
+FILTERABLE_COLUMNS_CONFIG = {
+    "epg_channels": ["source", "filter_reasons"],
+    "m3u_channels": ["source", "group", "stream_mode", "filter_reasons"],
+    "programs": ["source", "filter_reasons"],
+    "streams": ["source", "group", "stream_mode", "filter_reasons"],
+}
+
+# Special query configurations for complex filter types
+SPECIAL_FILTER_QUERIES = {
+    "streams": {
+        "source": """
+            SELECT source as value, COUNT(*) as count
+            FROM m3u_channels
+            WHERE source IS NOT NULL AND source != ''
+            GROUP BY source
+            ORDER BY source
+        """,
+        "group": """
+            SELECT `group` as value, COUNT(*) as count
+            FROM m3u_channels
+            WHERE `group` IS NOT NULL AND `group` != ''
+            GROUP BY `group`
+            ORDER BY `group`
+        """,
+        "stream_mode": """
+            SELECT stream_mode as value, COUNT(*) as count
+            FROM m3u_channels
+            WHERE stream_mode IS NOT NULL AND stream_mode != ''
+            GROUP BY stream_mode
+            ORDER BY stream_mode
+        """,
+        "filter_reasons": """
+            WITH filter_values AS (
+                SELECT 
+                    CASE 
+                        WHEN filter_reasons IS NULL OR filter_reasons = '' OR filter_reasons = '[]' THEN 'Passed'
+                        ELSE TRIM(REPLACE(REPLACE(filter_reasons, '["', ''), '"]', ''))
+                    END as value
+                FROM m3u_channels
+            )
+            SELECT 
+                value,
+                COUNT(*) as count
+            FROM filter_values
+            WHERE value IS NOT NULL
+            GROUP BY value
+            ORDER BY value
+        """,
+    }
+}
+
+
+def _get_filter_query(table_name: str, column_name: str) -> str:
+    """Get the appropriate SQL query for a specific table/column combination.
+
+    Args:
+        table_name: Name of the table
+        column_name: Name of the column
+
+    Returns:
+        SQL query string
+    """
+    # Check if there's a special query for this table/column combination
+    if (
+        table_name in SPECIAL_FILTER_QUERIES
+        and column_name in SPECIAL_FILTER_QUERIES[table_name]
+    ):
+        return SPECIAL_FILTER_QUERIES[table_name][column_name]
+
+    # Handle filter_reasons as a special case for regular tables
+    if column_name == "filter_reasons":
+        return f"""
+            WITH filter_values AS (
+                SELECT 
+                    CASE 
+                        WHEN filter_reasons IS NULL OR filter_reasons = '' OR filter_reasons = '[]' THEN 'Passed'
+                        ELSE TRIM(REPLACE(REPLACE(filter_reasons, '["', ''), '"]', ''))
+                    END as value
+                FROM {table_name}
+            )
+            SELECT 
+                value,
+                COUNT(*) as count
+            FROM filter_values
+            WHERE value IS NOT NULL
+            GROUP BY value
+            ORDER BY value
+        """
+
+    # Standard column query
+    safe_col = f"`{column_name}`"
+    return f"""
+        SELECT {safe_col} as value, COUNT(*) as count
+        FROM {table_name}
+        WHERE {safe_col} IS NOT NULL AND {safe_col} != ''
+        GROUP BY {safe_col}
+        ORDER BY {safe_col}
+    """
+
+
+def _precompute_column_values(
+    session: Session, table_name: str, column_name: str
+) -> List[FilterValueTable]:
+    """Precompute filter values for a specific column.
+
+    Args:
+        session: SQLAlchemy session
+        table_name: Name of the table
+        column_name: Name of the column
+
+    Returns:
+        List of FilterValueTable objects
+    """
+    try:
+        query = _get_filter_query(table_name, column_name)
+        result = session.execute(text(query))
+
+        filter_values = [
+            FilterValueTable(
+                table_name=table_name,
+                column_name=column_name,
+                value=row.value,
+                count=row.count,
+            )
+            for row in result
+            if row.value  # Skip empty values
+        ]
+
+        logger.debug(
+            "Computed %s filter values for %s.%s",
+            len(filter_values),
+            table_name,
+            column_name,
+        )
+        return filter_values
+
+    except Exception:
+        logger.exception(
+            "Error computing filter values for %s.%s", table_name, column_name
+        )
+        raise
 
 
 def precompute_filter_values(session: Session, table_name: str) -> None:
@@ -20,106 +162,60 @@ def precompute_filter_values(session: Session, table_name: str) -> None:
         table_name: Name of the table to process
 
     """
-    logger.info("Precomputing filter values for table: %s", table_name)
-    # Define filterable columns for each table
-    filterable_columns = {
-        "epg_channels": ["source", "filter_reasons"],
-        "m3u_channels": ["source", "group", "stream_mode", "filter_reasons"],
-        "programs": ["source", "filter_reasons"],
-    }
-
-    if table_name not in filterable_columns:
+    if table_name not in FILTERABLE_COLUMNS_CONFIG:
         logger.warning("No filterable columns defined for table: %s", table_name)
         return
 
-    logger.info("Precomputing filter values for table: %s", table_name)
+    logger.debug("Precomputing filter values for table: %s", table_name)
 
-    # Clear existing filter values for this table
-    session.query(FilterValueTable).filter(
-        FilterValueTable.table_name == table_name
-    ).delete()
+    try:
+        # Clear existing filter values for this table
+        session.query(FilterValueTable).filter(
+            FilterValueTable.table_name == table_name
+        ).delete()
 
-    # Process each filterable column
-    for column_name in filterable_columns[table_name]:
+        # Process each filterable column
+        all_filter_values = []
+        for column_name in FILTERABLE_COLUMNS_CONFIG[table_name]:
+            column_values = _precompute_column_values(session, table_name, column_name)
+            all_filter_values.extend(column_values)
+
+        # Add all filter values in batch
+        if all_filter_values:
+            session.add_all(all_filter_values)
+            session.commit()
+            logger.info(
+                "Successfully precomputed %s filter values for table: %s",
+                len(all_filter_values),
+                table_name,
+            )
+        else:
+            logger.warning("No filter values found for table: %s", table_name)
+
+    except Exception:
+        logger.exception("Error precomputing filter values for table: %s", table_name)
+        session.rollback()
+        raise
+
+
+def precompute_all_filter_values(session: Session) -> None:
+    """Precompute filter values for all configured tables and views.
+
+    Args:
+        session: SQLAlchemy session
+    """
+    logger.info("Precomputing filter values for all tables")
+
+    for table_name in FILTERABLE_COLUMNS_CONFIG.keys():
         try:
-            # Handle filter_reasons as a special case (JSON array)
-            if column_name == "filter_reasons":
-                # Query to extract individual filter reasons from JSON array
-                # Use json_each with proper table aliases to avoid ambiguous column names
-                query = text(
-                    f"""
-                    WITH expanded_reasons AS (
-                        SELECT 
-                            t.id as table_id,
-                            j.value as filter_reasons
-                        FROM {table_name} t, json_each(t.filter_reasons) j
-                        WHERE t.filter_reasons != '[]'
-                    )
-                    SELECT 
-                        filter_reasons as value,
-                        COUNT(*) as count
-                    FROM expanded_reasons
-                    WHERE filter_reasons IS NOT NULL
-                    GROUP BY filter_reasons
-                    
-                    UNION ALL
-                    
-                    SELECT 'Passed' as value, COUNT(*) as count
-                    FROM {table_name}
-                    WHERE filter_reasons = '[]'
-                    
-                    ORDER BY value
-                """
-                )
-            else:
-                # Regular column handling
-                # Escape column names with backticks to handle reserved keywords like 'group'
-                query = text(
-                    f"""
-                    SELECT `{column_name}` as value, COUNT(*) as count
-                    FROM {table_name}
-                    WHERE `{column_name}` IS NOT NULL AND `{column_name}` != ''
-                    GROUP BY `{column_name}`
-                    ORDER BY `{column_name}`
-                """
-                )
-
-            result = session.execute(query)
-
-            # Insert filter values
-            filter_values = [
-                FilterValueTable(
-                    table_name=table_name,
-                    column_name=column_name,
-                    value=row.value,
-                    count=row.count,
-                )
-                for row in result
-                if row.value and row.count > 0
-            ]
-
-            if filter_values:
-                session.add_all(filter_values)
-                logger.info(
-                    "Added %s unique values for %s.%s",
-                    len(filter_values),
-                    table_name,
-                    column_name,
-                )
-            else:
-                logger.warning(
-                    "No unique values found for %s.%s", table_name, column_name
-                )
-
+            precompute_filter_values(session, table_name)
         except Exception:
             logger.exception(
-                "Error precomputing filter values for %s.%s", table_name, column_name
+                "Failed to precompute filter values for table: %s", table_name
             )
-            raise
+            # Continue with other tables even if one fails
 
-    # Commit the changes
-    session.commit()
-    logger.info("Successfully precomputed filter values for table: %s", table_name)
+    logger.info("Completed precomputing filter values for all tables")
 
 
 def get_filter_values(
@@ -238,7 +334,7 @@ def get_table_filter_statistics(session: Session, table_name: str) -> dict[str, 
 def get_table_filter_statistics_by_source(
     session: Session, table_name: str, source: str
 ) -> dict[str, int]:
-    logger.info(
+    logger.debug(
         "Getting filter statistics for table: %s and source: %s", table_name, source
     )
     try:

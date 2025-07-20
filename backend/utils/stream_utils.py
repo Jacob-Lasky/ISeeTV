@@ -421,7 +421,7 @@ def get_stream_programs_query(
         Tuple of (stream_programs, total_count)
 
     """
-    logger.info(
+    logger.debug(
         "Executing stream programs query: channel_id=%s, source=%s",
         channel_id,
         source,
@@ -567,82 +567,6 @@ def get_stream_programs_query(
 
     except Exception:
         logger.exception("Error executing stream programs query")
-        raise
-
-
-def precompute_streams_filter_values(session: Session) -> None:
-    """Precompute filter values for the streams view.
-
-    Args:
-        session: SQLAlchemy session
-
-    """
-    logger.info("Precomputing filter values for streams view")
-
-    try:
-        # Define filterable columns for streams view
-        streams_filterable_columns = ["source", "group"]
-
-        session.query(FilterValueTable).filter(
-            FilterValueTable.table_name == "streams"
-        ).delete()
-
-        # Precompute source values from M3U channels
-        source_query = text(
-            """
-            SELECT source as value, COUNT(*) as count
-            FROM m3u_channels
-            WHERE source IS NOT NULL AND source != ''
-            GROUP BY source
-            ORDER BY source
-        """
-        )
-
-        source_result = session.execute(source_query)
-        source_values = [
-            FilterValueTable(
-                table_name="streams",
-                column_name="source",
-                value=row.value,
-                count=row.count,
-            )
-            for row in source_result
-        ]
-
-        # Precompute group values from M3U channels
-        group_query = text(
-            """
-            SELECT `group` as value, COUNT(*) as count
-            FROM m3u_channels
-            WHERE `group` IS NOT NULL AND `group` != ''
-            GROUP BY `group`
-            ORDER BY `group`
-        """
-        )
-
-        group_result = session.execute(group_query)
-        group_values = [
-            FilterValueTable(
-                table_name="streams",
-                column_name="group",
-                value=row.value,
-                count=row.count,
-            )
-            for row in group_result
-        ]
-
-        # Add all filter values
-        all_values = source_values + group_values
-        if all_values:
-            session.add_all(all_values)
-            session.commit()
-            logger.info("Added %s filter values for streams view", len(all_values))
-        else:
-            logger.warning("No filter values found for streams view")
-
-    except Exception:
-        logger.exception("Error precomputing streams filter values")
-        session.rollback()
         raise
 
 

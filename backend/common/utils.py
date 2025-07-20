@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from common.log_utils import get_logger
 from common.state import get_progress
 from models.models import DownloadProgress
+from utils.filter_utils import FILTERABLE_COLUMNS_CONFIG
 
 logger = get_logger(__name__)
 
@@ -16,7 +17,7 @@ def create_task_id(
     task_type: Literal["download", "ingest"],
 ):
     """Create a unique task ID for a source and file type"""
-    logger.info("Creating task for %s, %s, %s", source_name, file_type, task_type)
+    logger.debug("Creating task for %s, %s, %s", source_name, file_type, task_type)
     timestamp = dt.datetime.now().strftime("%Y%m%d_%H%M%S")
     return f"{task_type}_{file_type}_{source_name}_{timestamp}"
 
@@ -93,3 +94,24 @@ def format_table_response(
             "source_filter": source_filter,
         },
     }
+
+
+def validate_table_name(table_name: str, include_streams: bool = True) -> None:
+    """Unified table name validation to prevent SQL injection.
+
+    Args:
+        table_name: Name of the table to validate
+        include_streams: Whether to include 'streams' as a valid table
+
+    Raises:
+        HTTPException: If table name is invalid
+    """
+    valid_tables = list(FILTERABLE_COLUMNS_CONFIG.keys())
+    if not include_streams:
+        valid_tables = [t for t in valid_tables if t != "streams"]
+
+    if table_name not in valid_tables:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"Invalid table name. Must be one of: {valid_tables}",
+        )

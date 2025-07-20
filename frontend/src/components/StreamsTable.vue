@@ -367,32 +367,39 @@
                 :filterField="'filter_reasons'"
             >
                 <template #body="{ data }">
-                    <div v-if="data.filter_reasons" class="filter-reason">
+                    <div
+                        v-if="
+                            data.filter_reasons && data.filter_reasons !== '[]'
+                        "
+                        class="filter-reason"
+                    >
                         <Tag
-                            :value="
-                                data.filter_reasons.includes('Blacklisted')
-                                    ? 'Filtered'
-                                    : 'Not Whitelisted'
-                            "
-                            :severity="
-                                data.filter_reasons.includes('Blacklisted')
-                                    ? 'danger'
-                                    : 'warn'
-                            "
+                            :value="getFilterReasonDisplay(data.filter_reasons)"
+                            severity="danger"
                         />
                         <div
-                            v-tooltip="data.filter_reasons"
+                            v-if="
+                                getFilterReasonDisplay(data.filter_reasons)
+                                    .length > 20
+                            "
+                            v-tooltip="
+                                getFilterReasonDisplay(data.filter_reasons)
+                            "
                             class="filter-detail"
                         >
                             {{
-                                data.filter_reasons.length > 50
-                                    ? data.filter_reasons.substring(0, 50) +
-                                      "..."
-                                    : data.filter_reasons
+                                getFilterReasonDisplay(data.filter_reasons)
+                                    .length > 30
+                                    ? getFilterReasonDisplay(
+                                          data.filter_reasons
+                                      ).substring(0, 30) + "..."
+                                    : getFilterReasonDisplay(
+                                          data.filter_reasons
+                                      )
                             }}
                         </div>
                     </div>
-                    <Tag v-else value="Active" severity="success" />
+                    <Tag v-else value="Passed" severity="success" />
                 </template>
                 <template #filter="{ filterModel, filterCallback }">
                     <Select
@@ -665,12 +672,10 @@ const groupOptions = ref<{ label: string; value: string }[]>([])
 // Column filter options (for DataTable column filters)
 const sourceFilterOptions = ref<string[]>([])
 const groupFilterOptions = ref<string[]>([])
-const streamModeFilterOptions = ref<string[]>(["live", "on_demand"])
-const filterStatusOptions = ref<{ label: string; value: string }[]>([
-    { label: "Active", value: "null" },
-    { label: "Filtered", value: "filtered" },
-    { label: "Not Whitelisted", value: "not_whitelisted" },
-])
+const streamModeFilterOptions = ref<string[]>([])
+const filterReasonOptions = ref<string[]>([])
+// Filter Status options will be populated from precomputed filter reasons
+const filterStatusOptions = ref<{ label: string; value: string }[]>([])
 
 // PrimeVue DataTable filters
 const filters = ref({
@@ -680,7 +685,7 @@ const filters = ref({
     source: { value: null, matchMode: FilterMatchMode.CONTAINS },
     group: { value: null, matchMode: FilterMatchMode.CONTAINS },
     stream_mode: { value: null, matchMode: FilterMatchMode.CONTAINS },
-    filter_reasons: { value: "null", matchMode: FilterMatchMode.EQUALS }, // Default to show only active (non-filtered) records
+    filter_reasons: { value: null, matchMode: FilterMatchMode.EQUALS }, // Default to show all records
 })
 const globalFilterFields = ref<string[]>([
     "name",
@@ -816,6 +821,26 @@ const loadStreams = async (resetPage = false): Promise<void> => {
     }
 }
 
+// Helper function to parse and display filter reasons
+const getFilterReasonDisplay = (filterReasons: string): string => {
+    if (!filterReasons || filterReasons === "[]") {
+        return "Passed"
+    }
+
+    try {
+        // Parse JSON array and extract filter names
+        const reasons = JSON.parse(filterReasons)
+        if (Array.isArray(reasons) && reasons.length > 0) {
+            return reasons.join(", ")
+        }
+    } catch (e) {
+        // If parsing fails, return the raw string
+        console.warn("Failed to parse filter reasons:", filterReasons)
+    }
+
+    return filterReasons
+}
+
 const updateFilterOptions = (filters: Record<string, FilterValue[]>): void => {
     console.log(
         "Updating filter options with",
@@ -823,14 +848,12 @@ const updateFilterOptions = (filters: Record<string, FilterValue[]>): void => {
         "filter types"
     )
 
+    // Update source filter options
     if (filters.source) {
-        // Update header dropdown options
         sourceOptions.value = filters.source.map((f) => ({
             label: `${f.value} (${f.count})`,
             value: f.value,
         }))
-
-        // Update column filter options
         sourceFilterOptions.value = filters.source.map((f) => f.value)
         console.log(
             "Updated sourceFilterOptions:",
@@ -839,29 +862,57 @@ const updateFilterOptions = (filters: Record<string, FilterValue[]>): void => {
         )
     }
 
+    // Update group filter options
     if (filters.group) {
-        // Update header dropdown options
         groupOptions.value = filters.group.map((f) => ({
             label: `${f.value} (${f.count})`,
             value: f.value,
         }))
-
-        // Update column filter options
         groupFilterOptions.value = filters.group.map((f) => f.value)
         console.log(
             "Updated groupFilterOptions:",
             groupFilterOptions.value.length,
             "options"
         )
-    } else {
-        console.log("No group filters found in API response")
+    }
+
+    // Update stream mode filter options
+    if (filters.stream_mode) {
+        streamModeFilterOptions.value = filters.stream_mode.map((f) => f.value)
+        console.log(
+            "Updated streamModeFilterOptions:",
+            streamModeFilterOptions.value.length,
+            "options"
+        )
+    }
+
+    // Update filter reasons options
+    if (filters.filter_reasons) {
+        filterReasonOptions.value = filters.filter_reasons.map((f) => f.value)
+
+        // Update filter status options (same as filter reasons for the dropdown)
+        filterStatusOptions.value = filters.filter_reasons.map((f) => ({
+            label: `${f.value} (${f.count})`,
+            value: f.value,
+        }))
+
+        console.log(
+            "Updated filterReasonOptions:",
+            filterReasonOptions.value.length,
+            "options"
+        )
+        console.log(
+            "Updated filterStatusOptions:",
+            filterStatusOptions.value.length,
+            "options"
+        )
     }
 }
 
 const precomputeFilterValues = async (): Promise<void> => {
     try {
         console.log("Precomputing streams filter values...")
-        const response = await fetch("/api/streams/precompute-filters", {
+        const response = await fetch("/api/tables/streams/precompute-filters", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
