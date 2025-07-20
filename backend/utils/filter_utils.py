@@ -141,6 +141,12 @@ def _precompute_column_values(
             if row.value  # Skip empty values
         ]
 
+    except Exception:
+        logger.exception(
+            "Error computing filter values for %s.%s", table_name, column_name
+        )
+        raise
+    else:
         logger.debug(
             "Computed %s filter values for %s.%s",
             len(filter_values),
@@ -148,12 +154,6 @@ def _precompute_column_values(
             column_name,
         )
         return filter_values
-
-    except Exception:
-        logger.exception(
-            "Error computing filter values for %s.%s", table_name, column_name
-        )
-        raise
 
 
 def precompute_filter_values(session: Session, table_name: str) -> None:
@@ -282,11 +282,11 @@ def get_all_filter_values(
             if fv.column_name not in result:
                 result[fv.column_name] = []
             result[fv.column_name].append({"value": fv.value, "count": fv.count})
-
-        return result
     except Exception:
         logger.exception("Error getting all filter values for %s", table_name)
         return {}
+    else:
+        return result
 
 
 def get_table_filter_statistics(session: Session, table_name: str) -> dict[str, int]:
@@ -325,13 +325,14 @@ def get_table_filter_statistics(session: Session, table_name: str) -> dict[str, 
             count = row.count
             filter_stats[source][reason] = count
 
-        logger.info("Filter statistics for %s: %s", table_name, dict(filter_stats))
-
-        return filter_stats
-
     except Exception:
         logger.exception("Error getting filter statistics for table %s", table_name)
         return {}
+
+    else:
+        logger.info("Filter statistics for %s: %s", table_name, dict(filter_stats))
+
+        return filter_stats
 
 
 def get_table_filter_statistics_by_source(
@@ -387,6 +388,15 @@ def get_table_filter_statistics_by_source(
             total += count
             filter_stats[reason] = count
 
+    except Exception:
+        logger.exception(
+            "Error getting filter statistics for table %s and source %s",
+            table_name,
+            source,
+        )
+        return {}
+
+    else:
         logger.info("Filter statistics for %s: %s", table_name, dict(filter_stats))
 
         return {
@@ -395,11 +405,3 @@ def get_table_filter_statistics_by_source(
             "all_not_passed": all_not_passed,
             "total": total,
         }
-
-    except Exception:
-        logger.exception(
-            "Error getting filter statistics for table %s and source %s",
-            table_name,
-            source,
-        )
-        return {}

@@ -279,10 +279,11 @@ def generate_epg_content(
         # Remove the first line (XML declaration from minidom) and add our own
         lines = pretty_xml.split("\n")[1:]
         pretty_xml = xml_declaration + "\n".join(lines)
-        return pretty_xml
     except Exception:
         # Fallback to non-pretty XML if pretty printing fails
         return xml_declaration + xml_str
+    else:
+        return pretty_xml
 
 
 def _format_epg_datetime(dt_str: str) -> str:
@@ -297,11 +298,7 @@ def _format_epg_datetime(dt_str: str) -> str:
     """
     logger.debug("Formatting EPG datetime...")
     try:
-        # Parse the datetime string
-        if dt_str.endswith("Z"):
-            dt_str = dt_str[:-1] + "+00:00"
-
-        dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(dt_str)
 
         # Format as YYYYMMDDHHMMSS +0000
         return dt.strftime("%Y%m%d%H%M%S +0000")
@@ -322,10 +319,7 @@ def _datetime_to_timestamp(dt_str: str) -> int:
     """
     logger.debug("Converting datetime to timestamp...")
     try:
-        if dt_str.endswith("Z"):
-            dt_str = dt_str[:-1] + "+00:00"
-
-        dt = datetime.fromisoformat(dt_str.replace("Z", "+00:00"))
+        dt = datetime.fromisoformat(dt_str)
         return int(dt.timestamp())
     except Exception:
         # Fallback to current timestamp if parsing fails

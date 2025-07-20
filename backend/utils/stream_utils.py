@@ -152,12 +152,13 @@ def get_filter_view_counts(
             "all": row.all_count or 0,
         }
 
-        logger.info("Filter view counts: %s", counts)
-        return counts
-
     except Exception:
         logger.exception("Error getting filter view counts")
         return {"normal": 0, "inverse": 0, "all": 0}
+
+    else:
+        logger.info("Filter view counts: %s", counts)
+        return counts
 
 
 def get_streams_query(
@@ -362,21 +363,19 @@ def get_streams_query(
                 display_name=row.display_name,
                 icon_url=row.icon_url,
                 created_at=(
-                    datetime.fromisoformat(row.created_at.replace("Z", "+00:00"))
+                    datetime.fromisoformat(row.created_at)
                     if isinstance(row.created_at, str)
                     else row.created_at
                 ),
                 updated_at=(
-                    datetime.fromisoformat(row.updated_at.replace("Z", "+00:00"))
+                    datetime.fromisoformat(row.updated_at)
                     if isinstance(row.updated_at, str)
                     else row.updated_at
                 ),
                 program_count=row.program_count or 0,
                 next_program_title=row.next_program_title,
                 next_program_start=(
-                    datetime.fromisoformat(
-                        row.next_program_start.replace("Z", "+00:00")
-                    )
+                    datetime.fromisoformat(row.next_program_start)
                     if row.next_program_start
                     and isinstance(row.next_program_start, str)
                     else row.next_program_start
@@ -384,12 +383,13 @@ def get_streams_query(
             )
             streams.append(stream)
 
-        logger.info("Retrieved %s streams out of %s total", len(streams), total_count)
-        return streams, total_count
-
     except Exception:
         logger.exception("Error executing streams query")
         raise
+
+    else:
+        logger.info("Retrieved %s streams out of %s total", len(streams), total_count)
+        return streams, total_count
 
 
 def get_stream_programs_query(
@@ -526,24 +526,24 @@ def get_stream_programs_query(
                 program_uid=row.program_uid,
                 channel_id=row.channel_id,
                 start_time=(
-                    datetime.fromisoformat(row.start_time.replace("Z", "+00:00"))
+                    datetime.fromisoformat(row.start_time)
                     if isinstance(row.start_time, str)
                     else row.start_time
                 ),
                 end_time=(
-                    datetime.fromisoformat(row.end_time.replace("Z", "+00:00"))
+                    datetime.fromisoformat(row.end_time)
                     if isinstance(row.end_time, str)
                     else row.end_time
                 ),
                 title=row.title,
                 description=row.description,
                 created_at=(
-                    datetime.fromisoformat(row.created_at.replace("Z", "+00:00"))
+                    datetime.fromisoformat(row.created_at)
                     if isinstance(row.created_at, str)
                     else row.created_at
                 ),
                 updated_at=(
-                    datetime.fromisoformat(row.updated_at.replace("Z", "+00:00"))
+                    datetime.fromisoformat(row.updated_at)
                     if isinstance(row.updated_at, str)
                     else row.updated_at
                 ),
@@ -555,18 +555,19 @@ def get_stream_programs_query(
                 icon_url=row.icon_url,
             )
             programs.append(program)
+    except Exception:
+        logger.exception("Error executing stream programs query")
+        raise
 
+    else:
         logger.info(
             "Retrieved %s programs out of %s total for channel %s",
             len(programs),
             total_count,
             channel_id,
         )
-        return programs, total_count
 
-    except Exception:
-        logger.exception("Error executing stream programs query")
-        raise
+        return programs, total_count
 
 
 def get_streams_filter_values(session: Session) -> dict[str, list[dict[str, Any]]]:
