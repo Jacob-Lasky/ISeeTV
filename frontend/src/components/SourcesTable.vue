@@ -1008,7 +1008,7 @@ async function preserveActiveDownloadsAndReload() {
     for (const [fileId, taskId] of activeDownloads) {
         // Check if this task is still active on the backend
         try {
-            const progress = await fetch(`/api/download/progress/${taskId}`)
+            const progress = await fetch(`/api/downloads/progress/${taskId}`)
             if (progress.ok) {
                 const progressData = await progress.json()
                 // Only restore if download is still active (not completed/failed/cancelled)
@@ -1035,7 +1035,7 @@ async function preserveActiveDownloadsAndReload() {
 async function detectAndRestoreActiveDownloads() {
     try {
         // Get all active downloads from the backend
-        const response = await fetch("/api/download/progress")
+        const response = await fetch("/api/downloads/progress")
 
         if (!response.ok) {
             console.log("No active downloads to restore (response not ok)")
@@ -1146,9 +1146,10 @@ async function refreshFile(fileRow: SourceFileRow) {
 
     try {
         // Step 1: Start download
-        const downloadEndpoint = `/api/download/${fileRow.fileType}/${encodeURIComponent(fileRow.sourceName)}`
-        const downloadResponse = await apiGet<DownloadTaskResponse>(
+        const downloadEndpoint = `/api/${encodeURIComponent(fileRow.sourceName)}/downloads/${fileRow.fileType}`
+        const downloadResponse = await apiPost<DownloadTaskResponse>(
             downloadEndpoint,
+            {},
             true,
             {
                 successMessage: `${fileRow.fileType.toUpperCase()} download started`,
@@ -1166,19 +1167,15 @@ async function refreshFile(fileRow: SourceFileRow) {
         console.log(
             `Download completed for ${fileRow.fileType}, starting ingest process...`
         )
-        const ingestEndpoint = `/api/load/${fileRow.fileType}/${encodeURIComponent(fileRow.sourceName)}`
+        const ingestEndpoint = `/api/${encodeURIComponent(fileRow.sourceName)}/loads/${fileRow.fileType}`
         const ingestResponse = await apiPost<{
             task_id: string
             message: string
             status: string
-        }>(
-            ingestEndpoint,
-            {},
-            {
-                successMessage: `${fileRow.fileType.toUpperCase()} processing started`,
-                errorPrefix: `${fileRow.fileType.toUpperCase()} processing failed`,
-            }
-        )
+        }>(ingestEndpoint, {}, true, {
+            successMessage: `${fileRow.fileType.toUpperCase()} processing started`,
+            errorPrefix: `${fileRow.fileType.toUpperCase()} processing failed`,
+        })
 
         // Start ingest progress polling
         startIngestProgressPolling(ingestResponse.task_id, fileRow.fileId)
@@ -1198,7 +1195,7 @@ async function refreshAllM3u() {
         refreshingAllM3u.value = true
 
         const response = await apiGet<DownloadAllTasksResponse>(
-            "/api/download/m3u/all",
+            "/api/downloads/m3u/all",
             true,
             {
                 successMessage: "All M3U refresh started",
@@ -1236,7 +1233,7 @@ async function refreshAllEpg() {
         refreshingAllEpg.value = true
 
         const response = await apiGet<DownloadAllTasksResponse>(
-            "/api/download/epg/all",
+            "/api/downloads/epg/all",
             true,
             {
                 successMessage: "All EPG refresh started",
@@ -1371,7 +1368,7 @@ function startProgressPolling(taskId: string, fileId: string) {
     const interval = setInterval(async () => {
         try {
             const progress = await apiGet<DownloadProgress>(
-                `/api/download/progress/${taskId}`,
+                `/api/downloads/progress/${taskId}`,
                 false,
                 {
                     showSuccessToast: false,
@@ -1416,7 +1413,7 @@ function startProgressPollingAndWait(
         const interval = setInterval(async () => {
             try {
                 const progress = await apiGet<DownloadProgress>(
-                    `/api/download/progress/${taskId}`,
+                    `/api/downloads/progress/${taskId}`,
                     false,
                     {
                         showSuccessToast: false,
@@ -1761,7 +1758,7 @@ async function downloadFile(fileRow: SourceFileRow) {
     )
 
     try {
-        const endpoint = `/api/download/file/${encodeURIComponent(fileRow.sourceName)}/${fileRow.fileType}`
+        const endpoint = `/api/${encodeURIComponent(fileRow.sourceName)}/downloads/${fileRow.fileType}/file`
 
         // Create a temporary link to trigger the download
         const link = document.createElement("a")
@@ -1798,7 +1795,7 @@ async function cancelDownload(fileRow: SourceFileRow) {
             return
         }
 
-        const endpoint = `/api/download/cancel/${taskId}`
+        const endpoint = `/api/downloads/cancel/${taskId}`
 
         // Use apiGet with DELETE method (note: apiGet can handle different HTTP methods)
         await fetch(endpoint, {
@@ -1927,7 +1924,7 @@ function deleteSource(sourceId: string) {
 }
 
 function updateScheduler(source: Source) {
-    apiPost(`/api/scheduler/update/${source.name}`, null, true, {
+    apiPost(`/api/${source.name}/scheduler/update`, null, true, {
         successMessage: "Scheduler updated successfully",
         errorPrefix: "Failed to update scheduler",
     })
@@ -2041,7 +2038,7 @@ async function applySourceRules(sourceName: string): Promise<void> {
 
         console.log(`Applying all rules to source ${sourceName}...`)
 
-        const response = await fetch("/api/rules/apply/source", {
+        const response = await fetch(`/api/${sourceName}/rules/apply`, {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -2292,7 +2289,7 @@ const confirmDelete = async () => {
             errorPrefix: "Failed to delete source",
         })
 
-        await apiDelete(`/api/scheduler/delete/${sourceName}`, null, true, {
+        await apiDelete(`/api/${sourceName}/scheduler/delete`, true, {
             successMessage: "Scheduler deleted successfully",
             errorPrefix: "Failed to delete scheduler",
         })

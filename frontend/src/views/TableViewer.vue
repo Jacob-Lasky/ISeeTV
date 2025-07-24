@@ -647,7 +647,7 @@ const tableData = ref([])
 const filters = ref({})
 const globalFilterFields = ref([])
 
-// Filter statistics (from /api/tables/{table_name}/filtered_counts/{source})
+// Filter statistics
 const totalRecords = ref(0)
 const passedRecords = ref(0)
 const filteredRecords = ref(0)
@@ -985,7 +985,7 @@ const loadTableData = async () => {
 
     try {
         const response = await apiGet(
-            `/api/tables/${tableName.value}?source=${encodeURIComponent(sourceName.value)}`
+            `/api/${encodeURIComponent(sourceName.value)}/tables/${tableName.value}`
         )
 
         if (response.success && response.data) {
@@ -1022,7 +1022,7 @@ const loadFilterOptions = async () => {
         console.log(`Loading filter options for table: ${tableName.value}`)
 
         const response = await apiGet(
-            `/api/tables/${tableName.value}/filters`,
+            `/api/${encodeURIComponent(sourceName.value)}/tables/${tableName.value}/filters`,
             false,
             { showSuccessToast: false }
         )
@@ -1090,7 +1090,7 @@ const loadFilterStatistics = async () => {
         )
 
         const response = await apiGet(
-            `/api/tables/${tableName.value}/filtered_counts/${encodeURIComponent(sourceName.value)}`,
+            `/api/${encodeURIComponent(sourceName.value)}/tables/${tableName.value}/filtered_counts`,
             false,
             { showSuccessToast: false }
         )

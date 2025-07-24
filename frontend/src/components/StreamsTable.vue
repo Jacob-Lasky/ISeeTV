@@ -912,7 +912,7 @@ const updateFilterOptions = (filters: Record<string, FilterValue[]>): void => {
 const precomputeFilterValues = async (): Promise<void> => {
     try {
         console.log("Precomputing streams filter values...")
-        const response = await fetch("/api/tables/streams/precompute-filters", {
+        const response = await fetch("/api/streams/precompute_filters", {
             method: "POST",
             headers: {
                 "Content-Type": "application/json",
@@ -1035,8 +1035,9 @@ const loadChannelPrograms = async (channel: StreamChannel): Promise<void> => {
 
     try {
         const encodedTvgId = encodeURIComponent(channel.tvg_id)
+        const encodedSource = encodeURIComponent(channel.source)
         const response = await fetch(
-            `/api/streams/${channel.source}/${encodedTvgId}/programs`
+            `/api/${encodedSource}/streams/${encodedTvgId}/programs`
         )
 
         if (!response.ok) {

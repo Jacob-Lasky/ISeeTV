@@ -6,9 +6,25 @@ from sqlalchemy import Column, DateTime, Index, Integer, String
 from sqlalchemy.sql import func
 
 from common.db import Base
+from sqlalchemy.inspection import inspect
 
 
-class EpgChannelTable(Base):
+class MetadataMixin:
+    @classmethod
+    def get_metadata(cls):
+        inspector = inspect(cls)
+        return [
+            {
+                "field": col.key,
+                "type": str(col.type),
+                "nullable": col.nullable,
+                "primary_key": col.primary_key,
+            }
+            for col in inspector.columns
+        ]
+
+
+class EpgChannelTable(Base, MetadataMixin):
     """SQLAlchemy table model for EPG channels."""
 
     __tablename__ = "epg_channels"
@@ -31,7 +47,7 @@ class EpgChannelTable(Base):
     )
 
 
-class M3uChannelTable(Base):
+class M3uChannelTable(Base, MetadataMixin):
     """SQLAlchemy table model for M3U channels."""
 
     __tablename__ = "m3u_channels"
@@ -58,7 +74,7 @@ class M3uChannelTable(Base):
     )
 
 
-class ProgramTable(Base):
+class ProgramTable(Base, MetadataMixin):
     """SQLAlchemy table model for EPG programs."""
 
     __tablename__ = "programs"

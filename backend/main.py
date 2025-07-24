@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 
 import httpx
 import uvicorn
-from fastapi import Body, FastAPI, HTTPException, status
+from fastapi import Body, Depends, FastAPI, HTTPException, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from pydantic import ValidationError
@@ -56,8 +56,14 @@ from models.models import (
     Source,
     TableResponse,
 )
+from models.db_models import (
+    EpgChannelTable,
+    M3uChannelTable,
+    ProgramTable,
+)
 from models.stream_models import (
     StreamProgramsResponse,
+    StreamQueryParams,
     StreamsResponse,
 )
 from rules.ingestion_rules import (
@@ -89,11 +95,10 @@ from utils.filter_utils import (
     precompute_all_filter_values,
     precompute_filter_values,
 )
-from utils.stream_utils import (
-    get_filter_view_counts,
+from streams.streams_utils import (
     get_stream_programs_query,
     get_streams_filter_values,
-    get_streams_query,
+    get_streams_internal,
 )
 
 logger = get_logger(__name__)
@@ -106,7 +111,7 @@ class SuppressIngestProgressFilter(logging.Filter):
 
 class SuppressDownloadProgressFilter(logging.Filter):
     def filter(self, record):
-        return "/api/download/progress" not in record.getMessage()
+        return "/api/downloads/progress" not in record.getMessage()
 
 
 # Apply filter to Uvicorn's access logger
@@ -123,9 +128,10 @@ app = FastAPI(
     redoc_url="/api/redoc",
     openapi_tags=[
         {"name": "Health", "description": "Health checks"},
+        {"name": "Metadata", "description": "View metadata"},
+        {"name": "Tables", "description": "Manage database tables"},
         {"name": "Streams", "description": "Browse and filter merged channel streams"},
         {"name": "Rules", "description": "Ingestion rules management and filtering"},
-        {"name": "Database", "description": "Manage the database"},
         {"name": "Sources", "description": "Manage IPTV sources (M3U, EPG, metadata)"},
         {"name": "Download", "description": "Download the M3U and EPG files"},
         {
@@ -133,14 +139,19 @@ app = FastAPI(
             "description": "Parse the downloaded files and load into the database",
         },
         {"name": "Settings", "description": "Global app configuration"},
+        {"name": "File Generation", "description": "File generation operations"},
+        {"name": "Job Queue", "description": "Job operations"},
         {"name": "Scheduler", "description": "Refresh scheduling operations"},
+        {"name": "Progress", "description": "Progress tracking"},
         {"name": "Redirect", "description": "Redirect operations"},
     ],
 )
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],  # TODO: restrict this
+    allow_origins=[
+        "*"
+    ],  # TODO(Jake): restrict this https://github.com/Jacob-Lasky/ISeeTV/issues/156
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
@@ -288,7 +299,7 @@ async def set_sources(
 @app.get(
     "/api/ingest/progress/{task_id}",
     response_model=IngestProgress,
-    tags=["Ingest"],
+    tags=["Progress"],
     status_code=status.HTTP_200_OK,
 )
 async def get_ingest_progress_by_id(task_id: str) -> IngestProgress:
@@ -300,7 +311,7 @@ async def get_ingest_progress_by_id(task_id: str) -> IngestProgress:
 @app.get(
     "/api/ingest/progress",
     response_model=dict[str, dict],
-    tags=["Ingest"],
+    tags=["Progress"],
     status_code=status.HTTP_200_OK,
 )
 async def get_ingest_progress() -> dict[str, dict]:
@@ -311,9 +322,9 @@ async def get_ingest_progress() -> dict[str, dict]:
 
 
 @app.get(
-    "/api/download/progress/{task_id}",
+    "/api/downloads/progress/{task_id}",
     response_model=DownloadProgress,
-    tags=["Download"],
+    tags=["Progress"],
     status_code=status.HTTP_200_OK,
 )
 async def get_download_progress_by_id(task_id: str) -> DownloadProgress:
@@ -323,9 +334,9 @@ async def get_download_progress_by_id(task_id: str) -> DownloadProgress:
 
 
 @app.get(
-    "/api/download/progress",
+    "/api/downloads/progress",
     response_model=dict[str, DownloadProgress],
-    tags=["Download"],
+    tags=["Progress"],
     status_code=status.HTTP_200_OK,
 )
 async def get_all_download_progress() -> dict[str, DownloadProgress]:
@@ -336,9 +347,9 @@ async def get_all_download_progress() -> dict[str, DownloadProgress]:
 
 
 @app.delete(
-    "/api/download/cancel/{task_id}",
+    "/api/downloads/cancel/{task_id}",
     response_model=Message,
-    tags=["Download"],
+    tags=["Progress"],
     status_code=status.HTTP_200_OK,
 )
 async def cancel_download(task_id: str) -> Message:
@@ -358,8 +369,8 @@ async def cancel_download(task_id: str) -> Message:
         )
 
 
-@app.get(
-    "/api/download/{file_type}/all",
+@app.post(
+    "/api/downloads/{file_type}/all",
     response_model=DownloadAllTasksResponse,
     tags=["Download"],
     status_code=status.HTTP_200_OK,
@@ -421,30 +432,30 @@ async def download_all_files(
         )
 
 
-@app.get(
-    "/api/download/{file_type}/{source_name}",
+@app.post(
+    "/api/{source}/downloads/{file_type}",
     response_model=DownloadTaskResponse,
     tags=["Download"],
-    status_code=status.HTTP_200_OK,
+    status_code=status.HTTP_202_ACCEPTED,
 )
 async def queue_file_for_download(
+    source: str,
     file_type: Literal["m3u", "epg"],
-    source_name: str,
     sources_file: str = os.path.join(DATA_PATH, "sources.json"),
     download_dir: str = os.path.join(DATA_PATH, "sources"),
 ) -> DownloadTaskResponse:
     """Queue file download for a specific source through the job queue."""
-    logger.info("Queuing %s file download for source %s", file_type, source_name)
+    logger.info("Queuing %s file download for source %s", file_type, source)
     try:
         # Create unique task ID for each source
-        task_id = create_task_id(source_name, file_type, "download")
+        task_id = create_task_id(source, file_type, "download")
 
         # Create download task (1 item per task)
         DownloadTaskManager.create_download_task(task_id, 1, file_type)
 
         # Enqueue download job through the global job queue
         job_id = await enqueue_download_job(
-            source_name=source_name,
+            source_name=source,
             file_type=file_type,
             job_function=background_single_download_task,
             task_id=task_id,
@@ -454,7 +465,7 @@ async def queue_file_for_download(
         )
 
         return DownloadTaskResponse(
-            message=f"{file_type} file for {source_name} download queued (job: {job_id})",
+            message=f"{file_type} file for {source} download queued (job: {job_id})",
             task_id=task_id,
         )
     except Exception as e:
@@ -464,17 +475,17 @@ async def queue_file_for_download(
 
 
 @app.get(
-    "/api/download/file/{source_name}/{file_type}",
+    "/api/{source}/downloads/{file_type}/file",
     tags=["Download"],
     status_code=status.HTTP_200_OK,
 )
 async def download_file_stream(
-    source_name: str,
+    source: str,
     file_type: str,
     sources_file: str = os.path.join(DATA_PATH, "sources.json"),
 ) -> StreamingResponse:
     """Stream a file directly to the browser for download."""
-    logger.info("Downloading %s file for source %s", file_type, source_name)
+    logger.info("Downloading %s file for source %s", file_type, source)
     try:
         # Validate file type
         if file_type not in {"m3u", "epg"}:
@@ -490,14 +501,14 @@ async def download_file_stream(
         # Find the source
         source_data = None
         for source in sources_data:
-            if source["name"] == source_name:
+            if source["name"] == source:
                 source_data = source
                 break
 
         if not source_data:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Source '{source_name}' not found",
+                detail=f"Source '{source}' not found",
             )
 
         # Get file metadata
@@ -507,11 +518,11 @@ async def download_file_stream(
         if not file_info or not file_info.get("url"):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No {file_type.upper()} URL found for source '{source_name}'",
+                detail=f"No {file_type.upper()} URL found for source '{source}'",
             )
 
         file_url = file_info["url"]
-        filename = f"{source_name}_{file_type}.{file_type}"
+        filename = f"{source}_{file_type}.{file_type}"
 
         # Create the streaming generator function
         async def stream_file():
@@ -568,39 +579,37 @@ async def download_file_stream(
 
 
 @app.post(
-    "/api/load/{file_type}/{source_name}",
+    "/api/{source}/loads/{file_type}",
     response_model=dict[str, str],
-    tags=["Database"],
+    tags=["Ingest"],
     status_code=status.HTTP_202_ACCEPTED,
 )
 async def load_file_to_db(
+    source: str,
     file_type: Literal["m3u", "epg"],
-    source_name: str,
     sources_file: str = os.path.join(DATA_PATH, "sources.json"),
 ) -> dict[str, str]:
     """Start async database loading task for parsed file data."""
-    logger.info("Loading %s file to database for %s", file_type, source_name)
+    logger.info("Loading %s file to database for %s", file_type, source)
     try:
         # Load sources configuration
         with open(sources_file, encoding="utf-8") as f:
             sources = [Source(**source) for source in json.load(f)]
 
         # Find the source
-        source = next(
-            (source for source in sources if source.name == source_name), None
-        )
-        if not source:
+        source_obj = next((s for s in sources if s.name == source), None)
+        if not source_obj:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Source '{source_name}' not found",
+                detail=f"Source '{source}' not found",
             )
 
         # Get file metadata
-        file_metadata = source.get_file_metadata(file_type)
+        file_metadata = source_obj.get_file_metadata(file_type)
         if not file_metadata or not file_metadata.local_path:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"No {file_type.upper()} file defined for source '{source_name}'",
+                detail=f"No {file_type.upper()} file defined for source '{source}'",
             )
 
         file_path = file_metadata.local_path
@@ -608,11 +617,11 @@ async def load_file_to_db(
         if not os.path.exists(file_path):
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"File '{file_path}' not found for source '{source_name}'",
+                detail=f"File '{file_path}' not found for source '{source}'",
             )
 
         # Create task ID and initialize task
-        task_id = create_task_id(source_name, file_type, "ingest")
+        task_id = create_task_id(source, file_type, "ingest")
 
         # Extract total records for progress tracking
         total_records = 0
@@ -628,12 +637,12 @@ async def load_file_to_db(
             total_steps = 5  # download, parse channels, load channels, parse programs, load programs
 
         IngestTaskManager.create_ingest_task(
-            task_id, file_type, source_name, total_records, total_steps
+            task_id, file_type, source, total_records, total_steps
         )
 
         # Enqueue ingest job through the global job queue
         job_id = await enqueue_ingest_job(
-            source_name=source_name,
+            source_name=source,
             file_type=file_type,
             job_function=background_load_task,
             task_id=task_id,
@@ -643,7 +652,7 @@ async def load_file_to_db(
         return {
             "task_id": task_id,
             "job_id": job_id,
-            "message": f"Queued loading {file_type.upper()} file for {source_name} (job: {job_id})",
+            "message": f"Queued loading {file_type.upper()} file for {source} (job: {job_id})",
             "status": "queued",
         }
 
@@ -657,11 +666,11 @@ async def load_file_to_db(
 
 
 def update_source_total_records(
-    source_name: str, file_type: Literal["m3u", "epg"], session: SessionLocal
+    source: str, file_type: Literal["m3u", "epg"], session: SessionLocal
 ) -> None:
     """Update source total_records using simple row counts from database."""
     logger.info(
-        "Updating total_records for source %s after %s parsing", source_name, file_type
+        "Updating total_records for source %s after %s parsing", source, file_type
     )
 
     try:
@@ -673,12 +682,12 @@ def update_source_total_records(
         # Find the source to update
         source_to_update = None
         for source in sources:
-            if source.name == source_name:
+            if source.name == source:
                 source_to_update = source
                 break
 
         if source_to_update is None:
-            logger.error("Source '%s' not found for total_records update", source_name)
+            logger.error("Source '%s' not found for total_records update", source)
             return
 
         # Get row counts by source using direct queries
@@ -686,17 +695,17 @@ def update_source_total_records(
             if file_type == "m3u":
                 channel_count = session.execute(
                     text("SELECT COUNT(*) FROM m3u_channels WHERE source = :source"),
-                    {"source": source_name},
+                    {"source": source},
                 ).scalar()
                 program_count = 0  # M3U files don't have programs
             elif file_type == "epg":
                 channel_count = session.execute(
                     text("SELECT COUNT(*) FROM epg_channels WHERE source = :source"),
-                    {"source": source_name},
+                    {"source": source},
                 ).scalar()
                 program_count = session.execute(
                     text("SELECT COUNT(*) FROM programs WHERE source = :source"),
-                    {"source": source_name},
+                    {"source": source},
                 ).scalar()
 
         # Update using existing method
@@ -719,12 +728,10 @@ def update_source_total_records(
         with open(sources_file, "w", encoding="utf-8") as f:
             json.dump([source.model_dump() for source in sources], f, indent=4)
 
-        logger.debug("Successfully updated total_records for source %s", source_name)
+        logger.debug("Successfully updated total_records for source %s", source)
 
     except Exception as e:
-        logger.exception(
-            "Error updating total_records for source %s: %s", source_name, e
-        )
+        logger.exception("Error updating total_records for source %s: %s", source, e)
 
 
 async def background_load_task(
@@ -785,12 +792,12 @@ async def background_load_task(
 
 
 @app.get(
-    "/api/db/{table}/head",
+    "/api/{source}/tables/{table}/head",
     response_model=TableResponse,
-    tags=["Database"],
+    tags=["Tables"],
     status_code=status.HTTP_200_OK,
 )
-async def get_db_table_head(table: str) -> dict[str, Any]:
+async def get_db_table_head(source: str, table: str) -> dict[str, Any]:
     """Return the first 10 rows of a table."""
     logger.info("Fetching head of table %s", table)
     try:
@@ -807,30 +814,57 @@ async def get_db_table_head(table: str) -> dict[str, Any]:
 
 
 @app.get(
-    "/api/tables/{table_name}",
+    "/api/metadata/tables/{table}",
+    response_model=dict[str, Any],
+    tags=["Metadata"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_table_metadata(table: str) -> dict[str, Any]:
+    """Get metadata for a specific table."""
+    logger.info("Fetching metadata for table %s", table)
+    try:
+        if table == "epg_channels":
+            metadata = EpgChannelTable.get_metadata()
+        elif table == "m3u_channels":
+            metadata = M3uChannelTable.get_metadata()
+        elif table == "programs":
+            metadata = ProgramTable.get_metadata()
+        else:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Table {table} not found",
+            )
+        return {
+            "success": True,
+            "data": metadata,
+        }
+    except Exception as e:
+        logger.exception("Error getting metadata for table %s: %s", table, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
+
+
+@app.get(
+    "/api/{source}/tables/{table}",
     response_model=TableResponse,
-    tags=["Database"],
+    tags=["Tables"],
     status_code=status.HTTP_200_OK,
 )
 async def get_table_data(
-    table_name: str,
-    source: str | None = None,
+    source: str,
+    table: str,
 ) -> dict[str, Any]:
-    """Return paginated table data with optional source filtering."""
-    logger.info("Fetching table data for %s", table_name)
+    """Return paginated table data with source filtering."""
+    logger.info("Fetching table data for %s from source %s", table, source)
     # Validate table name to prevent SQL injection
-    validate_table_name(table_name, include_streams=False)
+    validate_table_name(table, include_streams=False)
 
     try:
         with SessionLocal() as session:
-            # Build base query
-            base_query = f"SELECT * FROM {table_name}"
-
-            # Add source filtering if provided
-            params = {}
-            if source:
-                base_query += " WHERE source = :source"
-                params["source"] = source
+            # Build base query with source filtering
+            base_query = f"SELECT * FROM {table} WHERE source = :source"
+            params = {"source": source}
 
             # Add ordering and pagination
             base_query += " ORDER BY id ASC"
@@ -838,10 +872,10 @@ async def get_table_data(
             data_result = session.execute(text(base_query), params)
             records = [dict(row._mapping) for row in data_result]
 
-            return format_table_response(records, table_name, source)
+            return format_table_response(records, table, source)
 
     except Exception as e:
-        logger.exception("Error fetching table data for %s: %s", table_name, e)
+        logger.exception("Error fetching table data for %s: %s", table, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to fetch table data: {e!s}",
@@ -849,9 +883,9 @@ async def get_table_data(
 
 
 @app.get(
-    "/api/db/summary",
+    "/api/summary",
     response_model=dict[str, Any],
-    tags=["Database"],
+    tags=["Metadata"],
     status_code=status.HTTP_200_OK,
 )
 async def get_db_summary() -> dict[str, Any]:
@@ -895,21 +929,17 @@ async def get_db_summary() -> dict[str, Any]:
 
 
 @app.get(
-    "/api/tables/{table_name}/filtered_counts/{source}",
+    "/api/{source}/tables/{table}/filtered_counts",
     response_model=dict[str, Any],
-    tags=["Database"],
+    tags=["Tables"],
     status_code=status.HTTP_200_OK,
 )
-async def get_table_filtered_counts(table_name: str, source: str) -> dict[str, Any]:
+async def get_table_filtered_counts(source: str, table: str) -> dict[str, Any]:
     """Get filter statistics for an entire table."""
-    logger.info(
-        "Fetching filter statistics for table %s in source %s", table_name, source
-    )
+    logger.info("Fetching filter statistics for table %s in source %s", table, source)
     try:
         with SessionLocal() as session:
-            filter_stats = get_table_filter_statistics_by_source(
-                session, table_name, source
-            )
+            filter_stats = get_table_filter_statistics_by_source(session, table, source)
 
             return {
                 "success": True,
@@ -917,32 +947,26 @@ async def get_table_filtered_counts(table_name: str, source: str) -> dict[str, A
             }
 
     except Exception as e:
-        logger.exception(
-            "Error getting filter statistics for table %s: %s", table_name, e
-        )
+        logger.exception("Error getting filter statistics for table %s: %s", table, e)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
 
 
 @app.get(
-    "/api/tables/{table_name}/filtered_counts/{source}/{rule}",
+    "/api/{source}/tables/{table}/filtered_counts/{rule}",
     response_model=dict[str, Any],
-    tags=["Database"],
+    tags=["Tables"],
     status_code=status.HTTP_200_OK,
 )
 async def get_table_filtered_counts_by_rule(
-    table_name: str, source: str, rule: str
+    source: str, table: str, rule: str
 ) -> dict[str, Any]:
     """Get filter statistics for a specific rule on a specific table and source."""
-    logger.info(
-        "Fetching filter statistics for table %s in source %s", table_name, source
-    )
+    logger.info("Fetching filter statistics for table %s in source %s", table, source)
     try:
         with SessionLocal() as session:
-            filter_stats = get_table_filter_statistics_by_source(
-                session, table_name, source
-            )
+            filter_stats = get_table_filter_statistics_by_source(session, table, source)
 
             # Extract the count for the specific assignment/rule
             # filter_stats structure: {"filter_stats": {"Blacklisted by rule 'alice_sports_content': matched pattern...": 9908, "Passed": 258901}, "passed": 258901, ...}
@@ -983,7 +1007,7 @@ async def get_table_filtered_counts_by_rule(
         logger.exception(
             "Error getting filter statistics for rule %s on table %s: %s",
             rule,
-            table_name,
+            table,
             e,
         )
         raise HTTPException(
@@ -992,83 +1016,52 @@ async def get_table_filtered_counts_by_rule(
 
 
 @app.get(
-    "/api/tables/{table_name}/filters",
+    "/api/{source}/tables/{table}/filters",
     response_model=dict[str, Any],
-    tags=["Database"],
+    tags=["Tables"],
     status_code=status.HTTP_200_OK,
 )
-async def get_table_filter_values(table_name: str) -> dict[str, Any]:
+async def get_table_filter_values(source: str, table: str) -> dict[str, Any]:
     """Get precomputed filter values for a table's filterable columns."""
-    logger.info("Fetching filter values for table %s", table_name)
+    logger.info("Fetching filter values for table %s from source %s", table, source)
     # Validate table name to prevent SQL injection
-    validate_table_name(table_name, include_streams=False)
+    validate_table_name(table, include_streams=False)
 
     try:
         with SessionLocal() as session:
-            filter_values = get_all_filter_values(session, table_name)
+            filter_values = get_all_filter_values(session, table)
 
             return {
                 "success": True,
                 "data": filter_values,
-                "table_name": table_name,
+                "table_name": table,
             }
 
     except Exception as e:
-        logger.exception("Error getting filter values for table %s: %s", table_name, e)
+        logger.exception("Error getting filter values for table %s", table)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
 
 
 @app.get(
-    "/api/tables/{table_name}/columns",
+    "/api/{source}/tables/{table}/filter_counts_by_assignment",
     response_model=dict[str, Any],
-    tags=["Database"],
-    status_code=status.HTTP_200_OK,
-)
-async def get_table_columns(table_name: str) -> dict[str, Any]:
-    """Get column names for a specific table."""
-    logger.info("Fetching columns for table %s", table_name)
-    # Validate table name to prevent SQL injection
-    validate_table_name(table_name, include_streams=False)
-
-    try:
-        inspector = inspect(engine)
-        columns = [col["name"] for col in inspector.get_columns(table_name)]
-
-        return {
-            "success": True,
-            "data": columns,
-            "table_name": table_name,
-        }
-
-    except Exception as e:
-        logger.exception("Error getting columns for table %s: %s", table_name, e)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
-        )
-
-
-@app.get(
-    "/api/tables/{table_name}/filter_counts_by_assignment/{source}",
-    response_model=dict[str, Any],
-    tags=["Database"],
+    tags=["Tables"],
     status_code=status.HTTP_200_OK,
 )
 async def get_table_filter_counts_by_assignment(
-    table_name: str, source: str
+    source: str, table: str
 ) -> dict[str, Any]:
     """Get filter statistics organized by assignment for a specific table and source."""
     logger.info(
         "Fetching filter statistics organized by assignment for table %s in source %s",
-        table_name,
+        table,
         source,
     )
     try:
         with SessionLocal() as session:
-            filter_stats = get_table_filter_statistics_by_source(
-                session, table_name, source
-            )
+            filter_stats = get_table_filter_statistics_by_source(session, table, source)
 
             # Get all assignments for this source
             ingestion_engine = IngestionRulesEngine()
@@ -1083,7 +1076,7 @@ async def get_table_filter_counts_by_assignment(
                         "passed": filter_stats.get("passed", 0),
                         "all_not_passed": filter_stats.get("all_not_passed", 0),
                     },
-                    "table_name": table_name,
+                    "table_name": table,
                     "source": source,
                 }
 
@@ -1118,42 +1111,110 @@ async def get_table_filter_counts_by_assignment(
                     "passed": filter_stats.get("passed", 0),
                     "all_not_passed": filter_stats.get("all_not_passed", 0),
                 },
-                "table_name": table_name,
+                "table_name": table,
                 "source": source,
             }
 
     except Exception as e:
         logger.exception(
-            "Error getting filter counts by assignment for table %s, source %s: %s",
-            table_name,
+            "Error getting filter counts by assignment for table %s, source %s",
+            table,
             source,
-            e,
         )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
         )
 
 
-# Streams API Endpoints
+@app.post(
+    "/api/{source}/tables/{table}/precompute_filters",
+    response_model=dict[str, str],
+    tags=["Tables"],
+    status_code=status.HTTP_200_OK,
+)
+async def precompute_table_filters(source: str, table: str) -> dict[str, str]:
+    """Precompute filter values for any table or view.
+
+    This is typically called after data ingestion to update filter options.
+
+    Args:
+        table_name: Name of the table/view to precompute filters for
+
+    Returns:
+        Success message
+
+    """
+    logger.info("Precomputing filter values for table: %s", table_name)
+
+    validate_table_name(table_name)
+
+    try:
+        with SessionLocal() as session:
+            precompute_filter_values(session, table_name)
+
+            return {
+                "message": f"Successfully precomputed filter values for {table_name}",
+                "table_name": table_name,
+            }
+
+    except Exception:
+        logger.exception("Error precomputing filter values for %s", table_name)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to precompute filter values for {table_name}",
+        )
+
+
+@app.post(
+    "/api/tables/precompute-all-filters",
+    response_model=dict[str, Any],
+    tags=["Tables"],
+    status_code=status.HTTP_200_OK,
+)
+async def precompute_all_table_filters() -> dict[str, Any]:
+    """Precompute filter values for all configured tables and views.
+
+    This is a convenience endpoint that precomputes filters for all tables at once.
+    Useful after bulk data ingestion.
+
+    Returns:
+        Success message with details of processed tables
+
+    """
+    logger.info("Precomputing filter values for all tables")
+
+    try:
+        with SessionLocal() as session:
+            from utils.filter_utils import (
+                FILTERABLE_COLUMNS_CONFIG,
+                precompute_all_filter_values,
+            )
+
+            precompute_all_filter_values(session)
+
+            return {
+                "message": "Successfully precomputed filter values for all tables",
+                "processed_tables": list(FILTERABLE_COLUMNS_CONFIG.keys()),
+                "success": True,
+            }
+
+    except Exception:
+        logger.exception("Error precomputing all filter values")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Failed to precompute all filter values",
+        )
 
 
 @app.get(
-    "/api/streams",
+    "/api/{source}/streams",
     response_model=StreamsResponse,
     tags=["Streams"],
     status_code=status.HTTP_200_OK,
 )
-async def get_streams(
-    source: str | None = None,
-    group: str | None = None,
-    page: int = 1,
-    page_size: int = 100,
-    sort_field: str = "name",
-    sort_order: str = "asc",
-    global_filter: str | None = None,
-    column_filters: str | None = None,
-    apply_rules: bool = True,
-    filter_view: str = "matched",
+async def get_streams_by_source(
+    source: str,
+    params: StreamQueryParams = Depends(),
 ) -> StreamsResponse:
     """Get joined streams view with M3U channels, EPG data, and program counts.
 
@@ -1162,100 +1223,106 @@ async def get_streams(
     - EPG channels (display names and icons)
     - Programs (aggregated counts and next program info)
 
+    Uses FastAPI dependency injection for shared query parameters following
+    atomic design principles.
+
     Args:
         source: Filter by source name
-        group: Filter by channel group
-        page: Page number (1-based)
-        page_size: Number of records per page (max 500)
-        sort_field: Field to sort by (name, tvg_id, display_name, group, source, program_count)
-        sort_order: Sort order (asc/desc)
-        global_filter: Global search across name, tvg_id, display_name, group
-        column_filters: JSON string of column-specific filters
-        apply_rules: Whether to apply ingestion rules filtering (default: True)
-        filter_view: Filter view mode ("matched", "unmatched", "all") for rules filtering
+        params: StreamQueryParams containing all query parameters via dependency injection
 
     Returns:
         StreamsResponse with paginated stream data and filter options
 
     """
-    logger.info(
-        "Getting streams: page=%s, size=%s, source=%s, group=%s",
-        page,
-        page_size,
-        source,
-        group,
-    )
+    with SessionLocal() as session:
+        return get_streams_internal(session, source=source, params=params)
 
+
+@app.get(
+    "/api/streams",
+    response_model=StreamsResponse,
+    tags=["Streams"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_all_streams(
+    params: StreamQueryParams = Depends(),
+) -> StreamsResponse:
+    """Get all streams from all sources.
+
+    This endpoint aggregates streams from all available sources using the same
+    query parameters as the source-specific endpoint. Uses FastAPI dependency
+    injection for shared query parameters following atomic design principles.
+
+    Args:
+        params: StreamQueryParams containing all query parameters via dependency injection
+
+    Returns:
+        StreamsResponse with aggregated stream data from all sources
+    """
+    logger.info("Getting streams for all sources")
     try:
-        # Validate page_size
-        page_size = min(page_size, 500)
-        if page_size < 1:
-            page_size = 100
+        sources_response = await get_sources()
+        all_sources = [source.name for source in sources_response]
+        all_streams = []
 
-        # Parse column filters if provided
-        parsed_column_filters = {}
-        if column_filters:
-            try:
-                parsed_column_filters = json.loads(column_filters)
-            except json.JSONDecodeError:
-                logger.warning("Invalid column_filters JSON: %s", column_filters)
-
+        # Aggregate streams from all sources using shared internal logic
         with SessionLocal() as session:
-            # Get streams data
-            streams, total_count = get_streams_query(
-                session=session,
-                source=source,
-                group=group,
-                page=page,
-                page_size=page_size,
-                sort_field=sort_field,
-                sort_order=sort_order,
-                global_filter=global_filter,
-                column_filters=parsed_column_filters,
-                apply_rules=apply_rules,
-                filter_view=filter_view,
-            )
+            for source_name in all_sources:
+                partial_response = get_streams_internal(
+                    session=session, source=source_name, params=params
+                )
+                all_streams.extend(partial_response.data)
 
-            # Get filter values
-            filter_values = get_streams_filter_values(session)
-
-            # Get filter view counts
-            filter_view_counts = get_filter_view_counts(
-                session=session,
-                source=source,
-                group=group,
-                global_filter=global_filter,
-                column_filters=parsed_column_filters,
-            )
-
-            # Calculate pagination metadata
-            total_pages = (total_count + page_size - 1) // page_size
-            has_next = page < total_pages
-            has_prev = page > 1
+        # For aggregated response, we'll use the structure from the last source
+        # but with combined data. This maintains consistency with the response model.
+        if all_sources:
+            with SessionLocal() as session:
+                # Get a sample response for metadata structure
+                sample_response = get_streams_internal(
+                    session=session, source=all_sources[0], params=params
+                )
 
             return StreamsResponse(
                 success=True,
-                data=streams,
-                total=total_count,
-                page=page,
-                page_size=page_size,
-                total_pages=total_pages,
-                has_next=has_next,
-                has_prev=has_prev,
-                filters=filter_values,
-                filter_view_counts=filter_view_counts,
+                data=all_streams,
+                total=len(all_streams),
+                page=params.page,
+                page_size=params.page_size,
+                total_pages=1,  # All data is returned in aggregated view
+                has_next=False,
+                has_prev=False,
+                filters=sample_response.filters,
+                filter_view_counts={
+                    "matched": len(all_streams),
+                    "unmatched": 0,
+                    "all": len(all_streams),
+                },
+            )
+        else:
+            # No sources available
+            return StreamsResponse(
+                success=True,
+                data=[],
+                total=0,
+                page=1,
+                page_size=params.page_size,
+                total_pages=0,
+                has_next=False,
+                has_prev=False,
+                filters={},
+                filter_view_counts={"matched": 0, "unmatched": 0, "all": 0},
             )
 
-    except Exception as e:
-        logger.exception("Error getting streams: %s", e)
+    except Exception:
+        logger.exception("Error getting streams")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to get streams: {e!s}",
+            detail="Failed to get streams",
         )
 
 
 @app.get(
-    "/api/streams/{source}/{channel_id}/programs",
+    "/api/{source}/streams/{channel_id}/programs",
     response_model=StreamProgramsResponse,
     tags=["Streams"],
     status_code=status.HTTP_200_OK,
@@ -1346,12 +1413,12 @@ async def get_stream_programs(
 
 
 @app.get(
-    "/api/streams/filters",
+    "/api/{source}/streams/filters",
     response_model=dict[str, Any],
     tags=["Streams"],
     status_code=status.HTTP_200_OK,
 )
-async def get_streams_filters() -> dict[str, Any]:
+async def get_streams_filters(source: str) -> dict[str, Any]:
     """Get precomputed filter values for streams view.
 
     Returns:
@@ -1362,7 +1429,7 @@ async def get_streams_filters() -> dict[str, Any]:
 
     try:
         with SessionLocal() as session:
-            filter_values = get_streams_filter_values(session)
+            filter_values = get_streams_filter_values(session, source)
 
             return {
                 "success": True,
@@ -1376,89 +1443,6 @@ async def get_streams_filters() -> dict[str, Any]:
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Failed to get streams filter values: {e!s}",
         )
-
-
-@app.post(
-    "/api/tables/{table_name}/precompute-filters",
-    response_model=dict[str, str],
-    tags=["Database"],
-    status_code=status.HTTP_200_OK,
-)
-async def precompute_table_filters(table_name: str) -> dict[str, str]:
-    """Precompute filter values for any table or view.
-
-    This is typically called after data ingestion to update filter options.
-
-    Args:
-        table_name: Name of the table/view to precompute filters for
-
-    Returns:
-        Success message
-
-    """
-    logger.info("Precomputing filter values for table: %s", table_name)
-
-    validate_table_name(table_name)
-
-    try:
-        with SessionLocal() as session:
-            precompute_filter_values(session, table_name)
-
-            return {
-                "message": f"Successfully precomputed filter values for {table_name}",
-                "table_name": table_name,
-            }
-
-    except Exception:
-        logger.exception("Error precomputing filter values for %s", table_name)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to precompute filter values for {table_name}",
-        )
-
-
-@app.post(
-    "/api/tables/precompute-all-filters",
-    response_model=dict[str, Any],
-    tags=["Database"],
-    status_code=status.HTTP_200_OK,
-)
-async def precompute_all_table_filters() -> dict[str, Any]:
-    """Precompute filter values for all configured tables and views.
-
-    This is a convenience endpoint that precomputes filters for all tables at once.
-    Useful after bulk data ingestion.
-
-    Returns:
-        Success message with details of processed tables
-
-    """
-    logger.info("Precomputing filter values for all tables")
-
-    try:
-        with SessionLocal() as session:
-            from utils.filter_utils import (
-                FILTERABLE_COLUMNS_CONFIG,
-                precompute_all_filter_values,
-            )
-
-            precompute_all_filter_values(session)
-
-            return {
-                "message": "Successfully precomputed filter values for all tables",
-                "processed_tables": list(FILTERABLE_COLUMNS_CONFIG.keys()),
-                "success": True,
-            }
-
-    except Exception:
-        logger.exception("Error precomputing all filter values")
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail="Failed to precompute all filter values",
-        )
-
-
-# Scheduler API Endpoints
 
 
 @app.get(
@@ -1536,17 +1520,17 @@ async def restart_scheduler_endpoint() -> dict[str, str]:
 
 
 @app.post(
-    "/api/scheduler/update/{source_name}",
+    "/api/{source}/scheduler/update",
     response_model=dict[str, str],
     tags=["Scheduler"],
     status_code=status.HTTP_200_OK,
 )
 async def update_source_schedule(
-    source_name: str,
+    source: str,
     sources_file: str = os.path.join(DATA_PATH, "sources.json"),
 ) -> dict[str, str]:
     """Update schedule for a specific source."""
-    logger.info("Updating schedule for source: %s", source_name)
+    logger.info("Updating schedule for source: %s", source)
     try:
         scheduler_manager = get_scheduler_manager()
         # Load sources configuration
@@ -1554,26 +1538,24 @@ async def update_source_schedule(
             sources = [Source(**source) for source in json.load(f)]
 
         # Find the source
-        source = next(
-            (source for source in sources if source.name == source_name), None
-        )
+        source = next((source for source in sources if source.name == source), None)
         if source:
             logger.info("Updating sources")
             scheduler_manager.update_source_schedule(source)
         else:
-            logger.info("Deleting source: %s", source_name)
+            logger.info("Deleting source: %s", source)
             # source not found, remove existing jobs
-            delete_source_schedule(source_name)
+            delete_source_schedule(source)
 
         return {
-            "message": f"Schedule updated for source {source_name}",
-            "source_name": source_name,
+            "message": f"Schedule updated for source {source}",
+            "source_name": source,
         }
 
     except HTTPException:
         raise
     except Exception:
-        logger.exception("Error updating schedule for %s", source_name)
+        logger.exception("Error updating schedule for %s", source)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to update schedule",
@@ -1581,26 +1563,26 @@ async def update_source_schedule(
 
 
 @app.delete(
-    "/api/scheduler/delete/{source_name}",
+    "/api/{source}/scheduler/delete",
     response_model=dict[str, str],
     tags=["Scheduler"],
     status_code=status.HTTP_200_OK,
 )
-async def delete_source_schedule(source_name: str) -> dict[str, str]:
+async def delete_source_schedule(source: str) -> dict[str, str]:
     """Delete/remove schedule for a specific source."""
-    logger.info("Deleting schedule for source: %s", source_name)
+    logger.info("Deleting schedule for source: %s", source)
     try:
         scheduler_manager = get_scheduler_manager()
         if scheduler_manager.scheduler:
-            scheduler_manager.scheduler.remove_source_jobs(source_name)
+            scheduler_manager.scheduler.remove_source_jobs(source)
 
         return {
-            "message": f"Schedule deleted for source {source_name}",
-            "source_name": source_name,
+            "message": f"Schedule deleted for source {source}",
+            "source_name": source,
         }
 
     except Exception:
-        logger.exception("Error deleting schedule for %s", source_name)
+        logger.exception("Error deleting schedule for %s", source)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail="Failed to delete schedule",
@@ -2235,27 +2217,19 @@ async def apply_single_rule(
 
 
 @app.post(
-    "/api/rules/apply/source",
+    "/api/{source}/rules/apply",
     response_model=dict[str, Any],
     tags=["Rules"],
     summary="Apply all rules to a specific source",
 )
 async def apply_rules_to_source(
-    request: Annotated[dict[str, Any], Body()] = ...
+    source: str, request: Annotated[dict[str, Any], Body()] = ...
 ) -> dict[str, Any]:
     """Apply all assigned rules to a specific source across all tables."""
     logger.info("Applying all rules to source")
 
     try:
-        source_name = request.get("source_name")
         table_names = request.get("table_names")  # Optional
-
-        # Validate required parameters
-        if not source_name:
-            raise HTTPException(
-                status_code=status.HTTP_400_BAD_REQUEST,
-                detail="source_name is required",
-            )
 
         # Validate table names if provided
         if table_names:
@@ -2269,18 +2243,18 @@ async def apply_rules_to_source(
 
         logger.info(
             "Applying all rules to source %s for tables: %s",
-            source_name,
+            source,
             table_names or "all",
         )
 
-        result = post_load_engine.apply_all_rules_to_source(source_name, table_names)
+        result = post_load_engine.apply_all_rules_to_source(source, table_names)
 
-        logger.info("All rules for %s applied to %s", source_name, table_names)
+        logger.info("All rules for %s applied to %s", source, table_names)
 
         return {
             "success": True,
-            "message": f"All rules applied to source {source_name}",
-            "source_name": source_name,
+            "message": f"All rules applied to source {source}",
+            "source_name": source,
             "table_names": table_names or ["m3u_channels", "epg_channels", "programs"],
             "results": result,
         }
@@ -2410,7 +2384,7 @@ async def get_job_status_by_id(job_id: str) -> dict[str, Any]:
         )
 
 
-@app.post(
+@app.delete(
     "/api/jobs/{job_id}/cancel",
     response_model=dict[str, Any],
     tags=["Job Queue"],

@@ -902,14 +902,19 @@ const loadTableColumns = async (tableName: string): Promise<void> => {
 
     loadingColumns.value = true
     try {
-        const response = await fetch(`/api/tables/${tableName}/columns`)
+        const response = await fetch(`/api/metadata/tables/${tableName}`)
         const data = await response.json()
 
         if (data.success && data.data) {
             columnOptions.value[tableName] = data.data.map(
-                (column: string) => ({
-                    label: column,
-                    value: column,
+                (column: {
+                    field: string
+                    type: string
+                    nullable: boolean
+                    primary_key: boolean
+                }) => ({
+                    label: column.field,
+                    value: column.field,
                 })
             )
         }
@@ -2347,7 +2352,7 @@ const fetchFilterStatsForSource = async (sourceName: string): Promise<void> => {
 
         // Fetch filter stats organized by assignment using the new endpoint
         const response = await fetch(
-            `/api/tables/${tableName}/filter_counts_by_assignment/${sourceName}`
+            `/api/${encodeURIComponent(sourceName)}/tables/${tableName}/filter_counts_by_assignment`
         )
         const data = await response.json()
 

@@ -2,15 +2,20 @@
 
 from datetime import datetime
 from typing import Any
-
+from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+import json
 
 from common.log_utils import get_logger
 
 # Clear existing filter values for streams
 from models.stream_models import StreamChannel, StreamProgram
 from utils.filter_utils import get_all_filter_values
+from models.stream_models import (
+    StreamQueryParams,
+    StreamsResponse,
+)
 
 logger = get_logger(__name__)
 
@@ -47,7 +52,7 @@ def _get_rules_filter_condition(
         # For blacklist mode: show records that passed (filter_reasons is empty JSON array)
         # For whitelist mode: show records that matched rules (filter_reasons is not empty)
         # Since most current assignments are blacklist, default to blacklist behavior
-        # TODO: This could be enhanced to check actual rule_mode per source
+        # TODO(Jake): This could be enhanced to check actual rule_mode per source
         return "(m.filter_reasons = '[]')"
 
     if filter_view == "inverse":
@@ -570,7 +575,9 @@ def get_stream_programs_query(
         return programs, total_count
 
 
-def get_streams_filter_values(session: Session) -> dict[str, list[dict[str, Any]]]:
+def get_streams_filter_values(
+    session: Session, source: str
+) -> dict[str, list[dict[str, Any]]]:
     """Get precomputed filter values for streams view.
 
     Args:
@@ -585,3 +592,101 @@ def get_streams_filter_values(session: Session) -> dict[str, list[dict[str, Any]
     except Exception:
         logger.exception("Error getting streams filter values")
         return {}
+
+
+def get_streams_internal(
+    session: Session, source: str, params: StreamQueryParams
+) -> StreamsResponse:
+    """Internal function for shared streams logic following atomic design principles.
+
+    This function encapsulates the core streams retrieval logic that is shared
+    between the source-specific and all-sources endpoints. It handles:
+    - Parameter validation and parsing
+    - Database session management
+    - Stream data retrieval with filtering and pagination
+    - Filter options and view counts calculation
+    - Response formatting
+
+    Args:
+        source: Source name to filter by
+        params: StreamQueryParams containing all query parameters
+
+    Returns:
+        StreamsResponse with paginated stream data and metadata
+
+    Raises:
+        HTTPException: On database errors or invalid parameters
+    """
+    logger.info(
+        "Getting streams: page=%s, size=%s, source=%s, group=%s",
+        params.page,
+        params.page_size,
+        source,
+        params.group,
+    )
+
+    try:
+        # Validate page_size
+        page_size = min(params.page_size, 500)
+        if page_size < 1:
+            page_size = 100
+
+        # Parse column filters if provided
+        parsed_column_filters = {}
+        if params.column_filters:
+            try:
+                parsed_column_filters = json.loads(params.column_filters)
+            except json.JSONDecodeError:
+                logger.warning("Invalid column_filters JSON: %s", params.column_filters)
+
+        # Get streams data
+        streams, total_count = get_streams_query(
+            session=session,
+            source=source,
+            group=params.group,
+            page=params.page,
+            page_size=page_size,
+            sort_field=params.sort_field,
+            sort_order=params.sort_order,
+            global_filter=params.global_filter,
+            column_filters=parsed_column_filters,
+            apply_rules=params.apply_rules,
+            filter_view=params.filter_view,
+        )
+
+        # Get filter values
+        filter_values = get_streams_filter_values(session, source)
+
+        # Get filter view counts
+        filter_view_counts = get_filter_view_counts(
+            session=session,
+            source=source,
+            group=params.group,
+            global_filter=params.global_filter,
+            column_filters=parsed_column_filters,
+        )
+
+        # Calculate pagination metadata
+        total_pages = (total_count + page_size - 1) // page_size
+        has_next = params.page < total_pages
+        has_prev = params.page > 1
+
+        return StreamsResponse(
+            success=True,
+            data=streams,
+            total=total_count,
+            page=params.page,
+            page_size=page_size,
+            total_pages=total_pages,
+            has_next=has_next,
+            has_prev=has_prev,
+            filters=filter_values,
+            filter_view_counts=filter_view_counts,
+        )
+
+    except Exception as e:
+        logger.exception("Error getting streams: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to get streams: {e!s}",
+        )
