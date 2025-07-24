@@ -3,10 +3,10 @@ table definitions for EpgChannel, M3uChannel, and Program.
 """
 
 from sqlalchemy import Column, DateTime, Index, Integer, String
+from sqlalchemy.inspection import inspect
 from sqlalchemy.sql import func
 
 from common.db import Base
-from sqlalchemy.inspection import inspect
 
 
 class MetadataMixin:

@@ -39,7 +39,9 @@ class FileMetadata(BaseModel):
     last_refresh_status: Literal["success", "failed", "cancelled"] | None = None
     last_refresh_finished_timestamp: str | None = ""
     local_path: str | None = ""
-    total_records: TotalRecords = Field(default_factory=lambda: TotalRecords(channels=0, programs=0))
+    total_records: TotalRecords = Field(
+        default_factory=lambda: TotalRecords(channels=0, programs=0)
+    )
 
 
 class GlobalSettings(BaseModel):

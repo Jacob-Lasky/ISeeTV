@@ -334,14 +334,17 @@ class RefreshScheduler:
 
         """
         logger.info("Getting scheduled jobs")
-        return [{
-                    "id": job.id,
-                    "name": job.name,
-                    "next_run_time": (
-                        job.next_run_time.isoformat() if job.next_run_time else None
-                    ),
-                    "trigger": str(job.trigger),
-                } for job in self.scheduler.get_jobs()]
+        return [
+            {
+                "id": job.id,
+                "name": job.name,
+                "next_run_time": (
+                    job.next_run_time.isoformat() if job.next_run_time else None
+                ),
+                "trigger": str(job.trigger),
+            }
+            for job in self.scheduler.get_jobs()
+        ]
 
     def _on_job_executed(self, event: JobExecutionEvent) -> None:
         """Handle successful job execution."""

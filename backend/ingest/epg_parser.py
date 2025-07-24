@@ -343,7 +343,5 @@ def get_required_attr(elem: _Element, attr: str, context: str = "") -> str:
     if not value or not value.strip():
         line = getattr(elem, "sourceline", "unknown")
         msg = f"Missing required attribute '{attr}' at line {line}. Context: {context}"
-        raise ValueError(
-            msg
-        )
+        raise ValueError(msg)
     return value.strip()

@@ -736,7 +736,9 @@ class PostLoadRulesEngine:
 post_load_engine = PostLoadRulesEngine()
 
 
-def apply_post_load_rules(table_name: str, source_name: str | None = None) -> dict[str, Any]:
+def apply_post_load_rules(
+    table_name: str, source_name: str | None = None
+) -> dict[str, Any]:
     """Apply post-load rules to a table (atomic operation)."""
     logger.debug("Applying post-load rules to %s", table_name)
     if source_name:

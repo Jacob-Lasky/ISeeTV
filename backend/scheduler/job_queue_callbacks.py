@@ -52,9 +52,7 @@ async def refresh_job_callback_wrapper(
         file_metadata = source.get_file_metadata(file_type)
         if not file_metadata or not file_metadata.url:
             msg = f"No {file_type.upper()} URL defined for source '{source_name}'"
-            raise ValueError(
-                msg
-            )
+            raise ValueError(msg)
 
         # Create task IDs for both download and ingest
         download_task_id = create_task_id(source_name, file_type, "download")
@@ -155,17 +153,13 @@ async def _execute_refresh_job(
         file_metadata = source.get_file_metadata(file_type)
         if not file_metadata or not file_metadata.local_path:
             msg = f"No {file_type.upper()} file path found for source '{source_name}'"
-            raise ValueError(
-                msg
-            )
+            raise ValueError(msg)
 
         file_path = file_metadata.local_path
 
         if not os.path.exists(file_path):
             msg = f"Downloaded file '{file_path}' not found for source '{source_name}'"
-            raise ValueError(
-                msg
-            )
+            raise ValueError(msg)
 
         # Step 3: Ingest the file
         logger.info("Starting ingest for %s %s", source_name, file_type)

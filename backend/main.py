@@ -46,6 +46,11 @@ from download.downloader import (
 )
 from ingest.epg_loader import load_epg_file_async
 from ingest.m3u_loader import load_m3u_file_async
+from models.db_models import (
+    EpgChannelTable,
+    M3uChannelTable,
+    ProgramTable,
+)
 from models.models import (
     DownloadAllTasksResponse,
     DownloadProgress,
@@ -55,11 +60,6 @@ from models.models import (
     Message,
     Source,
     TableResponse,
-)
-from models.db_models import (
-    EpgChannelTable,
-    M3uChannelTable,
-    ProgramTable,
 )
 from models.stream_models import (
     StreamProgramsResponse,
@@ -82,6 +82,11 @@ from scheduler.scheduler_integration import (
     start_scheduler,
     stop_scheduler,
 )
+from streams.streams_utils import (
+    get_stream_programs_query,
+    get_streams_filter_values,
+    get_streams_internal,
+)
 from utils.file_generators import (
     apply_unified_channel_filtering,
     generate_epg_content,
@@ -94,11 +99,6 @@ from utils.filter_utils import (
     get_table_filter_statistics_by_source,
     precompute_all_filter_values,
     precompute_filter_values,
-)
-from streams.streams_utils import (
-    get_stream_programs_query,
-    get_streams_filter_values,
-    get_streams_internal,
 )
 
 logger = get_logger(__name__)
@@ -1258,6 +1258,7 @@ async def get_all_streams(
 
     Returns:
         StreamsResponse with aggregated stream data from all sources
+
     """
     logger.info("Getting streams for all sources")
     try:
@@ -1298,20 +1299,19 @@ async def get_all_streams(
                     "all": len(all_streams),
                 },
             )
-        else:
-            # No sources available
-            return StreamsResponse(
-                success=True,
-                data=[],
-                total=0,
-                page=1,
-                page_size=params.page_size,
-                total_pages=0,
-                has_next=False,
-                has_prev=False,
-                filters={},
-                filter_view_counts={"matched": 0, "unmatched": 0, "all": 0},
-            )
+        # No sources available
+        return StreamsResponse(
+            success=True,
+            data=[],
+            total=0,
+            page=1,
+            page_size=params.page_size,
+            total_pages=0,
+            has_next=False,
+            has_prev=False,
+            filters={},
+            filter_view_counts={"matched": 0, "unmatched": 0, "all": 0},
+        )
 
     except Exception:
         logger.exception("Error getting streams")
@@ -2083,7 +2083,7 @@ async def get_rules_log_content(filename: str) -> dict[str, Any]:
     summary="Apply rule assignments to database records",
 )
 async def apply_rule_assignments(
-    request: Annotated[dict[str, Any], Body()] = ...
+    request: Annotated[dict[str, Any], Body()] = ...,
 ) -> dict[str, Any]:
     """Apply rule assignments to database records for specified table and source."""
     logger.info("Applying rule assignments to database records")
@@ -2147,7 +2147,7 @@ async def apply_rule_assignments(
     summary="Apply a single rule to a specific source and table",
 )
 async def apply_single_rule(
-    request: Annotated[dict[str, Any], Body()] = ...
+    request: Annotated[dict[str, Any], Body()] = ...,
 ) -> dict[str, Any]:
     """Apply a single rule to a specific table and source."""
     logger.info("Applying single rule to database records")
@@ -2276,7 +2276,7 @@ async def apply_rules_to_source(
     summary="Unapply (remove) rules from database records",
 )
 async def unapply_rules(
-    request: Annotated[dict[str, Any], Body()] = ...
+    request: Annotated[dict[str, Any], Body()] = ...,
 ) -> dict[str, Any]:
     """Unapply (remove) rules from database records for specified table and source."""
     logger.info("Unapplying rules from database records")

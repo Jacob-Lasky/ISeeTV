@@ -1,21 +1,23 @@
 """Utility functions for streams view with atomic join logic."""
 
+import json
 from datetime import datetime
 from typing import Any
+
 from fastapi import HTTPException, status
 from sqlalchemy import text
 from sqlalchemy.orm import Session
-import json
 
 from common.log_utils import get_logger
 
 # Clear existing filter values for streams
-from models.stream_models import StreamChannel, StreamProgram
-from utils.filter_utils import get_all_filter_values
 from models.stream_models import (
+    StreamChannel,
+    StreamProgram,
     StreamQueryParams,
     StreamsResponse,
 )
+from utils.filter_utils import get_all_filter_values
 
 logger = get_logger(__name__)
 
@@ -616,6 +618,7 @@ def get_streams_internal(
 
     Raises:
         HTTPException: On database errors or invalid parameters
+
     """
     logger.info(
         "Getting streams: page=%s, size=%s, source=%s, group=%s",

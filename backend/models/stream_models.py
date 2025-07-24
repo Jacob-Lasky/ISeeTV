@@ -1,21 +1,21 @@
 """Stream models for joined view of channels and programs."""
 
 from datetime import datetime
-from typing import Any, Optional
+from typing import Any
 
 from pydantic import BaseModel
 
 
 class StreamQueryParams(BaseModel):
     """Shared query parameters for streams endpoints following atomic design principles."""
-    
-    group: Optional[str] = None
+
+    group: str | None = None
     page: int = 1
     page_size: int = 100
     sort_field: str = "name"
     sort_order: str = "asc"
-    global_filter: Optional[str] = None
-    column_filters: Optional[str] = None
+    global_filter: str | None = None
+    column_filters: str | None = None
     apply_rules: bool = True
     filter_view: str = "matched"
 

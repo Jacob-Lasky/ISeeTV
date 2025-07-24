@@ -262,9 +262,13 @@ class IngestionRulesEngine:
             all_assigned_rule_names.update(assignment.assigned_rules)
 
         # Get applicable rules for this source and table
-        applicable_rules = [rule for rule in rules if rule.enabled
-                and table_name in rule.tables
-                and rule.name in all_assigned_rule_names]
+        applicable_rules = [
+            rule
+            for rule in rules
+            if rule.enabled
+            and table_name in rule.tables
+            and rule.name in all_assigned_rule_names
+        ]
 
         logger.debug(
             "Found %s applicable rules for %s/%s: %s",
@@ -793,14 +797,22 @@ def validate_rules_config(rules_data: list[dict[str, Any]]) -> tuple[bool, list[
 
         # Required fields
         required_fields = ["name", "tables", "field", "regex"]
-        errors.extend(f"Rule {i}: Missing required field '{field}'" for field in required_fields if field not in rule_data)
+        errors.extend(
+            f"Rule {i}: Missing required field '{field}'"
+            for field in required_fields
+            if field not in rule_data
+        )
 
         # Validate tables
         if "tables" in rule_data:
             if not isinstance(rule_data["tables"], list):
                 errors.append(f"Rule {i}: 'tables' must be a list")
             else:
-                errors.extend(f"Rule {i}: Invalid table '{table}'. Valid tables: {valid_tables}" for table in rule_data["tables"] if table not in valid_tables)
+                errors.extend(
+                    f"Rule {i}: Invalid table '{table}'. Valid tables: {valid_tables}"
+                    for table in rule_data["tables"]
+                    if table not in valid_tables
+                )
 
         # Validate regex
         if "regex" in rule_data:
@@ -812,7 +824,11 @@ def validate_rules_config(rules_data: list[dict[str, Any]]) -> tuple[bool, list[
                 )
 
         # Validate boolean fields
-        errors.extend(f"Rule {i}: '{bool_field}' must be a boolean" for bool_field in ["is_whitelist", "enabled"] if bool_field in rule_data and not isinstance(rule_data[bool_field], bool))
+        errors.extend(
+            f"Rule {i}: '{bool_field}' must be a boolean"
+            for bool_field in ["is_whitelist", "enabled"]
+            if bool_field in rule_data and not isinstance(rule_data[bool_field], bool)
+        )
 
     return len(errors) == 0, errors
 

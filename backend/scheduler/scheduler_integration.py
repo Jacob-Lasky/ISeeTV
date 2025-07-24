@@ -231,9 +231,7 @@ async def ingest_callback_wrapper(source_name: str, file_type: str) -> None:
         file_metadata = source.get_file_metadata(file_type)
         if not file_metadata or not file_metadata.local_path:
             msg = f"No {file_type.upper()} file defined for source '{source_name}'"
-            raise ValueError(
-                msg
-            )
+            raise ValueError(msg)
 
         file_path = file_metadata.local_path
 
