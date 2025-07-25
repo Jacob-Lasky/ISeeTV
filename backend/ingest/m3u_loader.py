@@ -33,55 +33,6 @@ class LoadResult:
         return f"{self.record_type}[{self.record_id}]: {self.status} - {self.message}"
 
 
-def _upsert_m3u_channel(session: Session, channel: M3uChannel) -> LoadResult:
-    """Function to upsert a single M3U channel."""
-    logger.debug("Upserting M3U channel: %s", channel)
-    try:
-        stmt = insert(M3uChannelTable).values(
-            source=channel.source,
-            tvg_id=channel.tvg_id,
-            name=channel.name,
-            stream_url=channel.stream_url,
-            logo_url=channel.logo_url,
-            group=channel.group,
-        )
-
-        # On conflict, update all fields except created_at
-        stmt = stmt.on_conflict_do_update(
-            index_elements=["source", "tvg_id"],
-            set_={
-                "name": stmt.excluded.name,
-                "stream_url": stmt.excluded.stream_url,
-                "logo_url": stmt.excluded.logo_url,
-                "group": stmt.excluded.group,
-                "updated_at": stmt.excluded.updated_at,
-            },
-        )
-
-        result = session.execute(stmt)
-
-        # Check if it was an insert or update
-        if result.rowcount > 0:
-            return LoadResult(
-                "M3U_CHANNEL",
-                f"{channel.source}:{channel.tvg_id}",
-                "upserted",
-                f"Channel '{channel.name}' in group '{channel.group}' processed",
-            )
-        return LoadResult(
-            "M3U_CHANNEL",
-            f"{channel.source}:{channel.tvg_id}",
-            "skipped",
-            "No changes detected",
-        )
-
-    except Exception:
-        logger.exception("Error upserting M3U channel %s", channel.tvg_id)
-        return LoadResult(
-            "M3U_CHANNEL", f"{channel.source}:{channel.tvg_id}", "error", str(e)
-        )
-
-
 async def _bulk_upsert_m3u_channels(
     session: Session, channels: list[M3uChannel]
 ) -> list[LoadResult]:
@@ -137,7 +88,7 @@ async def _bulk_upsert_m3u_channels(
         logger.debug("Bulk upserted %s M3U channels", len(channels))
         return results
 
-    except Exception:
+    except Exception as e:
         logger.exception("Error in bulk upsert of M3U channels")
         session.rollback()
 

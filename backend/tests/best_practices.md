@@ -23,13 +23,14 @@ Your goal is to create a test suite that is maintainable, meaningful, and aligne
     Include normal, edge, and error cases
     Test unicode, long data, and malformed inputs when relevant
     Use realistic integration scenarios to validate full workflows
-    Aim for high coverage without chasing 100% blindly
+    Aim for high coverage (90%+) without chasing 100% blindly
 
 5. Avoid Common Pitfalls
-    ❌ Don’t guess behavior—check the implementation
-    ❌ Don’t mock the wrong module path or object
-    ❌ Don’t test assumptions that don’t reflect reality (e.g., expecting a warning when the code logs)
-    ✅ Do test logging, exceptions, and validation logic deliberately
+    Don’t guess behavior—check the implementation
+    Don’t mock the wrong module path or object
+    Don’t test assumptions that don’t reflect reality (e.g., expecting a warning when the code logs)
+    Don't test logging
+    Do test exceptions and validation logic deliberately
 
 6. Make Tests Scalable and Useful
     Structure tests so they can grow independently

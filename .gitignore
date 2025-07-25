@@ -10,3 +10,4 @@ data/iseetv.db-journal
 data/assignments.json
 data/rules.json
 data/ingestion_rules_logs/*
+backend/.coverage
