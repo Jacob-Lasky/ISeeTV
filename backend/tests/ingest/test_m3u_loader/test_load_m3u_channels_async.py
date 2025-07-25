@@ -28,7 +28,7 @@ class TestLoadM3uChannelsAsync:
         """Test successful loading of M3U channels with task tracking."""
         # Setup mocks
         mock_parse_m3u.return_value = sample_m3u_channels
-        
+
         # Mock bulk_upsert to return results based on actual batch size
         def mock_bulk_upsert_side_effect(session, batch):
             return [
@@ -40,7 +40,7 @@ class TestLoadM3uChannelsAsync:
                 )
                 for channel in batch
             ]
-        
+
         mock_bulk_upsert.side_effect = mock_bulk_upsert_side_effect
 
         file_path = "/test/file.m3u"
@@ -70,7 +70,7 @@ class TestLoadM3uChannelsAsync:
         # Verify results
         assert len(results) == 3
         for i, result in enumerate(results):
-            assert result.record_id == f"test_source:channel{i+1}"
+            assert result.record_id == f"test_source:channel{i + 1}"
             assert result.status == "upserted"
 
     @pytest.mark.asyncio
@@ -85,9 +85,9 @@ class TestLoadM3uChannelsAsync:
         mock_bulk_upsert.return_value = [
             LoadResult(
                 "M3U_CHANNEL",
-                f"test_source:channel{i+1}",
+                f"test_source:channel{i + 1}",
                 "upserted",
-                f"Channel {i+1} loaded",
+                f"Channel {i + 1} loaded",
             )
             for i in range(3)
         ]

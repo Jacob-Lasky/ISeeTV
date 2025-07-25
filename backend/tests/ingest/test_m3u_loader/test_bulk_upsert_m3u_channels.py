@@ -30,8 +30,8 @@ class TestBulkUpsertM3uChannels:
             assert isinstance(result, LoadResult)
             assert result.record_type == "M3U_CHANNEL"
             assert result.status == "upserted"
-            assert f"test_source:channel{i+1}" == result.record_id
-            assert f"Test Channel {i+1}" in result.message
+            assert f"test_source:channel{i + 1}" == result.record_id
+            assert f"Test Channel {i + 1}" in result.message
 
     @pytest.mark.asyncio
     async def test_bulk_upsert_empty_list(self, mock_session, empty_m3u_channels):
@@ -78,7 +78,7 @@ class TestBulkUpsertM3uChannels:
         assert len(results) == 3
         for i, result in enumerate(results):
             assert result.record_type == "M3U_CHANNEL"
-            assert result.record_id == f"test_source:channel{i+1}"
+            assert result.record_id == f"test_source:channel{i + 1}"
             assert result.status == "error"
             # Note: The actual implementation has a bug - it references undefined 'e'
             # This test documents the current behavior

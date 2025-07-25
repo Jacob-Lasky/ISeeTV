@@ -58,7 +58,7 @@ class TestLoadM3uFileAsync:
         # Check channel results
         for i in range(3):
             assert results[i].record_type == "M3U_CHANNEL"
-            assert results[i].record_id == f"test_source:channel{i+1}"
+            assert results[i].record_id == f"test_source:channel{i + 1}"
             assert results[i].status == "upserted"
 
         # Check rule result

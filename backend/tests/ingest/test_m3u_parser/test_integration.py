@@ -51,9 +51,7 @@ http://example.com/basic/stream
         assert movie.group == "Movies"
 
         # Test channel without attributes
-        basic = next(
-            ch for ch in channels if ch.name == "Channel Without Attributes"
-        )
+        basic = next(ch for ch in channels if ch.name == "Channel Without Attributes")
         assert basic.tvg_id == "Channel Without Attributes"  # Uses name as fallback
         assert basic.logo_url is None
         assert basic.group is None
@@ -86,7 +84,7 @@ http://vod.example.com/show.mkv
         # Verify live streams
         live_channels = [ch for ch in channels if ch.stream_mode == "live"]
         assert len(live_channels) == 2
-        
+
         # Verify on-demand content
         vod_channels = [ch for ch in channels if ch.stream_mode == "on_demand"]
         assert len(vod_channels) == 2
@@ -105,10 +103,14 @@ http://vod.example.com/show.mkv
         # Generate content for 100 channels
         lines = ["#EXTM3U"]
         for i in range(100):
-            group = "News" if i % 3 == 0 else "Sports" if i % 3 == 1 else "Entertainment"
-            lines.append(f'#EXTINF:-1 tvg-id="ch{i}" tvg-name="Channel {i}" group-title="{group}",Channel {i}')
+            group = (
+                "News" if i % 3 == 0 else "Sports" if i % 3 == 1 else "Entertainment"
+            )
+            lines.append(
+                f'#EXTINF:-1 tvg-id="ch{i}" tvg-name="Channel {i}" group-title="{group}",Channel {i}'
+            )
             lines.append(f"http://example.com/stream{i}")
-        
+
         content = "\n".join(lines)
         m3u_file = tmp_path / "large.m3u"
         m3u_file.write_text(content)
@@ -161,7 +163,7 @@ http://example.com/valid3
 
         # Should only parse valid channel pairs
         assert len(channels) == 3
-        
+
         valid_ids = {ch.tvg_id for ch in channels}
         assert valid_ids == {"valid1", "valid2", "valid3"}
 

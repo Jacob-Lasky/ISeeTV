@@ -27,7 +27,7 @@ def sample_m3u_channel():
         stream_url="http://example.com/stream.m3u8",
         logo_url="http://example.com/logo.png",
         group="Entertainment",
-        stream_mode="live"
+        stream_mode="live",
     )
 
 
@@ -42,7 +42,7 @@ def sample_m3u_channels():
             stream_url="http://example.com/stream1.m3u8",
             logo_url="http://example.com/logo1.png",
             group="Entertainment",
-            stream_mode="live"
+            stream_mode="live",
         ),
         M3uChannel(
             source="test_source",
@@ -51,7 +51,7 @@ def sample_m3u_channels():
             stream_url="http://example.com/stream2.m3u8",
             logo_url="http://example.com/logo2.png",
             group="Sports",
-            stream_mode="live"
+            stream_mode="live",
         ),
         M3uChannel(
             source="test_source",
@@ -60,8 +60,8 @@ def sample_m3u_channels():
             stream_url="http://example.com/stream3.m3u8",
             logo_url=None,
             group=None,
-            stream_mode="on_demand"
-        )
+            stream_mode="on_demand",
+        ),
     ]
 
 
@@ -75,7 +75,7 @@ def unicode_m3u_channel():
         stream_url="http://example.com/unicode_stream.m3u8",
         logo_url="http://example.com/unicode_logo.png",
         group="国际频道",
-        stream_mode="live"
+        stream_mode="live",
     )
 
 

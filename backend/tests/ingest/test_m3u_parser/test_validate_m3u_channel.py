@@ -158,7 +158,7 @@ class TestValidateM3uChannel:
             "group-title": "Sports",
             "tvg-country": "US",
             "tvg-language": "English",
-            "custom-attr": "custom-value"  # Should be ignored
+            "custom-attr": "custom-value",  # Should be ignored
         }
         channel_name = "ESPN"
         stream_url = "http://sports.stream.com/espn"

@@ -39,19 +39,17 @@ class TestConstants:
             "#EXT-X-VERSION",
             "#EXT-X-STREAM-INF",
             "#EXT-X-MEDIA",
-            "#EXT-X-PLAYLIST-TYPE"
+            "#EXT-X-PLAYLIST-TYPE",
         }
         # Check if any HLS tags are included (implementation may vary)
-        assert any(tag in EXPECTED_M3U_TAGS for tag in hls_tags) or len(EXPECTED_M3U_TAGS) >= 2
+        assert (
+            any(tag in EXPECTED_M3U_TAGS for tag in hls_tags)
+            or len(EXPECTED_M3U_TAGS) >= 2
+        )
 
     def test_expected_extinf_keys_contains_iptv_keys(self):
         """EXPECTED_EXTINF_KEYS should include common IPTV-specific keys."""
-        iptv_keys = {
-            "tvg-id",
-            "tvg-name", 
-            "tvg-logo",
-            "group-title"
-        }
+        iptv_keys = {"tvg-id", "tvg-name", "tvg-logo", "group-title"}
         # All core IPTV keys should be present
         assert iptv_keys.issubset(EXPECTED_EXTINF_KEYS)
 
@@ -65,7 +63,7 @@ class TestConstants:
         """Constants should not contain empty strings."""
         assert "" not in EXPECTED_M3U_TAGS
         assert "" not in EXPECTED_EXTINF_KEYS
-        
+
     def test_all_m3u_tags_start_with_hash(self):
         """All M3U tags should start with # character."""
         for tag in EXPECTED_M3U_TAGS:
@@ -75,4 +73,6 @@ class TestConstants:
         """EXTINF keys should follow lowercase-with-hyphens convention."""
         for key in EXPECTED_EXTINF_KEYS:
             # Check that keys are lowercase and use hyphens (common EXTINF convention)
-            assert key.islower() or "-" in key, f"Key '{key}' should be lowercase or contain hyphens"
+            assert key.islower() or "-" in key, (
+                f"Key '{key}' should be lowercase or contain hyphens"
+            )
