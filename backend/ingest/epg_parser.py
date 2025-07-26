@@ -140,19 +140,26 @@ class ValidationResults:
                 logger.warning("  - Programme '%s': %s", prog_id, sorted(attrs))
 
 
+# Global validation_results for backward compatibility
 validation_results = ValidationResults()
 
 
-def validate_root_element(root_elem: _Element) -> None:
+def validate_root_element(root_elem: _Element, validation_results: ValidationResults = None) -> None:
     """Function to validate root <tv> element attributes."""
+    if validation_results is None:
+        validation_results = ValidationResults()
+    
     logger.debug("Validating root element attributes")
     for attr in root_elem.attrib:
         if attr not in EXPECTED_ROOT_ATTRS:
             validation_results.unexpected_root_attrs.add(attr)
 
 
-def validate_channel_element(channel_elem: _Element) -> str:
+def validate_channel_element(channel_elem: _Element, validation_results: ValidationResults = None) -> str:
     """Function to validate channel element structure and return channel_id."""
+    if validation_results is None:
+        validation_results = ValidationResults()
+    
     logger.debug("Validating channel element attributes")
     channel_id = channel_elem.attrib.get("id", "Unknown")
 
@@ -169,8 +176,11 @@ def validate_channel_element(channel_elem: _Element) -> str:
     return channel_id
 
 
-def validate_programme_element(programme_elem: _Element) -> str:
+def validate_programme_element(programme_elem: _Element, validation_results: ValidationResults = None) -> str:
     """Function to validate programme element structure and return programme_id."""
+    if validation_results is None:
+        validation_results = ValidationResults()
+    
     logger.debug("Validating programme element attributes")
     programme_id = programme_elem.attrib.get("program-id") or programme_elem.attrib.get(
         "channel", "Unknown"
@@ -204,7 +214,7 @@ def get_root_and_validate(epg_file: str) -> _Element:
     if root.tag != "tv":
         raise ValueError("Expected root tag 'tv', found '%s'" % root.tag)
 
-    validate_root_element(root)
+    validate_root_element(root, validation_results)
     validate_root_tags(root)
 
     return root
@@ -234,7 +244,7 @@ def parse_epg_for_channels(
 
     # Process all channel elements
     for channel_elem in root.findall("channel"):
-        channel_id = validate_channel_element(channel_elem)
+        channel_id = validate_channel_element(channel_elem, validation_results)
 
         try:
             channel_name = get_required_text(
@@ -281,7 +291,7 @@ def parse_epg_for_programs(
 
     # Process all programme elements
     for programme_elem in root.findall("programme"):
-        programme_id = validate_programme_element(programme_elem)
+        programme_id = validate_programme_element(programme_elem, validation_results)
 
         try:
             # Required attributes - strict parsing
