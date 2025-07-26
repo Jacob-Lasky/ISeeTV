@@ -11,3 +11,4 @@ data/assignments.json
 data/rules.json
 data/ingestion_rules_logs/*
 *.coverage
+*.windsurf

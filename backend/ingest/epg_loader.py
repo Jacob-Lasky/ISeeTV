@@ -230,16 +230,26 @@ async def _bulk_upsert_programs(
         )
 
         # Execute bulk operation
-        session.execute(stmt, program_data)
+        result = session.execute(stmt, program_data)
         session.commit()
 
-        # Create success results for all programs
+        # Determine status based on rowcount
+        # Note: For bulk operations, rowcount represents total affected rows
+        # We cannot determine per-record status, so we use aggregate logic
+        if result.rowcount > 0:
+            status = "upserted"
+            message_template = "Program '{title}' on {channel_id} processed"
+        else:
+            status = "skipped"
+            message_template = "Program '{title}' on {channel_id} - no changes detected"
+
+        # Create results for all programs with determined status
         results = [
             LoadResult(
                 "PROGRAM",
                 f"{program.source}:{program.program_id}",
-                "upserted",
-                f"Program '{program.title}' on {program.channel_id} processed",
+                status,
+                message_template.format(title=program.title, channel_id=program.channel_id),
             )
             for program in programs
         ]

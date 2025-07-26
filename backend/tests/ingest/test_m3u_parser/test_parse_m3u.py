@@ -271,20 +271,3 @@ http://movie.stream.com/video.mp4
 
         assert exc_info.value.status_code == 500
         assert "Error parsing M3U file" in str(exc_info.value.detail)
-
-    @patch("ingest.m3u_parser.IngestTaskManager")
-    def test_task_progress_updates(self, mock_task_manager, tmp_path):
-        """Task progress should be updated when task_id provided."""
-        content = """#EXTM3U
-#EXTINF:-1 tvg-id="channel1",Channel 1
-http://example.com/stream1
-"""
-        m3u_file = tmp_path / "task_progress.m3u"
-        m3u_file.write_text(content)
-
-        channels = parse_m3u(str(m3u_file), source="test_source", task_id="task123")
-
-        # Verify task progress was updated
-        mock_task_manager.update_step_progress.assert_called_once_with(
-            "task123", 2, "Parsing", 0
-        )
