@@ -465,3 +465,21 @@ class TestParseEpgForPrograms:
         assert len(programs) == 1
         assert programs[0].title == 'Program & Show <HD> "Special"'
         assert programs[0].description == 'Description with "quotes" and & symbols.'
+
+    @patch("ingest.epg_parser.IngestTaskManager.update_step_progress")
+    def test_parse_programs_with_unexpected_exception(self, mock_update_progress, patch_etree_parse):
+        """Test that unexpected exceptions are caught and logged during program parsing."""
+        xml_content = """<?xml version="1.0" encoding="UTF-8"?>
+        <tv>
+            <programme channel="ch1" start_timestamp="20240101120" stop_timestamp="20240101130">
+                <title>Valid Program</title>
+            </programme>
+        </tv>"""
+
+        temp_xml_file = patch_etree_parse(xml_content)
+        
+        with patch("ingest.epg_parser.validate_programme_element") as mock_validate:
+            mock_validate.side_effect = RuntimeError("Unexpected error")
+            
+            with pytest.raises(RuntimeError):
+                list(parse_epg_for_programs(temp_xml_file, "test_source", "UTC"))

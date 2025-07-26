@@ -116,14 +116,50 @@ class TestValidateRootElement:
         assert "générator-info" in validation_results.unexpected_root_attrs
 
     def test_case_sensitive_attribute_validation(self):
-        """Attribute validation should be case-sensitive."""
+        """Root element attribute validation should be case-sensitive."""
         validation_results = ValidationResults()
-        xml = '<tv Generator-Info-Name="test"></tv>'  # Wrong case
+        xml = '<tv Source="test" generator-info-name="Test"></tv>'
         root = etree.fromstring(xml)
 
         validate_root_element(root, validation_results)
 
-        assert "Generator-Info-Name" in validation_results.unexpected_root_attrs
+        # 'Source' (capital S) should be unexpected, 'source' would be expected
+        assert "Source" in validation_results.unexpected_root_attrs
+        # 'generator-info-name' is expected, so should not be in unexpected
+        assert "generator-info-name" not in validation_results.unexpected_root_attrs
+
+    def test_default_validation_results_instantiation(self):
+        """Test that validate_root_element creates ValidationResults when none provided."""
+        xml = '<tv unexpected-attr="value"></tv>'
+        root = etree.fromstring(xml)
+        
+        # Call without providing validation_results - should create default instance
+        # This covers line 150: validation_results = ValidationResults()
+        validate_root_element(root)
+        
+        # Function should complete successfully without errors
+        # (We can't access the internal validation_results, but successful completion
+        # indicates the default instance was created)
+
+    def test_unexpected_root_tags_validation(self):
+        """Test that unexpected child tags in root element are recorded."""
+        validation_results = ValidationResults()
+        xml = '''<tv>
+            <channel id="test"></channel>
+            <programme channel="test" start="20240101000000" stop="20240101010000"></programme>
+            <unexpected-tag>content</unexpected-tag>
+            <another-unexpected>more content</another-unexpected>
+        </tv>'''
+        root = etree.fromstring(xml)
+
+        validate_root_element(root, validation_results)
+
+        assert "unexpected-tag" in validation_results.unexpected_root_tags
+        assert "another-unexpected" in validation_results.unexpected_root_tags
+        assert validation_results.unexpected_root_tags["unexpected-tag"] == 1
+        assert validation_results.unexpected_root_tags["another-unexpected"] == 1
+        assert "channel" not in validation_results.unexpected_root_tags
+        assert "programme" not in validation_results.unexpected_root_tags
 
     def test_namespace_attributes(self):
         """Root element with namespace attributes should be handled correctly."""

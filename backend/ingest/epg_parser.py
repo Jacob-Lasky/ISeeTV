@@ -145,7 +145,7 @@ validation_results = ValidationResults()
 
 
 def validate_root_element(root_elem: _Element, validation_results: ValidationResults = None) -> None:
-    """Function to validate root <tv> element attributes."""
+    """Function to validate root <tv> element attributes and child tags."""
     if validation_results is None:
         validation_results = ValidationResults()
     
@@ -153,6 +153,12 @@ def validate_root_element(root_elem: _Element, validation_results: ValidationRes
     for attr in root_elem.attrib:
         if attr not in EXPECTED_ROOT_ATTRS:
             validation_results.unexpected_root_attrs.add(attr)
+    
+    # Validate root-level child tags
+    logger.debug("Validating root element child tags")
+    for child in root_elem:
+        if child.tag not in EXPECTED_ROOT_TAGS:
+            validation_results.unexpected_root_tags[child.tag] += 1
 
 
 def validate_channel_element(channel_elem: _Element, validation_results: ValidationResults = None) -> str:

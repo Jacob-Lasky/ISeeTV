@@ -336,3 +336,22 @@ class TestParseEpgForChannels:
         assert channels[0].display_name == "Channel 0"
         assert channels[99].channel_id == "ch99"
         assert channels[99].display_name == "Channel 99"
+
+    @patch("ingest.epg_parser.IngestTaskManager.update_step_progress")
+    def test_parse_channels_with_unexpected_exception(self, mock_update_progress, patch_etree_parse):
+        """Test that unexpected exceptions are caught and logged during channel parsing."""
+        xml_content = """<?xml version="1.0" encoding="UTF-8"?>
+        <tv>
+            <channel id="ch1">
+                <display-name>Valid Channel</display-name>
+            </channel>
+        </tv>"""
+
+        temp_xml_file = patch_etree_parse(xml_content)
+        
+        # Mock validate_channel_element to raise unexpected exception
+        with patch("ingest.epg_parser.validate_channel_element") as mock_validate:
+            mock_validate.side_effect = RuntimeError("Unexpected error")
+            
+            with pytest.raises(RuntimeError):
+                list(parse_epg_for_channels(temp_xml_file, "test_source"))

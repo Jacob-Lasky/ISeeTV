@@ -163,11 +163,26 @@ class TestValidateChannelElement:
         assert channel_id == "频道1"
 
     def test_channel_with_special_characters_id(self):
-        """Channel with special characters in id should be handled correctly."""
+        """Channel with special characters in ID should be handled correctly."""
         validation_results = ValidationResults()
-        xml = '<channel id="ch-1_test.channel@domain.com"></channel>'
+        xml = '<channel id="test@#$%^*()_+-"></channel>'
         channel = etree.fromstring(xml)
 
         channel_id = validate_channel_element(channel, validation_results)
 
-        assert channel_id == "ch-1_test.channel@domain.com"
+        assert channel_id == "test@#$%^*()_+-"
+        assert len(validation_results.unexpected_channel_attrs["test@#$%^*()_+-"]) == 0
+
+    def test_default_validation_results_instantiation(self):
+        """Test that validate_channel_element creates ValidationResults when none provided."""
+        xml = '<channel id="test" unexpected-attr="value"></channel>'
+        channel = etree.fromstring(xml)
+        
+        # Call without providing validation_results - should create default instance
+        # This covers line 161: validation_results = ValidationResults()
+        channel_id = validate_channel_element(channel)
+        
+        # Verify function returns expected result and completes without errors
+        assert channel_id == "test"
+        # (We can't access the internal validation_results, but successful completion
+        # indicates the default instance was created)
