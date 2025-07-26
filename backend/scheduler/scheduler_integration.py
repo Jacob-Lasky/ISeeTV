@@ -262,7 +262,9 @@ async def ingest_callback_wrapper(source_name: str, file_type: str) -> None:
         # Start background load task
         from main import background_load_task
 
-        await background_load_task(task_id, file_type, file_path, source_name)
+        await background_load_task(
+            task_id, file_type, file_path, source_name, source.source_timezone
+        )
 
         logger.info("Scheduler ingest completed: %s %s", source_name, file_type)
 

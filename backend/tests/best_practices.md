@@ -44,3 +44,6 @@ This approach:
     Helps document intent and behavior
     Makes onboarding easier for future developers
     Enables fast, confident iteration in a growing codebase
+
+Finally, to run tests, use the following command:
+uv run pytest ...

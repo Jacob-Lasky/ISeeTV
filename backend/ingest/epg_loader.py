@@ -335,6 +335,7 @@ async def load_programs_async(
     session: Session,
     file_path: str,
     source_name: str,
+    source_timezone: str,
     task_id: str | None = None,
     batch_size: int = 2000,
 ) -> AsyncGenerator[LoadResult, None]:
@@ -345,7 +346,9 @@ async def load_programs_async(
 
     try:
         # Parse programs (this is synchronous but can be large)
-        programs = parse_epg_for_programs(file_path, source_name, task_id)
+        programs = parse_epg_for_programs(
+            file_path, source_name, source_timezone, task_id
+        )
         logger.info("Parsed %s programs", len(programs))
 
         # Update task progress if task_id provided
@@ -398,10 +401,19 @@ async def load_programs_async(
 
 
 async def load_epg_file_async(
-    session: Session, file_path: str, source_name: str, task_id: str | None = None
+    session: Session,
+    file_path: str,
+    source_name: str,
+    source_timezone: str,
+    task_id: str | None = None,
 ) -> AsyncGenerator[LoadResult, None]:
     """Main async function to load complete EPG file (channels + programs)."""
-    logger.info("Starting complete EPG file load: %s for %s", file_path, source_name)
+    logger.info(
+        "Starting complete EPG file load: %s for %s with timezone %s",
+        file_path,
+        source_name,
+        source_timezone,
+    )
 
     # Load channels first
     async for result in load_epg_channels_async(
@@ -410,7 +422,9 @@ async def load_epg_file_async(
         yield result
 
     # Then load programs
-    async for result in load_programs_async(session, file_path, source_name, task_id):
+    async for result in load_programs_async(
+        session, file_path, source_name, source_timezone, task_id
+    ):
         yield result
 
     logger.info("Completed EPG file load for %s", source_name)

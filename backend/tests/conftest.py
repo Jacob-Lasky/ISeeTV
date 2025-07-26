@@ -1,8 +1,10 @@
 """Shared fixtures for M3U loader tests."""
 
 import pytest
-from unittest.mock import Mock, MagicMock
+from unittest.mock import Mock
 from sqlalchemy.orm import Session
+from io import StringIO
+import lxml.etree as et
 
 from models.models import M3uChannel
 
@@ -106,3 +108,15 @@ def mock_ingest_task_manager():
     mock_itm.update_item_progress = Mock()
     mock_itm.update_step_progress = Mock()
     return mock_itm
+
+
+@pytest.fixture
+def patch_etree_parse(tmp_path):
+    """Create temporary XML files for testing etree.parse without mocking."""
+    def _create_temp_xml(xml_str: str):
+        # Create a temporary XML file with the provided content
+        temp_file = tmp_path / "test.xml"
+        temp_file.write_text(xml_str, encoding="utf-8")
+        return str(temp_file)
+    
+    return _create_temp_xml

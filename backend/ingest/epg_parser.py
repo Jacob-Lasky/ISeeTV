@@ -8,6 +8,8 @@ from common.log_utils import get_logger
 from common.task_manager import IngestTaskManager
 from models.models import EpgChannel, Program
 
+import pytz
+
 logger = get_logger(__name__)
 
 # EPG are usually XML-based with a structure similar to:
@@ -248,7 +250,7 @@ def parse_epg_for_channels(
 
 
 def parse_epg_for_programs(
-    epg_file: str, source: str, task_id: str | None = None
+    epg_file: str, source: str, source_timezone: str, task_id: str | None = None
 ) -> list[Program]:
     """Parse an EPG file and return a list of Program objects."""
     logger.info("Parsing EPG file for programs: %s", epg_file)
@@ -257,12 +259,16 @@ def parse_epg_for_programs(
         IngestTaskManager.update_step_progress(task_id, 4, "Parsing EPG programs", 0)
 
     # Parse the entire tree at once
-    tree = etree.parse(epg_file)
+    try:
+        tree = etree.parse(epg_file)
+    except OSError as e:
+        logger.exception("File not found")
+        raise FileNotFoundError(f"{source} EPG file {epg_file} not found") from e
+
     root = tree.getroot()
 
     if root.tag != "tv":
-        logger.error("Expected root tag 'tv', found '%s'", root.tag)
-        return []
+        raise ValueError("Expected root tag 'tv', found '%s'" % root.tag)
 
     # Validate root element
     validate_root_element(root)
@@ -300,8 +306,9 @@ def parse_epg_for_programs(
             program_id = f"{channel_id}_{start_time}"
 
             # parse timestamps in formats: 1751953500
-            start_time = dt.datetime.fromtimestamp(int(start_time))
-            end_time = dt.datetime.fromtimestamp(int(end_time))
+            # time-zone aware based on source's timezone, will be set to UTC
+            start_time = parse_program_time(start_time, source_timezone)
+            end_time = parse_program_time(end_time, source_timezone)
 
             programs.append(
                 Program(
@@ -345,3 +352,21 @@ def get_required_attr(elem: _Element, attr: str, context: str = "") -> str:
         msg = f"Missing required attribute '{attr}' at line {line}. Context: {context}"
         raise ValueError(msg)
     return value.strip()
+
+
+def parse_program_time(ts_str: str, source_tz_str: str = "UTC") -> dt.datetime:
+    """
+    Interpret the Unix timestamp as a local time in the source timezone,
+    and convert it to UTC.
+    """
+    ts = int(ts_str)
+
+    # Step 1: convert to naive datetime (assume it's local time, not real UTC)
+    naive_dt = dt.datetime.utcfromtimestamp(ts)
+
+    # Step 2: assign the source's timezone to this naive datetime
+    source_tz = pytz.timezone(source_tz_str)
+    local_dt = source_tz.localize(naive_dt)
+
+    # Step 3: convert to real UTC
+    return local_dt.astimezone(pytz.UTC)

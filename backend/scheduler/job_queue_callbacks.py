@@ -163,7 +163,13 @@ async def _execute_refresh_job(
 
         # Step 3: Ingest the file
         logger.info("Starting ingest for %s %s", source_name, file_type)
-        await background_load_task(ingest_task_id, file_type, file_path, source_name)
+        await background_load_task(
+            ingest_task_id,
+            file_type,
+            file_path,
+            source_name,
+            source.source_timezone,
+        )
         logger.info("Ingest completed for %s %s", source_name, file_type)
 
         logger.info(

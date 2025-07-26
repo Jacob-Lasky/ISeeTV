@@ -735,7 +735,7 @@ def update_source_total_records(
 
 
 async def background_load_task(
-    task_id: str, file_type: str, file_path: str, source_name: str
+    task_id: str, file_type: str, file_path: str, source_name: str, source_timezone: str
 ) -> None:
     """Background task to load file data into database with multi-step progress tracking."""
     logger.debug(
@@ -762,7 +762,7 @@ async def background_load_task(
                     logger.warning(f"Load error in task {task_id}: {result.message}")
         elif file_type == "epg":
             async for result in load_epg_file_async(
-                session, file_path, source_name, task_id
+                session, file_path, source_name, source_timezone, task_id
             ):
                 if result.status == "error":
                     logger.warning(f"Load error in task {task_id}: {result.message}")
