@@ -4,8 +4,7 @@ This module focuses exclusively on testing channel element validation logic.
 Each test validates one specific validation scenario or edge case.
 """
 
-import pytest
-from unittest.mock import patch, MagicMock
+from unittest.mock import MagicMock
 from lxml import etree
 
 from ingest.epg_parser import validate_channel_element, ValidationResults
