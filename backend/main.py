@@ -82,7 +82,7 @@ from scheduler.scheduler_integration import (
     start_scheduler,
     stop_scheduler,
 )
-from streams.streams_utils import (
+from common.streams_utils import (
     get_stream_programs_query,
     get_streams_filter_values,
     get_streams_internal,
