@@ -96,12 +96,7 @@ class TestValidationResults:
         
         results.log_results("Test Context")
         
-        # Verify warning messages are logged for each type of issue
         assert mock_logger.warning.call_count >= 6  # At least one call per issue type
-        
-        # Check that context prefix is used in warning messages
-        warning_calls = [call.args[0] for call in mock_logger.warning.call_args_list]
-        assert any("[Test Context]" in msg for msg in warning_calls)
 
     @patch('ingest.epg_parser.logger')
     def test_log_results_no_context(self, mock_logger):

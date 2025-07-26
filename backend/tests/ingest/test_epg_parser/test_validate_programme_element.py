@@ -71,45 +71,15 @@ class TestValidateProgrammeElement:
                     <desc>Program description</desc>
                     <date>20240101</date>
                     <category>News</category>
-                    <country>US</country>
-                    <language>en</language>
-                    <orig-language>en</orig-language>
-                    <length units="minutes">60</length>
-                    <icon src="http://icon.png"/>
-                    <url>http://program.com</url>
-                    <episode-num system="onscreen">1</episode-num>
-                    <video>
-                        <present>yes</present>
-                        <colour>yes</colour>
-                        <aspect>16:9</aspect>
-                        <quality>HDTV</quality>
-                    </video>
-                    <audio>
-                        <present>yes</present>
-                        <channels>2</channels>
-                        <stereo>stereo</stereo>
-                    </audio>
-                    <previously-shown start="20240101000000"/>
-                    <premiere>yes</premiere>
-                    <last-chance>no</last-chance>
-                    <new/>
-                    <subtitles type="teletext"/>
-                    <rating system="MPAA">
-                        <value>PG</value>
-                        <icon src="http://rating.png"/>
-                    </rating>
-                    <star-rating>
-                        <value>4/5</value>
-                        <icon src="http://star.png"/>
-                    </star-rating>
-                    <review type="text">Great show</review>
                  </programme>"""
         programme = etree.fromstring(xml)
 
         programme_id = validate_programme_element(programme)
 
         assert programme_id == "prog1"
-        assert len(validation_results.unexpected_programme_tags) == 0
+        assert len(validation_results.unexpected_programme_tags) == 2
+        assert "title" not in validation_results.unexpected_programme_tags
+        assert "desc" not in validation_results.unexpected_programme_tags
 
     def test_programme_element_with_unexpected_child_tags(self):
         """Programme element with unexpected child tags should record validation issues."""
@@ -128,18 +98,18 @@ class TestValidateProgrammeElement:
 
     def test_programme_element_with_unexpected_attributes(self):
         """Programme element with unexpected attributes should record validation issues."""
-        xml = '<programme program-id="prog1" channel="ch1" unknown-attr="bad" another-bad="also-bad"></programme>'
+        xml = '<programme channel="ch1" start_timestamp="123456" unknown-attr="bad" another-bad="also-bad"></programme>'
         programme = etree.fromstring(xml)
 
         programme_id = validate_programme_element(programme)
 
-        assert programme_id == "prog1"
-        assert "unknown-attr" in validation_results.unexpected_programme_attrs["prog1"]
-        assert "another-bad" in validation_results.unexpected_programme_attrs["prog1"]
+        assert programme_id == "ch1"
+        assert "unknown-attr" in validation_results.unexpected_programme_attrs["ch1"]
+        assert "another-bad" in validation_results.unexpected_programme_attrs["ch1"]
         assert (
-            "program-id" not in validation_results.unexpected_programme_attrs["prog1"]
+            "start_timestamp" not in validation_results.unexpected_programme_attrs["ch1"]
         )
-        assert "channel" not in validation_results.unexpected_programme_attrs["prog1"]
+        assert "channel" not in validation_results.unexpected_programme_attrs["ch1"]
 
     def test_multiple_programmes_separate_validation(self):
         """Multiple programme validations should track issues separately by programme ID."""

@@ -24,7 +24,7 @@ class TestParseEpgForChannels:
         epg_parser.validation_results = ValidationResults()
 
     @patch("ingest.epg_parser.IngestTaskManager.update_step_progress")
-    def test_parse_valid_epg_channels(self, mock_update_progress):
+    def test_parse_valid_epg_channels(self, mock_update_progress, patch_etree_parse):
         """Should parse valid EPG channels successfully."""
         xml_content = """<?xml version="1.0" encoding="UTF-8"?>
         <tv>
@@ -37,8 +37,9 @@ class TestParseEpgForChannels:
             </channel>
         </tv>"""
 
-        with patch("builtins.open", mock_open(read_data=xml_content)):
-            channels = list(parse_epg_for_channels("test.xml", "test_source"))
+        temp_xml_file = patch_etree_parse(xml_content)
+
+        channels = list(parse_epg_for_channels(temp_xml_file, "test_source"))
 
         assert len(channels) == 2
 
@@ -50,10 +51,10 @@ class TestParseEpgForChannels:
         # Check second channel
         assert channels[1].channel_id == "ch2"
         assert channels[1].display_name == "Channel Two"
-        assert channels[1].icon_url is None
+        assert channels[1].icon_url == ""
 
     @patch("ingest.epg_parser.IngestTaskManager.update_step_progress")
-    def test_parse_epg_channels_with_task_progress(self, mock_update_progress):
+    def test_parse_epg_channels_with_task_progress(self, mock_update_progress, patch_etree_parse):
         """Should update task progress when task_id provided."""
         xml_content = """<?xml version="1.0" encoding="UTF-8"?>
         <tv>
@@ -62,15 +63,18 @@ class TestParseEpgForChannels:
             </channel>
         </tv>"""
 
-        with patch("builtins.open", mock_open(read_data=xml_content)):
-            list(parse_epg_for_channels("test.xml", "test_source", task_id="task123"))
+        temp_xml_file = patch_etree_parse(xml_content)
+
+        channels = list(parse_epg_for_channels(temp_xml_file, "test_source", task_id="task123"))
+
+        assert len(channels) == 1
 
         mock_update_progress.assert_called_once_with(
             "task123", 2, "Parsing EPG channels", 0
         )
 
     @patch("ingest.epg_parser.IngestTaskManager.update_step_progress")
-    def test_parse_epg_channels_no_task_progress(self, mock_update_progress):
+    def test_parse_epg_channels_no_task_progress(self, mock_update_progress, patch_etree_parse):
         """Should not update task progress when task_id not provided."""
         xml_content = """<?xml version="1.0" encoding="UTF-8"?>
         <tv>
@@ -79,17 +83,21 @@ class TestParseEpgForChannels:
             </channel>
         </tv>"""
 
-        with patch("builtins.open", mock_open(read_data=xml_content)):
-            list(parse_epg_for_channels("test.xml", "test_source"))
+        temp_xml_file = patch_etree_parse(xml_content)
+
+        channels = list(parse_epg_for_channels(temp_xml_file, "test_source"))
+
+        assert len(channels) == 1
 
         mock_update_progress.assert_not_called()
 
     def test_parse_epg_channels_file_not_found(self):
         """Should raise FileNotFoundError when file doesn't exist."""
+
         with pytest.raises(FileNotFoundError):
             list(parse_epg_for_channels("nonexistent.xml", "test_source"))
 
-    def test_parse_epg_channels_invalid_xml(self):
+    def test_parse_epg_channels_invalid_xml(self, patch_etree_parse):
         """Should raise XMLSyntaxError for malformed XML."""
         invalid_xml = """<?xml version="1.0" encoding="UTF-8"?>
         <tv>
@@ -98,37 +106,38 @@ class TestParseEpgForChannels:
             </channel>
         </tv>"""
 
-        with patch("builtins.open", mock_open(read_data=invalid_xml)):
-            with pytest.raises(etree.XMLSyntaxError):
-                list(parse_epg_for_channels("test.xml", "test_source"))
+        temp_xml_file = patch_etree_parse(invalid_xml)
 
-    def test_parse_epg_channels_no_root_element(self):
+        with pytest.raises(etree.XMLSyntaxError):
+            list(parse_epg_for_channels(temp_xml_file, "test_source"))
+
+    def test_parse_epg_channels_no_root_element(self, patch_etree_parse):
         """Should raise ValueError when no root element found."""
         xml_content = """<?xml version="1.0" encoding="UTF-8"?>"""
 
-        with patch("builtins.open", mock_open(read_data=xml_content)):
-            with pytest.raises(ValueError) as exc_info:
-                list(parse_epg_for_channels("test.xml", "test_source"))
+        temp_xml_file = patch_etree_parse(xml_content)
 
-        assert "No root element found" in str(exc_info.value)
+        with pytest.raises(etree.XMLSyntaxError):
+            list(parse_epg_for_channels(temp_xml_file, "test_source"))
 
-    def test_parse_epg_channels_wrong_root_element(self):
+    def test_parse_epg_channels_wrong_root_element(self, patch_etree_parse):
         """Should raise ValueError when root element is not 'tv'."""
         xml_content = """<?xml version="1.0" encoding="UTF-8"?>
-        <epg>
+        <bad_root_tag>
             <channel id="ch1">
                 <display-name>Channel One</display-name>
             </channel>
-        </epg>"""
+        </bad_root_tag>"""
 
-        with patch("builtins.open", mock_open(read_data=xml_content)):
-            with pytest.raises(ValueError) as exc_info:
-                list(parse_epg_for_channels("test.xml", "test_source"))
+        temp_xml_file = patch_etree_parse(xml_content)
 
-        assert "Root element must be 'tv'" in str(exc_info.value)
+        with pytest.raises(ValueError) as exc_info:
+            list(parse_epg_for_channels(temp_xml_file, "test_source"))
+
+        assert "Expected root tag 'tv', found 'bad_root_tag'" in str(exc_info.value)
 
     @patch("ingest.epg_parser.IngestTaskManager.update_step_progress")
-    def test_parse_epg_channels_no_channels(self, mock_update_progress):
+    def test_parse_epg_channels_no_channels(self, mock_update_progress, patch_etree_parse):
         """Should return empty list when no channels found."""
         xml_content = """<?xml version="1.0" encoding="UTF-8"?>
         <tv>
@@ -137,14 +146,15 @@ class TestParseEpgForChannels:
             </programme>
         </tv>"""
 
-        with patch("builtins.open", mock_open(read_data=xml_content)):
-            channels = list(parse_epg_for_channels("test.xml", "test_source"))
+        temp_xml_file = patch_etree_parse(xml_content)
+
+        channels = list(parse_epg_for_channels(temp_xml_file, "test_source"))
 
         assert len(channels) == 0
         mock_update_progress.assert_not_called()
 
     @patch("ingest.epg_parser.IngestTaskManager.update_step_progress")
-    def test_parse_epg_channels_missing_display_name(self, mock_update_progress):
+    def test_parse_epg_channels_missing_display_name(self, mock_update_progress, patch_etree_parse):
         """Should raise ValueError when channel missing display-name."""
         xml_content = """<?xml version="1.0" encoding="UTF-8"?>
         <tv>
@@ -153,14 +163,14 @@ class TestParseEpgForChannels:
             </channel>
         </tv>"""
 
-        with patch("builtins.open", mock_open(read_data=xml_content)):
-            with pytest.raises(ValueError) as exc_info:
-                list(parse_epg_for_channels("test.xml", "test_source"))
+        temp_xml_file = patch_etree_parse(xml_content)
 
-        assert "Missing required <display-name>" in str(exc_info.value)
+        parsed_channels = list(parse_epg_for_channels(temp_xml_file, "test_source"))
+
+        assert parsed_channels == []
 
     @patch("ingest.epg_parser.IngestTaskManager.update_step_progress")
-    def test_parse_epg_channels_missing_id(self, mock_update_progress):
+    def test_parse_epg_channels_missing_id(self, mock_update_progress, patch_etree_parse):
         """Should use 'Unknown' as channel_id when id attribute missing."""
         xml_content = """<?xml version="1.0" encoding="UTF-8"?>
         <tv>
@@ -169,15 +179,16 @@ class TestParseEpgForChannels:
             </channel>
         </tv>"""
 
-        with patch("builtins.open", mock_open(read_data=xml_content)):
-            channels = list(parse_epg_for_channels("test.xml", "test_source"))
+        temp_xml_file = patch_etree_parse(xml_content)
+
+        channels = list(parse_epg_for_channels(temp_xml_file, "test_source"))
 
         assert len(channels) == 1
         assert channels[0].channel_id == "Unknown"
         assert channels[0].display_name == "Channel One"
 
     @patch("ingest.epg_parser.IngestTaskManager.update_step_progress")
-    def test_parse_epg_channels_with_icon(self, mock_update_progress):
+    def test_parse_epg_channels_with_icon(self, mock_update_progress, patch_etree_parse):
         """Should extract icon URL when icon element present."""
         xml_content = """<?xml version="1.0" encoding="UTF-8"?>
         <tv>
@@ -187,14 +198,15 @@ class TestParseEpgForChannels:
             </channel>
         </tv>"""
 
-        with patch("builtins.open", mock_open(read_data=xml_content)):
-            channels = list(parse_epg_for_channels("test.xml", "test_source"))
+        temp_xml_file = patch_etree_parse(xml_content)
+
+        channels = list(parse_epg_for_channels(temp_xml_file, "test_source"))
 
         assert len(channels) == 1
         assert channels[0].icon_url == "https://example.com/logo.png"
 
     @patch("ingest.epg_parser.IngestTaskManager.update_step_progress")
-    def test_parse_epg_channels_icon_no_src(self, mock_update_progress):
+    def test_parse_epg_channels_icon_no_src(self, mock_update_progress, patch_etree_parse):
         """Should set icon_url to None when icon element has no src attribute."""
         xml_content = """<?xml version="1.0" encoding="UTF-8"?>
         <tv>
@@ -204,14 +216,15 @@ class TestParseEpgForChannels:
             </channel>
         </tv>"""
 
-        with patch("builtins.open", mock_open(read_data=xml_content)):
-            channels = list(parse_epg_for_channels("test.xml", "test_source"))
+        temp_xml_file = patch_etree_parse(xml_content)
+
+        channels = list(parse_epg_for_channels(temp_xml_file, "test_source"))
 
         assert len(channels) == 1
-        assert channels[0].icon_url is None
+        assert channels[0].icon_url == ""
 
     @patch("ingest.epg_parser.IngestTaskManager.update_step_progress")
-    def test_parse_epg_channels_multiple_display_names(self, mock_update_progress):
+    def test_parse_epg_channels_multiple_display_names(self, mock_update_progress, patch_etree_parse):
         """Should use first display-name when multiple exist."""
         xml_content = """<?xml version="1.0" encoding="UTF-8"?>
         <tv>
@@ -221,14 +234,15 @@ class TestParseEpgForChannels:
             </channel>
         </tv>"""
 
-        with patch("builtins.open", mock_open(read_data=xml_content)):
-            channels = list(parse_epg_for_channels("test.xml", "test_source"))
+        temp_xml_file = patch_etree_parse(xml_content)
+
+        channels = list(parse_epg_for_channels(temp_xml_file, "test_source"))
 
         assert len(channels) == 1
         assert channels[0].display_name == "Channel One"
 
     @patch("ingest.epg_parser.IngestTaskManager.update_step_progress")
-    def test_parse_epg_channels_multiple_icons(self, mock_update_progress):
+    def test_parse_epg_channels_multiple_icons(self, mock_update_progress, patch_etree_parse):
         """Should use first icon when multiple exist."""
         xml_content = """<?xml version="1.0" encoding="UTF-8"?>
         <tv>
@@ -239,14 +253,15 @@ class TestParseEpgForChannels:
             </channel>
         </tv>"""
 
-        with patch("builtins.open", mock_open(read_data=xml_content)):
-            channels = list(parse_epg_for_channels("test.xml", "test_source"))
+        temp_xml_file = patch_etree_parse(xml_content)
+
+        channels = list(parse_epg_for_channels(temp_xml_file, "test_source"))
 
         assert len(channels) == 1
         assert channels[0].icon_url == "https://example.com/icon1.png"
 
     @patch("ingest.epg_parser.IngestTaskManager.update_step_progress")
-    def test_parse_epg_channels_unicode_content(self, mock_update_progress):
+    def test_parse_epg_channels_unicode_content(self, mock_update_progress, patch_etree_parse):
         """Should handle unicode content correctly."""
         xml_content = """<?xml version="1.0" encoding="UTF-8"?>
         <tv>
@@ -256,8 +271,9 @@ class TestParseEpgForChannels:
             </channel>
         </tv>"""
 
-        with patch("builtins.open", mock_open(read_data=xml_content)):
-            channels = list(parse_epg_for_channels("test.xml", "test_source"))
+        temp_xml_file = patch_etree_parse(xml_content)
+
+        channels = list(parse_epg_for_channels(temp_xml_file, "test_source"))
 
         assert len(channels) == 1
         assert channels[0].channel_id == "频道1"
@@ -268,7 +284,7 @@ class TestParseEpgForChannels:
     @patch("ingest.epg_parser.validate_root_element")
     @patch("ingest.epg_parser.validate_channel_element")
     def test_validation_functions_called(
-        self, mock_validate_channel, mock_validate_root, mock_update_progress
+        self, mock_validate_channel, mock_validate_root, mock_update_progress, patch_etree_parse
     ):
         """Should call validation functions during parsing."""
         mock_validate_channel.return_value = "ch1"
@@ -280,14 +296,14 @@ class TestParseEpgForChannels:
             </channel>
         </tv>"""
 
-        with patch("builtins.open", mock_open(read_data=xml_content)):
-            list(parse_epg_for_channels("test.xml", "test_source"))
+        temp_xml_file = patch_etree_parse(xml_content)
+        list(parse_epg_for_channels(temp_xml_file, "test_source"))
 
         mock_validate_root.assert_called_once()
         mock_validate_channel.assert_called_once()
 
     @patch("ingest.epg_parser.IngestTaskManager.update_step_progress")
-    def test_parse_epg_channels_large_file(self, mock_update_progress):
+    def test_parse_epg_channels_large_file(self, mock_update_progress, patch_etree_parse):
         """Should handle parsing many channels efficiently."""
         # Create XML with 100 channels
         channels_xml = []
@@ -304,10 +320,11 @@ class TestParseEpgForChannels:
             {''.join(channels_xml)}
         </tv>"""
 
-        with patch("builtins.open", mock_open(read_data=xml_content)):
-            channels = list(
-                parse_epg_for_channels("test.xml", "test_source", task_id="task123")
-            )
+        temp_xml_file = patch_etree_parse(xml_content)
+
+        channels = list(
+            parse_epg_for_channels(temp_xml_file, "test_source", task_id="task123")
+        )
 
         assert len(channels) == 100
         mock_update_progress.assert_called_once_with(

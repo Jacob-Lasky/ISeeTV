@@ -175,6 +175,8 @@ def validate_programme_element(programme_elem: _Element) -> str:
     programme_id = programme_elem.attrib.get("program-id") or programme_elem.attrib.get(
         "channel", "Unknown"
     )
+    if programme_id == "":
+        programme_id = "Unknown"
 
     # Validate programme attributes
     for attr in programme_elem.attrib:
@@ -189,6 +191,33 @@ def validate_programme_element(programme_elem: _Element) -> str:
     return programme_id
 
 
+def get_root_and_validate(epg_file: str) -> _Element:
+    """Read an EPG file and return the root element."""
+    try:
+        tree = etree.parse(epg_file)
+    except OSError as e:
+        logger.exception("File not found")
+        raise FileNotFoundError(f"EPG file {epg_file} not found") from e
+
+    root = tree.getroot()
+
+    if root.tag != "tv":
+        raise ValueError("Expected root tag 'tv', found '%s'" % root.tag)
+
+    validate_root_element(root)
+    validate_root_tags(root)
+
+    return root
+
+
+def validate_root_tags(root: _Element):
+    """Validate the root element of an EPG file."""
+    # Validate root-level tags
+    for child in root:
+        if child.tag not in EXPECTED_ROOT_TAGS:
+            validation_results.unexpected_root_tags[child.tag] += 1
+
+
 def parse_epg_for_channels(
     epg_file: str, source: str, task_id: str | None = None
 ) -> list[EpgChannel]:
@@ -199,20 +228,7 @@ def parse_epg_for_channels(
         IngestTaskManager.update_step_progress(task_id, 2, "Parsing EPG channels", 0)
 
     # Parse the entire tree at once
-    tree = etree.parse(epg_file)
-    root = tree.getroot()
-
-    if root.tag != "tv":
-        logger.error("Expected root tag 'tv', found '%s'", root.tag)
-        return []
-
-    # Validate root element
-    validate_root_element(root)
-
-    # Validate root-level tags
-    for child in root:
-        if child.tag not in EXPECTED_ROOT_TAGS:
-            validation_results.unexpected_root_tags[child.tag] += 1
+    root = get_root_and_validate(epg_file)
 
     channels = []
 
@@ -259,24 +275,7 @@ def parse_epg_for_programs(
         IngestTaskManager.update_step_progress(task_id, 4, "Parsing EPG programs", 0)
 
     # Parse the entire tree at once
-    try:
-        tree = etree.parse(epg_file)
-    except OSError as e:
-        logger.exception("File not found")
-        raise FileNotFoundError(f"{source} EPG file {epg_file} not found") from e
-
-    root = tree.getroot()
-
-    if root.tag != "tv":
-        raise ValueError("Expected root tag 'tv', found '%s'" % root.tag)
-
-    # Validate root element
-    validate_root_element(root)
-
-    # Validate root-level tags
-    for child in root:
-        if child.tag not in EXPECTED_ROOT_TAGS:
-            validation_results.unexpected_root_tags[child.tag] += 1
+    root = get_root_and_validate(epg_file)
 
     programs = []
 
