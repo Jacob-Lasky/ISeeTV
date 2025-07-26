@@ -1,5 +1,9 @@
 Testing Prompt for Future Modules
 
+I have a top-level conftest.py which is where additional fixtures are defined. 
+
+To run tests, use the following command: uv run pytest ...
+
 Your goal is to create a test suite that is maintainable, meaningful, and aligned with the real code. Follow these guidelines when testing any new or existing module:
 1. Understand Before You Test
     Read the actual function and class definitions
@@ -44,6 +48,3 @@ This approach:
     Helps document intent and behavior
     Makes onboarding easier for future developers
     Enables fast, confident iteration in a growing codebase
-
-Finally, to run tests, use the following command:
-uv run pytest ...
