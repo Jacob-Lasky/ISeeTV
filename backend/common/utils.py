@@ -6,7 +6,7 @@ from fastapi import HTTPException, status
 from common.log_utils import get_logger
 from common.state import get_progress
 from models.models import DownloadProgress
-from utils.filter_utils import FILTERABLE_COLUMNS_CONFIG
+from common.filter_utils import FILTERABLE_COLUMNS_CONFIG
 
 logger = get_logger(__name__)
 

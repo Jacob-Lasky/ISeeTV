@@ -17,7 +17,7 @@ from models.stream_models import (
     StreamQueryParams,
     StreamsResponse,
 )
-from utils.filter_utils import get_all_filter_values
+from common.filter_utils import get_all_filter_values
 
 logger = get_logger(__name__)
 

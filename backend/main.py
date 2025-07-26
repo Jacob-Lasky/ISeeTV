@@ -87,18 +87,19 @@ from streams.streams_utils import (
     get_streams_filter_values,
     get_streams_internal,
 )
-from utils.file_generators import (
+from common.file_generators import (
     apply_unified_channel_filtering,
     generate_epg_content,
     generate_m3u_content,
     get_filtered_channels_and_programs,
 )
-from utils.filter_utils import (
+from common.filter_utils import (
     get_all_filter_values,
     get_table_filter_statistics,
     get_table_filter_statistics_by_source,
     precompute_all_filter_values,
     precompute_filter_values,
+    FILTERABLE_COLUMNS_CONFIG,
 )
 
 logger = get_logger(__name__)
@@ -1185,11 +1186,6 @@ async def precompute_all_table_filters() -> dict[str, Any]:
 
     try:
         with SessionLocal() as session:
-            from utils.filter_utils import (
-                FILTERABLE_COLUMNS_CONFIG,
-                precompute_all_filter_values,
-            )
-
             precompute_all_filter_values(session)
 
             return {
