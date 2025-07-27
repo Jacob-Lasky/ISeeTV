@@ -144,16 +144,18 @@ class ValidationResults:
 validation_results = ValidationResults()
 
 
-def validate_root_element(root_elem: _Element, validation_results: ValidationResults = None) -> None:
+def validate_root_element(
+    root_elem: _Element, validation_results: ValidationResults = None
+) -> None:
     """Function to validate root <tv> element attributes and child tags."""
     if validation_results is None:
         validation_results = ValidationResults()
-    
+
     logger.debug("Validating root element attributes")
     for attr in root_elem.attrib:
         if attr not in EXPECTED_ROOT_ATTRS:
             validation_results.unexpected_root_attrs.add(attr)
-    
+
     # Validate root-level child tags
     logger.debug("Validating root element child tags")
     for child in root_elem:
@@ -161,11 +163,13 @@ def validate_root_element(root_elem: _Element, validation_results: ValidationRes
             validation_results.unexpected_root_tags[child.tag] += 1
 
 
-def validate_channel_element(channel_elem: _Element, validation_results: ValidationResults = None) -> str:
+def validate_channel_element(
+    channel_elem: _Element, validation_results: ValidationResults = None
+) -> str:
     """Function to validate channel element structure and return channel_id."""
     if validation_results is None:
         validation_results = ValidationResults()
-    
+
     logger.debug("Validating channel element attributes")
     channel_id = channel_elem.attrib.get("id", "Unknown")
 
@@ -182,11 +186,13 @@ def validate_channel_element(channel_elem: _Element, validation_results: Validat
     return channel_id
 
 
-def validate_programme_element(programme_elem: _Element, validation_results: ValidationResults = None) -> str:
+def validate_programme_element(
+    programme_elem: _Element, validation_results: ValidationResults = None
+) -> str:
     """Function to validate programme element structure and return programme_id."""
     if validation_results is None:
         validation_results = ValidationResults()
-    
+
     logger.debug("Validating programme element attributes")
     programme_id = programme_elem.attrib.get("program-id") or programme_elem.attrib.get(
         "channel", "Unknown"
