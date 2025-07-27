@@ -30,13 +30,15 @@
                                     <span class="text-lg font-semibold"
                                         >Rules Configuration</span
                                     >
-                                    <div class="flex gap-2">
-                                        <Button
-                                            icon="pi pi-plus"
-                                            label="Add Rule"
-                                            severity="success"
-                                            @click="addNewRule"
-                                        />
+                                    <div class="flex">
+                                        <div class="button-spacing">
+                                            <Button
+                                                icon="pi pi-plus"
+                                                label="Add Rule"
+                                                severity="success"
+                                                @click="addNewRule"
+                                            />
+                                        </div>
                                         <Button
                                             icon="pi pi-play"
                                             label="Apply Rules"
@@ -297,13 +299,15 @@
                                     <span class="text-lg font-semibold"
                                         >Source Rule Assignments</span
                                     >
-                                    <div class="flex gap-2">
-                                        <Button
-                                            icon="pi pi-plus"
-                                            label="Add Assignment"
-                                            severity="success"
-                                            @click="addNewAssignment"
-                                        />
+                                    <div class="flex">
+                                        <div class="button-spacing">
+                                            <Button
+                                                icon="pi pi-plus"
+                                                label="Add Assignment"
+                                                severity="success"
+                                                @click="addNewAssignment"
+                                            />
+                                        </div>
                                         <Button
                                             icon="pi pi-play"
                                             label="Apply Assignments"
@@ -2483,6 +2487,12 @@ const isAssignmentBeingApplied = (
 .log-content {
     border-top: 1px solid #e5e7eb;
     padding-top: 1rem;
+}
+
+/* Button spacing utility class */
+.button-spacing {
+    margin-right: 16px;
+    display: inline-block;
 }
 
 /* Responsive adjustments */
