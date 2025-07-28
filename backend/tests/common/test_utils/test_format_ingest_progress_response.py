@@ -97,13 +97,11 @@ class TestFormatIngestProgressResponse:
                         "completed": True,
                         "count": 200,
                         "processed": 200,
-                        "duration": 45.2
                     },
                     "programs": {
                         "completed": False,
                         "count": 10000,
                         "processed": 8500,
-                        "duration": 180.8
                     }
                 },
                 "metadata": {

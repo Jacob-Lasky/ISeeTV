@@ -166,13 +166,11 @@ class TestGetAllProgressResponse:
                         "completed": True,
                         "count": 150,
                         "processed": 150,
-                        "duration": 45.2
                     },
                     "programs": {
                         "completed": False,
                         "count": 5000,
                         "processed": 4250,
-                        "duration": 120.8
                     }
                 },
                 "metadata": {
