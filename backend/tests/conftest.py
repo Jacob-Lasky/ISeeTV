@@ -319,3 +319,44 @@ def patch_etree_parse(tmp_path):
         return str(temp_file)
 
     return _create_temp_xml
+
+@pytest.fixture
+def mock_stream_channel():
+    """Mock StreamChannel object for testing."""
+    return StreamChannel(
+        m3u_id=1,
+        source="test_source",
+        tvg_id="ch001",
+        name="Test Channel",
+        stream_url="http://example.com/stream.m3u8",
+        logo_url="http://example.com/logo.png",
+        group="Entertainment",
+        stream_mode="live",
+        epg_id=2,
+        display_name="Test Channel Display",
+        icon_url="http://example.com/icon.png",
+        created_at=datetime(2024, 1, 1, 12, 0, 0),
+        updated_at=datetime(2024, 1, 2, 12, 0, 0),
+        filter_reasons=[],
+        program_count=5,
+        next_program_title="Next Program",
+        next_program_start=datetime(2024, 1, 3, 15, 0, 0)
+    )
+
+@pytest.fixture
+def mock_filter_counts():
+    """Mock filter view counts for testing."""
+    return {
+        "normal": 100,
+        "inverse": 50,
+        "all": 150
+    }
+
+@pytest.fixture
+def mock_filter_values():
+    """Mock filter values for testing."""
+    return {
+        "source": ["source1", "source2", "source3"],
+        "group": ["Entertainment", "Sports", "News"],
+        "display_name": ["Channel 1", "Channel 2", "Channel 3"]
+    }
