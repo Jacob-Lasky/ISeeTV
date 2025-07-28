@@ -1,6 +1,5 @@
 """Tests for get_streams_filter_values function following atomic design principles."""
 
-import pytest
 from unittest.mock import Mock, patch
 
 from common.streams_utils import get_streams_filter_values

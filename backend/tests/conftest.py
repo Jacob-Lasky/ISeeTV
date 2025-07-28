@@ -9,6 +9,7 @@ from io import StringIO
 import lxml.etree as et
 
 from models.models import M3uChannel, EpgChannel, Program
+from models.stream_models import StreamChannel
 from ingest.epg_loader import LoadResult
 
 
@@ -356,7 +357,19 @@ def mock_filter_counts():
 def mock_filter_values():
     """Mock filter values for testing."""
     return {
-        "source": ["source1", "source2", "source3"],
-        "group": ["Entertainment", "Sports", "News"],
-        "display_name": ["Channel 1", "Channel 2", "Channel 3"]
+        "source": [
+            {"value": "source1", "count": 10},
+            {"value": "source2", "count": 15},
+            {"value": "source3", "count": 8}
+        ],
+        "group": [
+            {"value": "Entertainment", "count": 20},
+            {"value": "Sports", "count": 12},
+            {"value": "News", "count": 5}
+        ],
+        "display_name": [
+            {"value": "Channel 1", "count": 1},
+            {"value": "Channel 2", "count": 1},
+            {"value": "Channel 3", "count": 1}
+        ]
     }
