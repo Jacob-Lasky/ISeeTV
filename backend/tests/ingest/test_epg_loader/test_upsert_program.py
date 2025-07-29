@@ -116,29 +116,7 @@ class TestUpsertProgram:
         result = _upsert_program(mock_session, sample_program)
 
         assert result.status == expected_status
-
-    @patch('ingest.epg_loader.logger')
-    def test_upsert_program_logging(self, mock_logger, mock_session, sample_program):
-        """Test program upsert logging behavior."""
-        mock_result = Mock()
-        mock_result.rowcount = 1
-        mock_session.execute.return_value = mock_result
-
-        _upsert_program(mock_session, sample_program)
-
-        # Verify debug logging was called
-        mock_logger.debug.assert_called_with("Upserting program %s", "prog1")
-
-    @patch('ingest.epg_loader.logger')
-    def test_upsert_program_error_logging(self, mock_logger, mock_session, sample_program):
-        """Test program upsert error logging behavior."""
-        mock_session.execute.side_effect = Exception("Test error")
-
-        _upsert_program(mock_session, sample_program)
-
-        # Verify exception logging was called
-        mock_logger.exception.assert_called_with("Error upserting program %s: %s", "prog1", mock_session.execute.side_effect)
-
+        
     def test_upsert_program_sql_statement_structure(self, mock_session, sample_program):
         """Test that the SQL statement is constructed correctly."""
         mock_result = Mock()

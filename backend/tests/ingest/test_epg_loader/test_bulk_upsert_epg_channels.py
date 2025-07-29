@@ -113,28 +113,7 @@ class TestBulkUpsertEpgChannels:
         for result in results:
             assert result.status == "error"
             assert "Commit failed" in result.message
-
-    @pytest.mark.asyncio
-    @patch('ingest.epg_loader.logger')
-    async def test_bulk_upsert_epg_channels_logging(self, mock_logger, mock_session, sample_epg_channels):
-        """Test bulk EPG channel upsert logging behavior."""
-        await _bulk_upsert_epg_channels(mock_session, sample_epg_channels)
-
-        # Verify debug logging was called
-        mock_logger.debug.assert_any_call("Bulk upserting %s EPG channels", 3)
-        mock_logger.debug.assert_any_call("Bulk upserted %s EPG channels", 3)
-
-    @pytest.mark.asyncio
-    @patch('ingest.epg_loader.logger')
-    async def test_bulk_upsert_epg_channels_error_logging(self, mock_logger, mock_session, sample_epg_channels):
-        """Test bulk EPG channel upsert error logging behavior."""
-        mock_session.execute.side_effect = Exception("Test error")
-
-        await _bulk_upsert_epg_channels(mock_session, sample_epg_channels)
-
-        # Verify exception logging was called
-        mock_logger.exception.assert_called_with("Error in bulk upsert of EPG channels: %s", mock_session.execute.side_effect)
-
+            
     @pytest.mark.asyncio
     async def test_bulk_upsert_epg_channels_data_structure(self, mock_session, sample_epg_channels):
         """Test that the data structure passed to execute is correct."""

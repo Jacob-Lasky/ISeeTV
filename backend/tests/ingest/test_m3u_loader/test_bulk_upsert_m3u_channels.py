@@ -100,9 +100,8 @@ class TestBulkUpsertM3uChannels:
             assert result.status == "error"
 
     @pytest.mark.asyncio
-    @patch("ingest.m3u_loader.logger")
     async def test_bulk_upsert_with_unicode_channels(
-        self, mock_logger, mock_session, unicode_m3u_channel
+        self, mock_session, unicode_m3u_channel
     ):
         """Test bulk upsert with unicode characters in channel data."""
         mock_session.execute.return_value = None

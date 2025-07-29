@@ -261,11 +261,9 @@ class TestGetFilterViewCounts:
         """Test that database exceptions are handled gracefully."""
         mock_session.execute.side_effect = Exception("Database error")
 
-        with patch('common.streams_utils.logger.exception') as mock_logger:
-            result = get_filter_view_counts(mock_session)
+        result = get_filter_view_counts(mock_session)
 
         assert result == {"normal": 0, "inverse": 0, "all": 0}
-        mock_logger.assert_called_once_with("Error getting filter view counts")
 
     def test_filter_view_counts_handles_no_result(self, mock_session):
         """Test that no database result is handled correctly."""

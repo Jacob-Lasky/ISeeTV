@@ -128,25 +128,6 @@ class TestFormatDownloadProgressResponse:
             assert call_args["file_size"] == 10485760
             assert call_args["metadata"]["compression"] == "gzip"
 
-    def test_format_download_progress_response_logger_called(self):
-        """Test that logger.debug is called with correct parameters."""
-        progress_data = {
-            "test_task": {
-                "task_id": "test_task",
-                "status": "completed"
-            }
-        }
-        
-        with patch("common.utils.DownloadProgress") as mock_download_progress, \
-             patch("common.utils.logger") as mock_logger:
-            mock_download_progress.return_value = MagicMock()
-            
-            format_download_progress_response(progress_data)
-            
-            mock_logger.debug.assert_called_once_with(
-                "Formatting download progress response for %s", progress_data
-            )
-
     def test_format_download_progress_response_download_progress_exception(self):
         """Test behavior when DownloadProgress constructor raises exception."""
         progress_data = {

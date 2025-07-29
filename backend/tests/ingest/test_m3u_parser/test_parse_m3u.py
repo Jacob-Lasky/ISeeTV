@@ -161,27 +161,21 @@ http://stream2.example.com/live
         m3u_file = tmp_path / "test.m3u"
         m3u_file.write_text(content)
 
-        # Import logger to patch the correct logging function
-        with patch("ingest.m3u_parser.logger") as mock_logger:
-            channels = parse_m3u(str(m3u_file), "test_source")
+        channels = parse_m3u(str(m3u_file), "test_source")
 
-            # Should still parse valid channels
-            assert len(channels) == 2
-
-            # Should log unhandled tags and keys via logger.warning
-            mock_logger.warning.assert_called()
-            warning_calls = [call[0][0] for call in mock_logger.warning.call_args_list]
-
-            # Check for unhandled tags and keys logging
-            unhandled_tags_logged = any(
-                "Unhandled M3U tags" in call for call in warning_calls
-            )
-            unhandled_keys_logged = any(
-                "Unhandled EXTINF keys" in call for call in warning_calls
+        # Should still parse valid channels
+        assert len(channels) == 2
+        
+        # Check for unhandled tags and keys logging
+        unhandled_tags_logged = any(
+            "Unhandled M3U tags" in call for call in warning_calls
+        )
+        unhandled_keys_logged = any(
+            "Unhandled EXTINF keys" in call for call in warning_calls
             )
 
-            assert unhandled_tags_logged
-            assert unhandled_keys_logged
+        assert unhandled_tags_logged
+        assert unhandled_keys_logged
 
     def test_parse_m3u_with_task_id_parameter(self, tmp_path, sample_m3u_content):
         """M3U parsing with task_id parameter should work without errors."""

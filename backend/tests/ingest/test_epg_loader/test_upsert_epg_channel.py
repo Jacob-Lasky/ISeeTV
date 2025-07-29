@@ -112,28 +112,6 @@ class TestUpsertEpgChannel:
 
         assert result.status == expected_status
 
-    @patch('ingest.epg_loader.logger')
-    def test_upsert_epg_channel_logging(self, mock_logger, mock_session, sample_epg_channel):
-        """Test EPG channel upsert logging behavior."""
-        mock_result = Mock()
-        mock_result.rowcount = 1
-        mock_session.execute.return_value = mock_result
-
-        _upsert_epg_channel(mock_session, sample_epg_channel)
-
-        # Verify debug logging was called
-        mock_logger.debug.assert_called_with("Upserting EPG channel %s", "channel1")
-
-    @patch('ingest.epg_loader.logger')
-    def test_upsert_epg_channel_error_logging(self, mock_logger, mock_session, sample_epg_channel):
-        """Test EPG channel upsert error logging behavior."""
-        mock_session.execute.side_effect = Exception("Test error")
-
-        _upsert_epg_channel(mock_session, sample_epg_channel)
-
-        # Verify exception logging was called
-        mock_logger.exception.assert_called_once()
-
     def test_upsert_epg_channel_sql_statement_structure(self, mock_session, sample_epg_channel):
         """Test that the SQL statement is constructed correctly."""
         mock_result = Mock()

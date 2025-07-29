@@ -115,11 +115,15 @@ def filter_passed_channels(channels: list[dict[str, Any]]) -> list[dict[str, Any
 
         # Handle both string and list formats
         if isinstance(filter_reasons, str):
-            try:
-                filter_reasons_list = json.loads(filter_reasons)
-            except json.JSONDecodeError:
-                # If parsing fails, assume it's not empty
-                continue
+            # Handle empty string as empty list (passed channel)
+            if not filter_reasons.strip():
+                filter_reasons_list = []
+            else:
+                try:
+                    filter_reasons_list = json.loads(filter_reasons)
+                except json.JSONDecodeError:
+                    # If parsing fails, assume it's not empty
+                    continue
         else:
             filter_reasons_list = filter_reasons or []
 
@@ -297,14 +301,8 @@ def _format_epg_datetime(dt_str: str) -> str:
 
     """
     logger.debug("Formatting EPG datetime...")
-    try:
-        dt = datetime.fromisoformat(dt_str)
-
-        # Format as YYYYMMDDHHMMSS +0000
-        return dt.strftime("%Y%m%d%H%M%S +0000")
-    except Exception:
-        # Fallback to current time if parsing fails
-        return datetime.utcnow().strftime("%Y%m%d%H%M%S +0000")
+    dt = datetime.fromisoformat(dt_str)
+    return dt.strftime("%Y%m%d%H%M%S +0000")
 
 
 def _datetime_to_timestamp(dt_str: str) -> int:
@@ -318,12 +316,8 @@ def _datetime_to_timestamp(dt_str: str) -> int:
 
     """
     logger.debug("Converting datetime to timestamp...")
-    try:
-        dt = datetime.fromisoformat(dt_str)
-        return int(dt.timestamp())
-    except Exception:
-        # Fallback to current timestamp if parsing fails
-        return int(datetime.utcnow().timestamp())
+    dt = datetime.fromisoformat(dt_str)
+    return int(dt.timestamp())
 
 
 def get_filtered_channels_and_programs(

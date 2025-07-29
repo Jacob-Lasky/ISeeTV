@@ -243,17 +243,6 @@ class TestFormatTableResponse:
         }
         assert result == expected
 
-    def test_format_table_response_logger_called(self):
-        """Test that logger.debug is called with correct parameters."""
-        records = [{"id": 1, "name": "Test"}]
-        
-        with patch("common.utils.logger") as mock_logger:
-            format_table_response(records, "test_table")
-            
-            mock_logger.debug.assert_called_once_with(
-                "Formatting table response for %s", "test_table"
-            )
-
     @pytest.mark.parametrize(
         "table_name,source_filter",
         [

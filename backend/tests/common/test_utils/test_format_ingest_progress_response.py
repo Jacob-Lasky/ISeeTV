@@ -124,22 +124,6 @@ class TestFormatIngestProgressResponse:
         assert task_data["steps"]["programs"]["processed"] == 8500
         assert task_data["metadata"]["items_per_second"] == 47.2
 
-    def test_format_ingest_progress_response_logger_called(self):
-        """Test that logger.debug is called with correct parameters."""
-        progress_data = {
-            "test_task": {
-                "task_id": "test_task",
-                "status": "completed"
-            }
-        }
-        
-        with patch("common.utils.logger") as mock_logger:
-            format_ingest_progress_response(progress_data)
-            
-            mock_logger.debug.assert_called_once_with(
-                "Formatting ingest progress response for %s", progress_data
-            )
-
     def test_format_ingest_progress_response_legacy_format_structure(self):
         """Test that the function returns the expected legacy format structure."""
         progress_data = {

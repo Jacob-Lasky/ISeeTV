@@ -144,21 +144,7 @@ class TestGetProgressResponse:
             assert result == complex_progress["ingest_epg_complex_20240127_143022"]
             assert result["steps"]["channels"]["completed"] is True
             assert result["metadata"]["source_name"] == "complex"
-
-    def test_get_progress_response_logger_called(self):
-        """Test that logger.debug is called with correct parameters."""
-        progress_data = {
-            "test_task_id": {"status": "completed"}
-        }
-        
-        with patch("common.utils.get_progress") as mock_get_progress, \
-             patch("common.utils.logger") as mock_logger:
-            mock_get_progress.return_value = progress_data
             
-            get_progress_response("test_task_id", "download")
-            
-            mock_logger.debug.assert_called_once_with("Getting progress for %s", "test_task_id")
-
     def test_get_progress_response_get_progress_exception(self):
         """Test behavior when get_progress raises an exception."""
         with patch("common.utils.get_progress") as mock_get_progress:

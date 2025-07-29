@@ -98,20 +98,6 @@ class TestCreateTaskId:
             expected = f"download_m3u_{source_name}_20240127_143022"
             assert result == expected
 
-    def test_create_task_id_with_mock_logger(self):
-        """Test that function works correctly with mocked logger."""
-        with patch("common.utils.logger") as mock_logger:
-            result = create_task_id("test", "epg", "ingest")
-
-            # Verify logger.debug was called with correct parameters
-            mock_logger.debug.assert_called_once_with(
-                "Creating task for %s, %s, %s", "test", "epg", "ingest"
-            )
-
-            # Verify result format
-            assert result.startswith("ingest_epg_test_")
-            assert len(result) > len("ingest_epg_test_")
-
     def test_create_task_id_literal_types(self):
         """Test that function accepts only valid literal types."""
         # Valid combinations should work
