@@ -38,6 +38,15 @@ package = false
 requires = ["hatchling"]
 build-backend = "hatchling.build"
 
+[tool.coverage.run]
+omit = ["tests/*", "*/tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "if __name__ == .__main__.:",
+    "pragma: no cover",
+]
+
 [tool.ruff]
 lint.select = ["ALL"]
 lint.preview = true

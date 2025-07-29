@@ -51,3 +51,7 @@ If you're thinking about contributing to this repo in any way, I want you to! I 
     - to fix most linting issues: `uv run ruff check . --fix` (or, if you want to containerize uv: `docker run --rm -v $(pwd):/app -w /app python:3.11-slim uv run ruff check . --fix`)
     - to check for type errors: `uv run pyright .` (or, if you want to containerize uv: `docker run --rm -v $(pwd):/app -w /app python:3.11-slim uv run pyright .`)
     - to fix most type errors, you'll need to manually edit the files
+
+## Test Coverage
+- While in the backend directory, run:
+    - to check coverage: `uv run pytest tests/ --cov=. --cov-config=pyproject.toml --cov-report=term-missing`
