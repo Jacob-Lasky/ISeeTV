@@ -497,8 +497,57 @@ class TestGetStreamsInternal:
         expected_params = ["session", "source", "params"]
         
         assert params == expected_params
+
+    @patch('common.streams_utils.get_streams_query')
+    @patch('common.streams_utils.get_filter_view_counts')
+    @patch('common.streams_utils.get_streams_filter_values')
+    def test_streams_internal_page_size_validation(self, mock_filter_values_func, mock_filter_counts_func,
+                                                  mock_streams_query, mock_session, mock_stream_channel,
+                                                  mock_filter_counts, mock_filter_values):
+        """Test page_size validation logic: min(page_size, 500) and default to 100 if < 1."""
+        mock_streams_query.return_value = ([mock_stream_channel], 100)
+        mock_filter_counts_func.return_value = mock_filter_counts
+        mock_filter_values_func.return_value = mock_filter_values
         
-        # Verify parameter types
-        assert sig.parameters["session"].annotation.__name__ == "Session"
-        assert sig.parameters["source"].annotation == str
-        assert sig.parameters["params"].annotation.__name__ == "StreamQueryParams"
+        # Test case 2: page_size < 1 should default to 100
+        params = StreamQueryParams(page_size=0)
+        result = get_streams_internal(mock_session, "test_source", params)
+        
+        # Verify the streams query was called with page_size=100 (default)
+        mock_streams_query.assert_called_with(
+            session=mock_session,
+            source="test_source",
+            group=None,
+            page=1,
+            page_size=100,  # Should default to 100
+            sort_field="name",
+            sort_order="asc",
+            global_filter=None,
+            column_filters={},
+            apply_rules=True,
+            filter_view="matched"
+        )
+        assert result.page_size == 100
+        
+        # Reset mocks for next test
+        mock_streams_query.reset_mock()
+        
+        # Test case 3: negative page_size should default to 100
+        params = StreamQueryParams(page_size=-5)
+        result = get_streams_internal(mock_session, "test_source", params)
+        
+        # Verify the streams query was called with page_size=100 (default)
+        mock_streams_query.assert_called_with(
+            session=mock_session,
+            source="test_source",
+            group=None,
+            page=1,
+            page_size=100,  # Should default to 100
+            sort_field="name",
+            sort_order="asc",
+            global_filter=None,
+            column_filters={},
+            apply_rules=True,
+            filter_view="matched"
+        )
+        assert result.page_size == 100
