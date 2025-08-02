@@ -53,10 +53,7 @@ def atomic_write_json(file_path: str, data: Any) -> None:
 
     except Exception:
         # Clean up temporary file on error
-        try:
-            os.unlink(temp_path)
-        except OSError:
-            pass  # Ignore cleanup errors
+        os.unlink(temp_path)
         raise
 
 

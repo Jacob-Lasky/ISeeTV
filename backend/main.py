@@ -2331,6 +2331,352 @@ async def unapply_rules(
         )
 
 
+# Built-in Plugins API Endpoints
+
+
+@app.get("/api/plugins")
+def get_available_plugins():
+    """Get all available built-in plugins (without source-specific configuration)."""
+    try:
+        from rules.plugin_integration import get_plugin_integration
+        from rules.plugins.registry import get_plugin_registry, load_all_plugins
+        
+        # Load all plugins
+        load_all_plugins()
+        registry = get_plugin_registry()
+        integration = get_plugin_integration()
+        
+        # Get available plugins with default configuration
+        plugins = integration.get_plugins_config()  # This returns default config when no source specified
+        
+        return {
+            "success": True,
+            "plugins": plugins
+        }
+    
+    except Exception as e:
+        logger.exception("Error getting available plugins")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting available plugins: {str(e)}"
+        )
+
+
+@app.get("/api/{source}/plugins")
+def get_source_plugins(source: str):
+    """Get plugins configuration for a specific source."""
+    try:
+        from rules.plugin_integration import get_plugin_integration
+        
+        integration = get_plugin_integration()
+        
+        # Get source-specific plugin configuration
+        source_plugins = integration.get_plugins_config(source)
+        
+        # If no source-specific config, return available plugins with default config
+        if not source_plugins:
+            source_plugins = integration.get_plugins_config()  # Get defaults
+        
+        return {
+            "success": True,
+            "source": source,
+            "plugins": source_plugins
+        }
+    
+    except Exception as e:
+        logger.exception(f"Error getting plugins for source {source}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting plugins for source {source}: {str(e)}"
+        )
+
+
+@app.get("/api/plugins/{plugin_name}")
+def get_plugin(plugin_name: str):
+    """Get details for a specific built-in plugin."""
+    try:
+        from rules.plugin_integration import get_plugin_integration
+        from rules.plugins.registry import get_plugin_registry, load_all_plugins
+        
+        # Load all available plugins
+        load_all_plugins()
+        registry = get_plugin_registry()
+        integration = get_plugin_integration()
+        
+        # Get available plugins
+        available_plugins = registry.get_available_plugins()
+        
+        if plugin_name not in available_plugins:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Plugin '{plugin_name}' not found"
+            )
+        
+        plugin_info = available_plugins[plugin_name]
+        current_config = integration.get_plugins_config()
+        plugin_config = current_config.get(plugin_name, {})
+        
+        return {
+            "success": True,
+            "plugin": {
+                "name": plugin_name,
+                "description": plugin_info.get("description", ""),
+                "version": plugin_info.get("version", "1.0.0"),
+                "author": plugin_info.get("author", "ISeeTV"),
+                "parameters_schema": plugin_info.get("parameters_schema", {}),
+                "default_parameters": plugin_info.get("default_parameters", {}),
+                "enabled": plugin_config.get("enabled", False),
+                "parameters": plugin_config.get("parameters", plugin_info.get("default_parameters", {}))
+            }
+        }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error getting plugin {plugin_name}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting plugin: {str(e)}"
+        )
+
+
+@app.post("/api/{source}/plugins/save")
+def save_source_plugins_config(
+    source: str,
+    plugins_config: Annotated[dict[str, dict[str, Any]], Body()]
+):
+    """Save built-in plugins configuration for a specific source."""
+    try:
+        from rules.plugin_integration import get_plugin_integration
+        
+        integration = get_plugin_integration()
+        
+        # Validate configuration
+        is_valid, errors = integration.validate_plugins_config(plugins_config)
+        if not is_valid:
+            return {
+                "success": False,
+                "errors": errors,
+                "message": "Plugin configuration validation failed"
+            }
+        
+        # Save all plugins configuration for the source
+        success = integration.update_plugins_config_for_source(source, plugins_config)
+        
+        if not success:
+            return {
+                "success": False,
+                "message": f"Failed to save plugin configuration for source {source}"
+            }
+        
+        return {
+            "success": True,
+            "message": f"Successfully saved configuration for {len(plugins_config)} plugins on source {source}",
+            "source": source,
+            "saved_plugins": list(plugins_config.keys())
+        }
+    
+    except Exception as e:
+        logger.exception(f"Error saving plugins configuration for source {source}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error saving plugins configuration for source {source}: {str(e)}"
+        )
+
+
+@app.post("/api/plugins/validate")
+def validate_plugins_config(
+    plugins_config: Annotated[dict[str, dict[str, Any]], Body()]
+):
+    """Validate built-in plugins configuration without saving."""
+    try:
+        from rules.plugin_integration import get_plugin_integration
+        
+        integration = get_plugin_integration()
+        
+        # Validate configuration
+        is_valid, errors = integration.validate_plugins_config(plugins_config)
+        
+        return {
+            "success": True,
+            "valid": is_valid,
+            "errors": errors if not is_valid else [],
+            "message": "Configuration is valid" if is_valid else "Configuration has errors"
+        }
+    
+    except Exception as e:
+        logger.exception("Error validating plugins configuration")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error validating plugins configuration: {str(e)}"
+        )
+
+
+@app.post("/api/plugins/{plugin_name}/enable")
+def enable_plugin(plugin_name: str):
+    """Enable a specific built-in plugin."""
+    try:
+        from rules.plugin_integration import get_plugin_integration
+        from rules.plugins.registry import get_plugin_registry, load_all_plugins
+        
+        # Load all available plugins
+        load_all_plugins()
+        registry = get_plugin_registry()
+        integration = get_plugin_integration()
+        
+        # Check if plugin exists
+        available_plugins = registry.get_available_plugins()
+        if plugin_name not in available_plugins:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Plugin '{plugin_name}' not found"
+            )
+        
+        # Get current configuration
+        current_config = integration.get_plugins_config()
+        plugin_config = current_config.get(plugin_name, {
+            "enabled": False,
+            "parameters": available_plugins[plugin_name].get("default_parameters", {})
+        })
+        
+        # Enable the plugin
+        plugin_config["enabled"] = True
+        
+        # Save configuration
+        success = integration.update_plugin_config(plugin_name, plugin_config)
+        
+        if success:
+            return {
+                "success": True,
+                "message": f"Plugin '{plugin_name}' enabled successfully"
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"Failed to enable plugin '{plugin_name}'"
+            }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error enabling plugin {plugin_name}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error enabling plugin: {str(e)}"
+        )
+
+
+@app.post("/api/plugins/{plugin_name}/disable")
+def disable_plugin(plugin_name: str):
+    """Disable a specific built-in plugin."""
+    try:
+        from rules.plugin_integration import get_plugin_integration
+        from rules.plugins.registry import get_plugin_registry, load_all_plugins
+        
+        # Load all available plugins
+        load_all_plugins()
+        registry = get_plugin_registry()
+        integration = get_plugin_integration()
+        
+        # Check if plugin exists
+        available_plugins = registry.get_available_plugins()
+        if plugin_name not in available_plugins:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Plugin '{plugin_name}' not found"
+            )
+        
+        # Get current configuration
+        current_config = integration.get_plugins_config()
+        plugin_config = current_config.get(plugin_name, {
+            "enabled": False,
+            "parameters": available_plugins[plugin_name].get("default_parameters", {})
+        })
+        
+        # Disable the plugin
+        plugin_config["enabled"] = False
+        
+        # Save configuration
+        success = integration.update_plugin_config(plugin_name, plugin_config)
+        
+        if success:
+            return {
+                "success": True,
+                "message": f"Plugin '{plugin_name}' disabled successfully"
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"Failed to disable plugin '{plugin_name}'"
+            }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error disabling plugin {plugin_name}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error disabling plugin: {str(e)}"
+        )
+
+
+@app.post("/api/plugins/{plugin_name}/configure")
+def configure_plugin(
+    plugin_name: str,
+    plugin_config: Annotated[dict[str, Any], Body()]
+):
+    """Configure parameters for a specific built-in plugin."""
+    try:
+        from rules.plugin_integration import get_plugin_integration
+        from rules.plugins.registry import get_plugin_registry, load_all_plugins
+        
+        # Load all available plugins
+        load_all_plugins()
+        registry = get_plugin_registry()
+        integration = get_plugin_integration()
+        
+        # Check if plugin exists
+        available_plugins = registry.get_available_plugins()
+        if plugin_name not in available_plugins:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Plugin '{plugin_name}' not found"
+            )
+        
+        # Validate the configuration
+        temp_config = {plugin_name: plugin_config}
+        is_valid, errors = integration.validate_plugins_config(temp_config)
+        if not is_valid:
+            return {
+                "success": False,
+                "errors": errors,
+                "message": "Plugin configuration validation failed"
+            }
+        
+        # Save configuration
+        success = integration.update_plugin_config(plugin_name, plugin_config)
+        
+        if success:
+            return {
+                "success": True,
+                "message": f"Plugin '{plugin_name}' configured successfully"
+            }
+        else:
+            return {
+                "success": False,
+                "message": f"Failed to configure plugin '{plugin_name}'"
+            }
+    
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error configuring plugin {plugin_name}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error configuring plugin: {str(e)}"
+        )
+
+
 # Job Queue Management API Endpoints
 
 

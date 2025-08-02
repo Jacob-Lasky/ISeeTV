@@ -17,9 +17,10 @@ import re
 import time
 from dataclasses import dataclass, field
 from datetime import datetime
-from typing import Any, Literal
+from typing import Any, Literal, Optional
 
 import pandas as pd
+from sqlalchemy.orm import Session
 
 from common.constants import DATA_PATH
 from common.log_utils import get_logger
@@ -473,6 +474,7 @@ class IngestionRulesEngine:
         record: M3uChannel | EpgChannel | Program,
         table_name: str,
         source_name: str,
+        db_session: Optional[Session] = None,
     ) -> FilterResult:
         """Apply source-based rules to a single record (atomic operation)."""
         logger.debug("Applying rules to record")
@@ -485,6 +487,24 @@ class IngestionRulesEngine:
                 record,
             )
             return FilterResult(passed=True)  # Default to pass for unexpected types
+
+        # Apply built-in plugins first (if any are enabled)
+        try:
+            from rules.plugin_integration import get_plugin_filter_result
+            plugin_passed, plugin_reason = get_plugin_filter_result(
+                record, table_name, source_name, db_session
+            )
+            if not plugin_passed:
+                return FilterResult(
+                    passed=False,
+                    rejected_by="built_in_plugin",
+                    reason=plugin_reason or "Built-in plugin rejected record"
+                )
+        except ImportError:
+            logger.debug("Plugin system not available, skipping plugin checks")
+        except Exception as e:
+            logger.error(f"Error applying plugins: {e}")
+            # Continue with regular rules if plugins fail
 
         # Get source assignment to determine mode
         source_assignment = self.get_source_assignment(source_name)

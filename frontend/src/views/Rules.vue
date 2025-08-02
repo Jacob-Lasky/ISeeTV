@@ -635,6 +635,341 @@
                         </DataTable>
                     </template>
                 </Card>
+
+                <!-- Built-in Plugins Section -->
+                <Card class="mb-6">
+                    <template #content>
+                        <div class="mb-4">
+                            <div class="flex justify-between items-center mb-3">
+                                <div>
+                                    <span class="text-lg font-semibold"
+                                        >Built-in Plugins</span
+                                    >
+                                    <p class="text-sm text-gray-600 mt-1">
+                                        Configure built-in rule plugins per
+                                        source that apply advanced filtering
+                                        logic
+                                    </p>
+                                </div>
+                                <div class="flex gap-2">
+                                    <Button
+                                        icon="pi pi-refresh"
+                                        label="Refresh"
+                                        severity="secondary"
+                                        size="small"
+                                        :loading="loadingPlugins"
+                                        :disabled="!selectedPluginSource"
+                                        @click="loadPluginsForSource"
+                                    />
+                                    <Button
+                                        icon="pi pi-save"
+                                        label="Save Plugins"
+                                        severity="primary"
+                                        size="small"
+                                        :loading="savingPlugins"
+                                        :disabled="!selectedPluginSource"
+                                        @click="savePluginsForSource"
+                                    />
+                                </div>
+                            </div>
+
+                            <!-- Source Selection for Plugins -->
+                            <div class="flex align-items-center gap-3 mb-3">
+                                <label
+                                    for="plugin-source-select"
+                                    class="font-medium text-sm"
+                                >
+                                    Select Source:
+                                </label>
+                                <Select
+                                    id="plugin-source-select"
+                                    v-model="selectedPluginSource"
+                                    :options="sourceOptions"
+                                    optionLabel="label"
+                                    optionValue="value"
+                                    placeholder="Choose a source to configure plugins"
+                                    class="w-64"
+                                    @update:model-value="onPluginSourceChange"
+                                />
+                            </div>
+                        </div>
+
+                        <DataTable
+                            v-if="selectedPluginSource"
+                            :value="plugins"
+                            :loading="loadingPlugins"
+                            stripedRows
+                            responsiveLayout="scroll"
+                            dataKey="name"
+                        >
+                            <template #header>
+                                <div class="flex justify-between items-center">
+                                    <span class="text-md font-medium">
+                                        Plugins for
+                                        {{
+                                            getSourceLabel(selectedPluginSource)
+                                        }}
+                                    </span>
+                                    <Button
+                                        icon="pi pi-undo"
+                                        label="Reset to Defaults"
+                                        severity="secondary"
+                                        size="small"
+                                        @click="resetPluginsForSource"
+                                    />
+                                </div>
+                            </template>
+
+                            <Column
+                                field="name"
+                                header="Plugin Name"
+                                style="min-width: 280px"
+                            >
+                                <template #body="{ data }">
+                                    <div
+                                        class="flex flex-column"
+                                        style="gap: 8px; padding: 4px 0"
+                                    >
+                                        <div
+                                            class="font-semibold text-color"
+                                            style="
+                                                font-size: 14px;
+                                                line-height: 1.4;
+                                            "
+                                        >
+                                            {{ data.name }}
+                                        </div>
+                                        <div
+                                            class="text-color-secondary"
+                                            style="
+                                                font-size: 13px;
+                                                line-height: 1.4;
+                                                margin-top: 2px;
+                                            "
+                                        >
+                                            {{ data.description }}
+                                        </div>
+                                        <div
+                                            class="flex"
+                                            style="gap: 12px; margin-top: 4px"
+                                        >
+                                            <span
+                                                class="text-color-secondary"
+                                                style="
+                                                    font-size: 11px;
+                                                    font-weight: 500;
+                                                "
+                                            >
+                                                Version {{ data.version }}
+                                            </span>
+                                            <span
+                                                class="text-color-secondary"
+                                                style="
+                                                    font-size: 11px;
+                                                    font-weight: 500;
+                                                "
+                                            >
+                                                by {{ data.author }}
+                                            </span>
+                                        </div>
+                                    </div>
+                                </template>
+                            </Column>
+
+                            <Column
+                                field="enabled"
+                                header="Status"
+                                style="min-width: 120px"
+                            >
+                                <template #body="{ data }">
+                                    <div class="flex items-center gap-2">
+                                        <ToggleSwitch
+                                            v-model="data.enabled"
+                                            :disabled="savingPlugins"
+                                            @change="onPluginToggle(data)"
+                                        />
+                                        <Tag
+                                            :value="
+                                                data.enabled
+                                                    ? 'Enabled'
+                                                    : 'Disabled'
+                                            "
+                                            :severity="
+                                                data.enabled
+                                                    ? 'success'
+                                                    : 'secondary'
+                                            "
+                                            class="text-xs"
+                                        />
+                                    </div>
+                                </template>
+                            </Column>
+
+                            <Column
+                                field="parameters"
+                                header="Configuration"
+                                style="min-width: 350px"
+                            >
+                                <template #body="{ data }">
+                                    <div
+                                        v-if="data.enabled"
+                                        style="
+                                            display: flex;
+                                            flex-direction: column;
+                                            gap: 12px;
+                                            padding: 4px 0;
+                                        "
+                                    >
+                                        <div
+                                            v-for="(
+                                                value, key
+                                            ) in data.parameters"
+                                            :key="key"
+                                            style="
+                                                display: flex;
+                                                align-items: center;
+                                                gap: 12px;
+                                                min-height: 32px;
+                                            "
+                                        >
+                                            <div
+                                                style="
+                                                    width: 140px;
+                                                    text-align: right;
+                                                    padding-right: 8px;
+                                                    border-right: 1px solid;
+                                                "
+                                            >
+                                                <label
+                                                    style="
+                                                        font-size: 12px;
+                                                        font-weight: 600;
+                                                        text-transform: capitalize;
+                                                    "
+                                                >
+                                                    {{
+                                                        formatParameterLabel(
+                                                            key
+                                                        )
+                                                    }}
+                                                </label>
+                                            </div>
+                                            <div
+                                                style="
+                                                    flex: 1;
+                                                    display: flex;
+                                                    align-items: center;
+                                                "
+                                            >
+                                                <InputNumber
+                                                    v-if="
+                                                        typeof value ===
+                                                        'number'
+                                                    "
+                                                    v-model="
+                                                        data.parameters[key]
+                                                    "
+                                                    :min="
+                                                        getParameterMin(
+                                                            data.name,
+                                                            key
+                                                        )
+                                                    "
+                                                    :max="
+                                                        getParameterMax(
+                                                            data.name,
+                                                            key
+                                                        )
+                                                    "
+                                                    size="small"
+                                                    style="width: 80px"
+                                                    @input="
+                                                        onPluginParameterChange(
+                                                            data
+                                                        )
+                                                    "
+                                                />
+                                                <ToggleSwitch
+                                                    v-else-if="
+                                                        typeof value ===
+                                                        'boolean'
+                                                    "
+                                                    v-model="
+                                                        data.parameters[key]
+                                                    "
+                                                    size="small"
+                                                    @change="
+                                                        onPluginParameterChange(
+                                                            data
+                                                        )
+                                                    "
+                                                />
+                                                <InputText
+                                                    v-else
+                                                    v-model="
+                                                        data.parameters[key]
+                                                    "
+                                                    size="small"
+                                                    style="width: 120px"
+                                                    @input="
+                                                        onPluginParameterChange(
+                                                            data
+                                                        )
+                                                    "
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                    <div
+                                        v-else
+                                        style="
+                                            font-size: 13px;
+                                            color: #9ca3af;
+                                            font-style: italic;
+                                            padding: 8px 0;
+                                        "
+                                    >
+                                        Plugin disabled - enable to configure
+                                    </div>
+                                </template>
+                            </Column>
+
+                            <Column header="Actions" style="min-width: 120px">
+                                <template #body="{ data }">
+                                    <div class="flex gap-1 justify-center">
+                                        <Button
+                                            v-tooltip="'Reset to defaults'"
+                                            icon="pi pi-refresh"
+                                            severity="secondary"
+                                            size="small"
+                                            text
+                                            @click="resetPluginToDefaults(data)"
+                                        />
+                                        <Button
+                                            v-tooltip="'View plugin details'"
+                                            icon="pi pi-info-circle"
+                                            severity="info"
+                                            size="small"
+                                            text
+                                            @click="showPluginDetails(data)"
+                                        />
+                                    </div>
+                                </template>
+                            </Column>
+
+                            <template #empty>
+                                <div class="text-center p-4">
+                                    <i
+                                        class="pi pi-puzzle-piece text-4xl text-gray-400 mb-2"
+                                    ></i>
+                                    <p class="text-gray-600">
+                                        No built-in plugins available
+                                    </p>
+                                </div>
+                            </template>
+                        </DataTable>
+                    </template>
+                </Card>
             </div>
         </div>
     </div>
@@ -645,9 +980,10 @@ import { ref, computed, onMounted, watch } from "vue"
 import { useToast } from "primevue/usetoast"
 import Button from "primevue/button"
 import Card from "primevue/card"
-import Checkbox from "primevue/checkbox"
 import Column from "primevue/column"
 import DataTable from "primevue/datatable"
+import InputNumber from "primevue/inputnumber"
+import ToggleSwitch from "primevue/toggleswitch"
 import InputText from "primevue/inputtext"
 import MultiSelect from "primevue/multiselect"
 import ProgressBar from "primevue/progressbar"
@@ -712,6 +1048,12 @@ const normalizeAssignedRules = (assignment: any): any => {
 const rules = ref<IngestionRule[]>([])
 const sourceAssignments = ref<SourceRuleAssignment[]>([])
 const sources = ref<Source[]>([])
+
+// Plugin-related state
+const plugins = ref([])
+const loadingPlugins = ref(false)
+const savingPlugins = ref(false)
+const selectedPluginSource = ref<string | null>(null)
 
 const editingRows = ref([])
 const loading = ref(false)
@@ -2289,11 +2631,247 @@ const unapplyAssignment = async (
     }
 }
 
+// Plugin-related methods
+const loadPluginsForSource = async (): Promise<void> => {
+    if (!selectedPluginSource.value) {
+        toast.add({
+            severity: "warn",
+            summary: "No Source Selected",
+            detail: "Please select a source to load plugins",
+            life: 3000,
+        })
+        return
+    }
+
+    try {
+        loadingPlugins.value = true
+
+        const response = await fetch(
+            `/api/${selectedPluginSource.value}/plugins`
+        )
+        const data = await response.json()
+
+        if (!response.ok) {
+            throw new Error(data.detail || "Failed to load plugins for source")
+        }
+
+        // Convert plugins object to array for DataTable with plugin names
+        const pluginsData = data.plugins || {}
+        plugins.value = Object.entries(pluginsData).map(([name, config]) => ({
+            name,
+            ...config,
+        }))
+
+        console.log(
+            `Loaded plugins for source '${selectedPluginSource.value}':`,
+            plugins.value
+        )
+    } catch (error) {
+        console.error(
+            `Error loading plugins for source '${selectedPluginSource.value}':`,
+            error
+        )
+        toast.add({
+            severity: "error",
+            summary: "Plugin Load Failed",
+            detail:
+                error instanceof Error
+                    ? error.message
+                    : "Failed to load plugins for source",
+            life: 3000,
+        })
+    } finally {
+        loadingPlugins.value = false
+    }
+}
+
+const savePluginsForSource = async (): Promise<void> => {
+    if (!selectedPluginSource.value) {
+        toast.add({
+            severity: "warn",
+            summary: "No Source Selected",
+            detail: "Please select a source to save plugins",
+            life: 3000,
+        })
+        return
+    }
+
+    try {
+        savingPlugins.value = true
+
+        // Convert plugins array to dictionary format expected by backend
+        const pluginsConfig: Record<string, any> = {}
+        plugins.value.forEach((plugin) => {
+            pluginsConfig[plugin.name] = {
+                enabled: plugin.enabled,
+                parameters: plugin.parameters,
+            }
+        })
+
+        const response = await fetch(
+            `/api/${selectedPluginSource.value}/plugins/save`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(pluginsConfig),
+            }
+        )
+
+        const data = await response.json()
+
+        if (!response.ok) {
+            throw new Error(data.detail || "Failed to save plugins for source")
+        }
+
+        toast.add({
+            severity: "success",
+            summary: "Plugins Saved",
+            detail: `Plugin configurations saved successfully for source '${selectedPluginSource.value}'`,
+            life: 3000,
+        })
+
+        console.log(
+            `Plugins saved successfully for source '${selectedPluginSource.value}'`
+        )
+    } catch (error) {
+        console.error(
+            `Error saving plugins for source '${selectedPluginSource.value}':`,
+            error
+        )
+        toast.add({
+            severity: "error",
+            summary: "Plugin Save Failed",
+            detail:
+                error instanceof Error
+                    ? error.message
+                    : "Failed to save plugins for source",
+            life: 3000,
+        })
+    } finally {
+        savingPlugins.value = false
+    }
+}
+
+const resetPluginsForSource = async (): Promise<void> => {
+    if (!selectedPluginSource.value) {
+        toast.add({
+            severity: "warn",
+            summary: "No Source Selected",
+            detail: "Please select a source to reset plugins",
+            life: 3000,
+        })
+        return
+    }
+
+    try {
+        loadingPlugins.value = true
+
+        // Load available plugins (without source-specific config)
+        const response = await fetch("/api/plugins")
+        const data = await response.json()
+
+        if (!response.ok) {
+            throw new Error(data.detail || "Failed to load default plugins")
+        }
+
+        // Convert plugins object to array with default configurations
+        const pluginsData = data.plugins || {}
+        plugins.value = Object.values(pluginsData)
+
+        toast.add({
+            severity: "success",
+            summary: "Plugins Reset",
+            detail: `Plugin configurations reset to defaults for source '${selectedPluginSource.value}'`,
+            life: 3000,
+        })
+
+        console.log(
+            `Plugins reset to defaults for source '${selectedPluginSource.value}':`,
+            plugins.value
+        )
+    } catch (error) {
+        console.error(
+            `Error resetting plugins for source '${selectedPluginSource.value}':`,
+            error
+        )
+        toast.add({
+            severity: "error",
+            summary: "Plugin Reset Failed",
+            detail:
+                error instanceof Error
+                    ? error.message
+                    : "Failed to reset plugins to defaults",
+            life: 3000,
+        })
+    } finally {
+        loadingPlugins.value = false
+    }
+}
+
+// Plugin methods removed - now handled through source-based save/load operations
+
+const showPluginDetails = (plugin: any): void => {
+    // For now, show details in console - could be enhanced with a dialog
+    console.log("Plugin Details:", {
+        name: plugin.name,
+        description: plugin.description,
+        version: plugin.version,
+        author: plugin.author,
+        parameters: plugin.parameters,
+        defaultParameters: plugin.default_parameters,
+    })
+
+    toast.add({
+        severity: "info",
+        summary: "Plugin Details",
+        detail: `${plugin.name} v${plugin.version} by ${plugin.author}. Check console for full details.`,
+        life: 5000,
+    })
+}
+
+// Utility functions for plugin parameter handling
+const formatParameterLabel = (key: string): string => {
+    return key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
+}
+
+const getParameterMin = (pluginName: string, paramKey: string): number => {
+    // Define parameter constraints for known plugins
+    const constraints: Record<
+        string,
+        Record<string, { min?: number; max?: number }>
+    > = {
+        ChannelProgramFilterPlugin: {
+            hours_ahead: { min: 1, max: 168 }, // 1 hour to 1 week
+            min_unfiltered_programs: { min: 0, max: 100 },
+        },
+    }
+
+    return constraints[pluginName]?.[paramKey]?.min ?? 0
+}
+
+const getParameterMax = (pluginName: string, paramKey: string): number => {
+    // Define parameter constraints for known plugins
+    const constraints: Record<
+        string,
+        Record<string, { min?: number; max?: number }>
+    > = {
+        ChannelProgramFilterPlugin: {
+            hours_ahead: { min: 1, max: 168 }, // 1 hour to 1 week
+            min_unfiltered_programs: { min: 0, max: 100 },
+        },
+    }
+
+    return constraints[pluginName]?.[paramKey]?.max ?? 999
+}
+
 // Lifecycle hooks
 onMounted(async () => {
     await Promise.all([loadConfiguration(), loadSources()])
     // Preload column data after configuration is loaded
     await preloadColumnData()
+    // Note: Plugins are not loaded automatically - they require source selection
 })
 
 const getTableDisplayName = (table: string): string => {
@@ -2312,6 +2890,27 @@ const getTableSeverity = (table: string): string => {
         programs: "warning",
     }
     return severityMap[table] || "secondary"
+}
+
+// Plugin-related utility functions
+const onPluginSourceChange = async (sourceValue: string): Promise<void> => {
+    selectedPluginSource.value = sourceValue
+    if (sourceValue) {
+        await loadPluginsForSource()
+    } else {
+        plugins.value = []
+    }
+}
+
+const getSourceLabel = (sourceValue: string | null): string => {
+    if (!sourceValue) return "No Source Selected"
+    const source = sources.value.find((s) => s.name === sourceValue)
+    if (source) {
+        // Use explicit type if available, otherwise default to "IPTV"
+        const sourceType = source.type || "IPTV"
+        return `${source.name} (${sourceType})`
+    }
+    return sourceValue
 }
 
 // Fetch filter statistics for all assignments of a specific source

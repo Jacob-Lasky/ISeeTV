@@ -1,0 +1,22 @@
+{
+  "channel_program_filter": {
+    "enabled": true,
+    "parameters": {
+      "hours_ahead": 24,
+      "min_programs_required": 1,
+      "check_current_programs": true,
+      "skip_if_no_epg": true
+    }
+  },
+  "Alice": {
+    "channel_program_filter": {
+      "enabled": true,
+      "parameters": {
+        "hours_ahead": 24,
+        "min_programs_required": 1,
+        "check_current_programs": true,
+        "skip_if_no_epg": true
+      }
+    }
+  }
+}
