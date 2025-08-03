@@ -243,6 +243,18 @@
                     </div>
                 </div>
 
+                <!-- Loading State -->
+                <div v-if="isLoadingSourceData" class="loading-state">
+                    <i class="pi pi-spin pi-spinner"></i>
+                    <span>Loading source data...</span>
+                </div>
+
+                <!-- Error State -->
+                <div v-if="sourceDataError" class="error-state">
+                    <i class="pi pi-exclamation-triangle"></i>
+                    <span>{{ sourceDataError }}</span>
+                </div>
+
                 <!-- Table Statistics Display -->
                 <div class="stats-section">
                     <!-- Individual table counts -->
@@ -412,7 +424,7 @@ const formatBytes = (bytes: number): string => {
 }
 
 const formatStepName = (stepName: string | undefined): string => {
-    if (!stepName) return "Processing"
+    if (!stepName) return "Unknown"
     return stepName
         .split("_")
         .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
@@ -500,10 +512,6 @@ const startPollingForTask = (taskId: string, fileType: string) => {
 
             const taskProgress = progress.ingest?.[taskId]
             if (taskProgress) {
-                console.log(
-                    `[DEBUG] Resumed ingest progress for task ${taskId}:`,
-                    taskProgress
-                )
                 // Update progress tracking state by file type
                 ingestProgressByType.value[fileType] = taskProgress
 
@@ -513,9 +521,6 @@ const startPollingForTask = (taskId: string, fileType: string) => {
                     taskProgress.status === "failed" ||
                     taskProgress.status === "cancelled"
                 ) {
-                    console.log(
-                        `Resumed ingest task ${taskId} completed with status: ${taskProgress.status}`
-                    )
                     clearInterval(interval)
                     // Remove completed task from progress tracking
                     delete ingestProgressByType.value[fileType]
@@ -560,6 +565,11 @@ const startPollingForTask = (taskId: string, fileType: string) => {
 const isRedownloading = ref(false)
 const isReingesting = ref(false)
 const isRefreshing = ref(false)
+
+// Source data state
+const sourceData = ref<any>(null)
+const isLoadingSourceData = ref(false)
+const sourceDataError = ref<string | null>(null)
 
 // Progress tracking state
 const activeDownloadProgress = ref<DownloadProgress | null>(null)
@@ -684,9 +694,6 @@ const reingestFileWithProgress = async (fileRow: SourceFileRow) => {
         )
 
         const taskId = ingestResponse.task_id
-        console.log(
-            `[DEBUG] Starting ingest progress polling for task ${taskId}...`
-        )
 
         // Start polling for ingest progress using SourcesTable.vue approach
         let pollCount = 0
@@ -696,20 +703,19 @@ const reingestFileWithProgress = async (fileRow: SourceFileRow) => {
             pollCount++
 
             try {
-                console.log(`[DEBUG] Polling ingest progress (attempt ${pollCount}) for task ${taskId}...`)
                 const progress = await apiGet<{
                     ingest: Record<string, any>
                 }>(`/api/ingest/progress`, false, {
                     showSuccessToast: false,
                     showErrorToast: false,
                 })
-                
+
                 if (!progress) {
-                    console.warn(`[DEBUG] No progress response received for task ${taskId} on attempt ${pollCount}`)
+                    console.warn(
+                        `No progress response received for task ${taskId} on attempt ${pollCount}`
+                    )
                     return
                 }
-                
-                console.log(`[DEBUG] Progress response received:`, Object.keys(progress.ingest || {}).length, 'tasks')
 
                 // Find our specific task in the progress response
                 const taskProgress = progress.ingest?.[taskId]
@@ -898,9 +904,93 @@ const handleSettings = () => {
     })
 }
 
-// Component lifecycle - resume active tasks when component mounts
+// Atomic function to fetch source data from API
+const fetchSourceData = async (): Promise<void> => {
+    if (!props.data.sourceName) {
+        console.warn("No source name provided for SourceNode")
+        return
+    }
+
+    isLoadingSourceData.value = true
+    sourceDataError.value = null
+
+    try {
+        const response = await apiGet(
+            `/api/${encodeURIComponent(props.data.sourceName)}/sources`
+        )
+        sourceData.value = response
+
+        // Update node data with real counts if available
+        if (response.file_metadata) {
+            updateNodeDataWithSourceInfo(response)
+        }
+    } catch (error: any) {
+        console.error("Failed to fetch source data:", error)
+        sourceDataError.value = error.message || "Failed to load source data"
+        toast.add({
+            severity: "warn",
+            summary: "Source Data",
+            detail: "Could not load source metadata",
+            life: 3000,
+        })
+    } finally {
+        isLoadingSourceData.value = false
+    }
+}
+
+// Atomic function to update node data with source information
+const updateNodeDataWithSourceInfo = (source: any): void => {
+    if (!source.file_metadata) return
+
+    const tables = []
+    let totalRecords = 0
+
+    // Add M3U channels if available
+    if (source.file_metadata.m3u?.total_records?.channels) {
+        const channelCount = source.file_metadata.m3u.total_records.channels
+        tables.push({
+            name: "m3u_channels",
+            recordCount: channelCount,
+            description: "M3U Channel listings",
+        })
+        totalRecords += channelCount
+    }
+
+    // Add EPG channels if available
+    if (source.file_metadata.epg?.total_records?.channels) {
+        const channelCount = source.file_metadata.epg.total_records.channels
+        tables.push({
+            name: "epg_channels",
+            recordCount: channelCount,
+            description: "EPG Channel metadata",
+        })
+        totalRecords += channelCount
+    }
+
+    // Add Programs if available
+    if (source.file_metadata.epg?.total_records?.programs) {
+        const programCount = source.file_metadata.epg.total_records.programs
+        tables.push({
+            name: "programs",
+            recordCount: programCount,
+            description: "TV Program listings",
+        })
+        totalRecords += programCount
+    }
+
+    // Update the node data reactively
+    if (tables.length > 0) {
+        props.data.tables = tables
+        props.data.totalRecords = totalRecords
+
+        // Emit update to Vue Flow
+        emit("updateNodeInternals", props.id)
+    }
+}
+
+// Component lifecycle - resume active tasks and fetch source data when component mounts
 onMounted(async () => {
-    await resumeActiveIngestPolling()
+    await Promise.all([resumeActiveIngestPolling(), fetchSourceData()])
 })
 </script>
 
@@ -1121,7 +1211,16 @@ onMounted(async () => {
     justify-content: space-between;
     align-items: center;
     font-size: 0.75rem;
-    color: var(--p-text-muted-color);
+    color: var(--text-color-secondary);
+    line-height: 1.4;
+}
+
+.progress-details div {
+    margin-bottom: 0.25rem;
+}
+
+.progress-details div:last-child {
+    margin-bottom: 0;
 }
 
 .progress-items {

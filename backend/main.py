@@ -258,6 +258,39 @@ async def set_settings(
 
 
 @app.get(
+    "/api/{source}/sources",
+    response_model=Source,
+    tags=["Sources"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_sources_by_name(
+    source: str,
+    sources_file: str = os.path.join(DATA_PATH, "sources.json"),
+) -> Source:
+    """Return sources from the provided file."""
+    logger.debug("Getting sources")
+    try:
+        with open(sources_file, encoding="utf-8") as f:
+            source_from_cache = [
+                Source(**src) for src in json.load(f) if src["name"] == source
+            ]
+            if len(source_from_cache) == 0:
+                raise HTTPException(
+                    status_code=status.HTTP_404_NOT_FOUND, detail="Source not found"
+                )
+            elif len(source_from_cache) > 1:
+                raise HTTPException(
+                    status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                    detail="Multiple sources found",
+                )
+            return source_from_cache[0]
+    except (FileNotFoundError, json.JSONDecodeError, ValidationError) as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail=str(e)
+        )
+
+
+@app.get(
     "/api/sources",
     response_model=list[Source],
     tags=["Sources"],
@@ -684,9 +717,9 @@ def update_source_total_records(
 
         # Find the source to update
         source_to_update = None
-        for source in sources:
-            if source.name == source:
-                source_to_update = source
+        for src in sources:
+            if src.name == source:
+                source_to_update = src
                 break
 
         if source_to_update is None:
