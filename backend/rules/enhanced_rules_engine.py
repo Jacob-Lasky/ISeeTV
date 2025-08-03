@@ -485,20 +485,21 @@ class EnhancedRulesEngine:
         source_name: str,
         progress_callback: Optional[callable] = None,
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """Fast vectorized processing optimized for large datasets.
+        """Path-based flow processing with detailed tracing.
 
-        Prioritizes speed over detailed tracing for massive performance gains.
+        Only records that flow through connected paths continue to next nodes.
+        Provides detailed tracing of each record's journey through the flow.
         """
         total_records = len(records)
         logger.info(
-            f"Starting processing for {total_records} records from {source_name}"
+            f"Starting path-based flow processing for {total_records} records from {source_name}"
         )
 
         if not records:
             logger.info("No records to process, returning empty results")
             return [], []
 
-        # Convert to DataFrame quickly
+        # Convert records to list of dictionaries
         records_data = []
         for i, record in enumerate(records):
             if i % 10000 == 0:  # Log progress every 10k records
@@ -511,10 +512,6 @@ class EnhancedRulesEngine:
                 record_dict = dict(record)
             records_data.append(record_dict)
 
-        logger.debug(f"Creating pandas DataFrame from {len(records_data)} records")
-        df = pd.DataFrame(records_data)
-        logger.debug(f"DataFrame created successfully with shape: {df.shape}")
-
         # Load flow configuration
         logger.info(f"Loading flow configuration for source: {source_name}")
         flow_config = self.load_flow_configuration(source_name)
@@ -522,140 +519,126 @@ class EnhancedRulesEngine:
             logger.warning(
                 f"No flow configuration found for {source_name}, accepting all records"
             )
-            # Add required columns
-            df["_trace"] = [
-                [f"table_entry:{table_name}", "final_decision:accepted:no_flow_config"]
-            ] * len(df)
-            df["filter_reasons"] = [""] * len(
-                df
-            )  # String format for Pydantic compatibility
-            df["accepted"] = True
+            # Add required columns for no flow config
+            for record in records_data:
+                record["_trace"] = [
+                    {
+                        "node_id": f"source:{source_name.lower()}",
+                        "type": "source",
+                        "input_table": table_name,
+                        "output": table_name
+                    },
+                    {
+                        "node_id": "stream:accepted",
+                        "type": "sink",
+                        "accepted": True
+                    }
+                ]
+                record["filter_reasons"] = {}
+                record["accepted"] = True
 
-            accepted_records = df.to_dict("records")
-            logger.info(
-                f"Completed with {len(accepted_records)} accepted (no flow config)"
-            )
-            return accepted_records, []
+            logger.info(f"Completed with {len(records_data)} accepted (no flow config)")
+            return records_data, []
 
-        # Get entry rule
-        logger.info(
-            f"Getting entry rule for flow config entry point: {flow_config.entry_point}"
-        )
-        entry_rule = flow_config.get_rule_by_name(flow_config.entry_point)
-        if not entry_rule or table_name not in entry_rule.tables:
-            logger.warning(
-                f"No applicable entry rule for table {table_name}, accepting all records"
-            )
-            df["accepted"] = True
-        else:
-            logger.info(
-                f"Applying rule {entry_rule.name} to field '{entry_rule.field}' with regex: {entry_rule.regex}"
-            )
+        # Load the flow JSON to get edge information
+        flow_file_path = os.path.join(self.flows_dir, f"{source_name}_flow.json")
+        if not os.path.exists(flow_file_path):
+            logger.error(f"Flow file not found: {flow_file_path}")
+            return records_data, []  # Fallback to accepting all
+            
+        with open(flow_file_path, 'r') as f:
+            flow_data = json.load(f)
+            
+        nodes = flow_data.get('nodes', [])
+        edges = flow_data.get('edges', [])
+        
+        # Build node lookup
+        node_lookup = {node['id']: node for node in nodes}
+        
+        # Build edge lookup for path routing
+        edge_lookup = {}
+        for edge in edges:
+            source_id = edge['source']
+            target_id = edge['target']
+            source_handle = edge.get('sourceHandle', 'default')
+            target_handle = edge.get('targetHandle', 'default')
+            
+            if source_id not in edge_lookup:
+                edge_lookup[source_id] = {}
+            if source_handle not in edge_lookup[source_id]:
+                edge_lookup[source_id][source_handle] = []
+            edge_lookup[source_id][source_handle].append({
+                'target_id': target_id,
+                'target_handle': target_handle,
+                'edge_id': edge['id']
+            })
 
-            try:
-                logger.debug(
-                    f"Starting vectorized regex matching on field: {entry_rule.field}"
-                )
-                # Fast vectorized regex matching
-                field_values = df[entry_rule.field].fillna("").astype(str)
-                logger.debug(f"Field values extracted, applying regex pattern")
-                # Use regex string directly with pandas (don't pre-compile)
-                matches = field_values.str.contains(
-                    entry_rule.regex, case=False, na=False, regex=True
-                )
-                logger.info(
-                    f"Vectorized matching completed, {matches.sum()} matches found"
-                )
-
-                if entry_rule.not_:
-                    matches = ~matches
-                    logger.debug(
-                        f"Applied NOT logic, {matches.sum()} matches after negation"
-                    )
-
-                if entry_rule.is_terminal:
-                    logger.debug(f"Terminal rule, setting accepted column")
-                    df["accepted"] = matches
-                else:
-                    logger.info(f"Non-terminal rule, continuing to next rules in flow")
-                    # For non-terminal rules, we need to continue processing
-                    # Start with records that matched this rule
-                    df["accepted"] = False  # Initialize all as rejected
-                    df.loc[matches, "accepted"] = True  # Accept matches from this rule
+        # Find source node for this table
+        source_node = None
+        for node in nodes:
+            if node['type'] == 'source' and node['data']['sourceName'] == source_name:
+                source_node = node
+                break
+                
+        if not source_node:
+            logger.error(f"Source node not found for {source_name}")
+            return records_data, []  # Fallback
+            
+        # Process each record through the flow
+        accepted_records = []
+        rejected_records = []
+        
+        for i, record in enumerate(records_data):
+            if i % 1000 == 0:  # Log progress every 1k records
+                logger.debug(f"Processing record {i}/{total_records}")
+                
+            # Initialize record tracing
+            record["_trace"] = []
+            record["filter_reasons"] = {}
+            record["accepted"] = False
+            
+            # Start at source node
+            record["_trace"].append({
+                "node_id": source_node['id'],
+                "type": "source",
+                "input_table": table_name,
+                "output": table_name
+            })
+            
+            # Find the path from source to first rule for this table
+            table_handle = f"table-{table_name}"
+            if source_node['id'] not in edge_lookup or table_handle not in edge_lookup[source_node['id']]:
+                # No path from this table, reject record
+                record["accepted"] = False
+                rejected_records.append(record)
+                continue
+                
+            # Follow the flow path
+            current_connections = edge_lookup[source_node['id']][table_handle]
+            record_accepted = False
+            
+            for connection in current_connections:
+                target_node_id = connection['target_id']
+                target_node = node_lookup.get(target_node_id)
+                
+                if not target_node:
+                    continue
                     
-                    # Process subsequent rules for matched records
-                    current_rule = entry_rule
-                    processed_mask = matches.copy()  # Track which records have been processed
+                # Process through the flow starting from this target
+                if self._process_record_through_flow(record, target_node, edge_lookup, node_lookup, flow_config, table_name):
+                    record_accepted = True
+                    break
                     
-                    while current_rule and not current_rule.is_terminal and current_rule.next_rules:
-                        logger.info(f"Processing next rules from {current_rule.name}: {current_rule.next_rules}")
-                        
-                        for next_rule_name in current_rule.next_rules:
-                            next_rule = flow_config.get_rule_by_name(next_rule_name)
-                            if not next_rule or table_name not in next_rule.tables:
-                                logger.warning(f"Skipping invalid next rule: {next_rule_name}")
-                                continue
-                                
-                            logger.info(f"Applying next rule {next_rule.name} to field '{next_rule.field}' with regex: {next_rule.regex}")
-                            
-                            # Apply rule only to records that haven't been processed yet
-                            unprocessed_mask = processed_mask & ~df["accepted"]
-                            if not unprocessed_mask.any():
-                                logger.info(f"No unprocessed records for rule {next_rule.name}")
-                                continue
-                                
-                            # Get field values for unprocessed records
-                            field_values = df.loc[unprocessed_mask, next_rule.field].fillna("").astype(str)
-                            
-                            # Apply regex matching
-                            rule_matches = field_values.str.contains(
-                                next_rule.regex, case=False, na=False, regex=True
-                            )
-                            
-                            if next_rule.not_:
-                                rule_matches = ~rule_matches
-                                
-                            # Update acceptance status
-                            matched_indices = field_values.index[rule_matches]
-                            df.loc[matched_indices, "accepted"] = True
-                            
-                            # Mark these records as processed
-                            processed_mask.loc[matched_indices] = True
-                            
-                            logger.info(f"Rule {next_rule.name} matched {rule_matches.sum()} additional records")
-                            
-                            # If this is a terminal rule, stop processing
-                            if next_rule.is_terminal:
-                                logger.info(f"Reached terminal rule {next_rule.name}, stopping flow")
-                                current_rule = None
-                                break
-                            else:
-                                current_rule = next_rule
-                                break  # Process one rule at a time for now
-                        else:
-                            # No valid next rules found
-                            logger.info(f"No more valid rules to process from {current_rule.name}")
-                            break
-
-                logger.info(f"Rule matched {matches.sum()} out of {len(df)} records")
-
-            except Exception as e:
-                logger.error(f"Error applying rule {entry_rule.name}: {e}")
-                df["accepted"] = True
-
-        # Add minimal tracing
-        logger.info(f"Adding tracing columns")
-        df["_trace"] = [
-            [f"table_entry:{table_name}", "vectorized_fast_processing"]
-        ] * len(df)
-        df["filter_reasons"] = [""] * len(
-            df
-        )  # String format for Pydantic compatibility
+            record["accepted"] = record_accepted
+            if record_accepted:
+                accepted_records.append(record)
+            else:
+                rejected_records.append(record)
 
         # Report progress
         if progress_callback:
-            accepted_count = int(df["accepted"].sum())
-            rejected_count = len(df) - accepted_count
+            accepted_count = len(accepted_records)
+            rejected_count = len(rejected_records)
             logger.info(
                 f"Calling progress callback: {accepted_count} accepted, {rejected_count} rejected"
             )
@@ -663,22 +646,142 @@ class EnhancedRulesEngine:
                 progress_callback(
                     processed=total_records,
                     total=total_records,
-                    current_item=f"Fast vectorized processing completed",
+                    current_item=f"Path-based flow processing completed",
                     accepted=accepted_count,
                     rejected=rejected_count,
                 )
             except Exception as e:
                 logger.warning(f"Progress callback failed: {e}")
 
-        # Convert to results
-        logger.debug(f"Converting results to dictionaries")
-        accepted_records = df[df["accepted"]].to_dict("records")
-        rejected_records = df[~df["accepted"]].to_dict("records")
-
         logger.info(
             f"Processing completed: {len(accepted_records)} accepted, {len(rejected_records)} rejected"
         )
         return accepted_records, rejected_records
+
+    def _process_record_through_flow(
+        self, 
+        record: Dict[str, Any], 
+        current_node: Dict[str, Any], 
+        edge_lookup: Dict[str, Any], 
+        node_lookup: Dict[str, Any], 
+        flow_config: FlowConfiguration, 
+        table_name: str
+    ) -> bool:
+        """Process a single record through the flow starting from current_node.
+        
+        Returns True if record reaches an accepted sink, False otherwise.
+        """
+        # Handle different node types
+        if current_node['type'] == 'rule':
+            return self._process_rule_node(record, current_node, edge_lookup, node_lookup, flow_config, table_name)
+        elif current_node['type'] == 'stream':
+            return self._process_stream_node(record, current_node)
+        else:
+            logger.warning(f"Unknown node type: {current_node['type']}")
+            return False
+            
+    def _process_rule_node(
+        self, 
+        record: Dict[str, Any], 
+        rule_node: Dict[str, Any], 
+        edge_lookup: Dict[str, Any], 
+        node_lookup: Dict[str, Any], 
+        flow_config: FlowConfiguration, 
+        table_name: str
+    ) -> bool:
+        """Process a record through a rule node."""
+        rule_name = rule_node['data']['ruleName']
+        rule = flow_config.get_rule_by_name(rule_name)
+        
+        if not rule or table_name not in rule.tables:
+            logger.debug(f"Rule {rule_name} not applicable to table {table_name}")
+            return False
+            
+        # Evaluate the rule
+        field_value = record.get(rule.field, "")
+        if field_value is None:
+            field_value = ""
+            
+        # Get or compile regex pattern
+        pattern_key = f"{rule.name}:{rule.regex}"
+        if pattern_key not in self._compiled_patterns:
+            try:
+                self._compiled_patterns[pattern_key] = re.compile(
+                    rule.regex, re.IGNORECASE
+                )
+            except re.error as e:
+                logger.error(f"Invalid regex in rule {rule.name}: {e}")
+                return False
+                
+        pattern = self._compiled_patterns[pattern_key]
+        match = bool(pattern.search(str(field_value)))
+        
+        # Apply NOT logic if specified
+        if rule.not_:
+            match = not match
+            
+        # Record the rule result
+        record["filter_reasons"][f"rule:{rule_name.lower().replace(' ', '_')}"] = match
+        
+        # Determine which path to take
+        path = "passed" if match else "caught"
+        
+        # Add trace entry
+        record["_trace"].append({
+            "node_id": f"rule:{rule_name.lower().replace(' ', '_')}",
+            "type": "rule",
+            "field": rule.field,
+            "result": match,
+            "path": path,
+            "continued": True  # Will be updated if we actually continue
+        })
+        
+        # Find outgoing connections for this path
+        rule_node_id = rule_node['id']
+        if rule_node_id not in edge_lookup:
+            # No outgoing connections, record stops here
+            record["_trace"][-1]["continued"] = False
+            return False
+            
+        # Look for connections from the appropriate handle (passed/caught)
+        handle_name = path  # "passed" or "caught"
+        if handle_name not in edge_lookup[rule_node_id]:
+            # No connection for this path, record stops here
+            record["_trace"][-1]["continued"] = False
+            return False
+            
+        # Follow the connected path
+        connections = edge_lookup[rule_node_id][handle_name]
+        for connection in connections:
+            target_node_id = connection['target_id']
+            target_node = node_lookup.get(target_node_id)
+            
+            if not target_node:
+                continue
+                
+            # Recursively process the next node
+            if self._process_record_through_flow(record, target_node, edge_lookup, node_lookup, flow_config, table_name):
+                return True
+                
+        # No successful path found
+        record["_trace"][-1]["continued"] = False
+        return False
+        
+    def _process_stream_node(self, record: Dict[str, Any], stream_node: Dict[str, Any]) -> bool:
+        """Process a record through a stream (sink) node."""
+        stream_name = stream_node['data'].get('streamName', 'unknown')
+        
+        # Determine if this is an accepting stream
+        is_accepting = stream_name.lower() in ['accepted', 'accept', 'pass']
+        
+        # Add trace entry
+        record["_trace"].append({
+            "node_id": f"stream:{stream_name.lower()}",
+            "type": "sink",
+            "accepted": is_accepting
+        })
+        
+        return is_accepting
 
 
 # Global enhanced rules engine instance

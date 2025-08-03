@@ -58,12 +58,36 @@ import { Handle, Position } from "@vue-flow/core"
 import Tag from "primevue/tag"
 import type { StreamNodeData } from "@/types/flow-types"
 
-// Props
+// Props - Define all Vue Flow props to prevent warnings
 interface Props {
+    id: string
     data: StreamNodeData
+    // Vue Flow internal props
+    type?: string
+    events?: any
+    selected?: boolean
+    resizing?: boolean
+    dragging?: boolean
+    connectable?: boolean
+    position?: { x: number; y: number }
+    dimensions?: { width: number; height: number }
+    isValidTargetPos?: boolean
+    isValidSourcePos?: boolean
+    parent?: string
+    parentNodeId?: string
+    zIndex?: number
+    targetPosition?: string
+    sourcePosition?: string
+    label?: string
+    dragHandle?: string
 }
 
 const props = defineProps<Props>()
+
+// Define emits for Vue Flow event listeners
+const emit = defineEmits<{
+    updateNodeInternals: [nodeId: string]
+}>()
 
 // Computed properties
 const streamTypeClass = computed(() => {

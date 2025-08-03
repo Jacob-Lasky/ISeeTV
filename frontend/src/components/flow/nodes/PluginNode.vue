@@ -1,119 +1,198 @@
 <template>
-    <div class="plugin-node" :class="{ 'disabled': !data.enabled }">
-        <div class="node-header">
-            <i class="pi pi-cog"></i>
-            <span class="node-title">{{ data.label }}</span>
-            <ToggleSwitch 
-                v-model="data.enabled" 
-                class="ml-auto"
-                @change="onEnabledChange"
+    <div class="plugin-node-wrapper">
+        <!-- Node Toolbar -->
+        <NodeToolbar
+            :is-visible="data.toolbarVisible"
+            :position="data.toolbarPosition || 'top'"
+        >
+            <div class="toolbar-buttons">
+                <Button
+                    icon="pi pi-play-circle"
+                    size="small"
+                    severity="success"
+                    v-tooltip.top="'Run the flow up to this node'"
+                    @click="handleExecuteToHere"
+                    :loading="data.isExecutingToHere"
+                />
+                <Button
+                    icon="pi pi-step-forward"
+                    size="small"
+                    severity="info"
+                    v-tooltip.top="'Run this node'"
+                    @click="handleExecuteThisNode"
+                    :loading="data.isExecutingThisNode"
+                />
+                <Button
+                    icon="pi pi-forward"
+                    size="small"
+                    severity="warning"
+                    v-tooltip.top="'Run the flow from this node'"
+                    @click="handleExecuteFromHere"
+                    :loading="data.isExecutingFromHere"
+                />
+            </div>
+        </NodeToolbar>
+
+        <div class="plugin-node" :class="{ disabled: !data.enabled }">
+            <div class="node-header">
+                <i class="pi pi-cog"></i>
+                <span class="node-title">{{ data.label }}</span>
+                <ToggleSwitch
+                    v-model="data.enabled"
+                    class="ml-auto"
+                    @change="onEnabledChange"
+                />
+            </div>
+
+            <div class="node-body">
+                <div class="plugin-info">
+                    <div class="plugin-name">{{ data.pluginName }}</div>
+                    <div class="plugin-type">
+                        <Tag
+                            :value="data.pluginType"
+                            severity="secondary"
+                            class="text-xs"
+                        />
+                    </div>
+                </div>
+
+                <!-- Parameters Display -->
+                <div
+                    v-if="
+                        data.parameters &&
+                        Object.keys(data.parameters).length > 0
+                    "
+                    class="parameters-section"
+                >
+                    <div class="parameters-header">Parameters</div>
+                    <div class="parameters-list">
+                        <div
+                            v-for="(value, key) in data.parameters"
+                            :key="key"
+                            class="parameter-item"
+                        >
+                            <span class="param-key"
+                                >{{ formatParameterKey(key) }}:</span
+                            >
+                            <span class="param-value">{{
+                                formatParameterValue(value)
+                            }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Statistics Display -->
+                <div v-if="data.stats" class="stats-section">
+                    <div class="stat-row">
+                        <div class="stat-item passed">
+                            <span class="stat-label">Passed:</span>
+                            <span class="stat-value">{{
+                                formatNumber(data.stats.passed)
+                            }}</span>
+                        </div>
+                        <div class="stat-item caught">
+                            <span class="stat-label">Caught:</span>
+                            <span class="stat-value">{{
+                                formatNumber(data.stats.caught)
+                            }}</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Execution Status -->
+                <div v-if="data.isExecuting" class="execution-status">
+                    <i class="pi pi-spin pi-spinner"></i>
+                    <span>Processing...</span>
+                </div>
+            </div>
+
+            <!-- Input Handle -->
+            <Handle
+                id="input"
+                type="target"
+                :position="Position.Left"
+                class="input-handle"
             />
-        </div>
-        
-        <div class="node-body">
-            <div class="plugin-info">
-                <div class="plugin-name">{{ data.pluginName }}</div>
-                <div class="plugin-type">
-                    <Tag :value="data.pluginType" severity="secondary" class="text-xs" />
-                </div>
+
+            <!-- Output Handles - Always visible -->
+            <Handle
+                id="passed"
+                type="source"
+                :position="Position.Right"
+                :style="{ top: '40%' }"
+                class="output-handle passed-handle"
+            />
+            <div v-if="isSelected" class="handle-label passed-label">
+                passed
             </div>
-            
-            <!-- Parameters Display -->
-            <div v-if="data.parameters && Object.keys(data.parameters).length > 0" class="parameters-section">
-                <div class="parameters-header">Parameters</div>
-                <div class="parameters-list">
-                    <div 
-                        v-for="(value, key) in data.parameters" 
-                        :key="key"
-                        class="parameter-item"
-                    >
-                        <span class="param-key">{{ formatParameterKey(key) }}:</span>
-                        <span class="param-value">{{ formatParameterValue(value) }}</span>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Statistics Display -->
-            <div v-if="data.stats" class="stats-section">
-                <div class="stat-row">
-                    <div class="stat-item passed">
-                        <span class="stat-label">Passed:</span>
-                        <span class="stat-value">{{ formatNumber(data.stats.passed) }}</span>
-                    </div>
-                    <div class="stat-item caught">
-                        <span class="stat-label">Caught:</span>
-                        <span class="stat-value">{{ formatNumber(data.stats.caught) }}</span>
-                    </div>
-                </div>
-            </div>
-            
-            <!-- Execution Status -->
-            <div v-if="data.isExecuting" class="execution-status">
-                <i class="pi pi-spin pi-spinner"></i>
-                <span>Processing...</span>
+
+            <Handle
+                id="caught"
+                type="source"
+                :position="Position.Right"
+                :style="{ top: '70%' }"
+                class="output-handle caught-handle"
+            />
+            <div v-if="isSelected" class="handle-label caught-label">
+                caught
             </div>
         </div>
-        
-        <!-- Input Handle -->
-        <Handle
-            id="input"
-            type="target"
-            :position="Position.Left"
-            class="input-handle"
-        />
-        
-        <!-- Output Handles - Always visible -->
-        <Handle
-            id="passed"
-            type="source"
-            :position="Position.Right"
-            :style="{ top: '40%' }"
-            class="output-handle passed-handle"
-        />
-        <div v-if="isSelected" class="handle-label passed-label">passed</div>
-        
-        <Handle
-            id="caught"
-            type="source"
-            :position="Position.Right"
-            :style="{ top: '70%' }"
-            class="output-handle caught-handle"
-        />
-        <div v-if="isSelected" class="handle-label caught-label">caught</div>
     </div>
 </template>
 
 <script setup lang="ts">
-import { computed, inject } from 'vue'
-import { Handle, Position, useNode } from '@vue-flow/core'
-import ToggleSwitch from 'primevue/toggleswitch'
-import Tag from 'primevue/tag'
-import type { PluginNodeData } from '@/types/flow-types'
+import { computed, inject } from "vue"
+import { Handle, Position, useNode } from "@vue-flow/core"
+import { NodeToolbar } from "@vue-flow/node-toolbar"
+import ToggleSwitch from "primevue/toggleswitch"
+import Tag from "primevue/tag"
+import Button from "primevue/button"
+import type { PluginNodeData } from "@/types/flow-types"
 
-// Props
+// Props - Define all Vue Flow props to prevent warnings
 interface Props {
+    id: string
     data: PluginNodeData
+    // Vue Flow internal props
+    type?: string
+    events?: any
+    selected?: boolean
+    resizing?: boolean
+    dragging?: boolean
+    connectable?: boolean
+    position?: { x: number; y: number }
+    dimensions?: { width: number; height: number }
+    isValidTargetPos?: boolean
+    isValidSourcePos?: boolean
+    parent?: string
+    parentNodeId?: string
+    zIndex?: number
+    targetPosition?: string
+    sourcePosition?: string
+    label?: string
+    dragHandle?: string
 }
 
 const props = defineProps<Props>()
 
+// Define emits for both Vue Flow event listeners and custom component events
+const emit = defineEmits<{
+    updateNodeInternals: [nodeId: string]
+    enabledChange: [enabled: boolean]
+}>()
+
 // Get node information and selection state
 const { node } = useNode()
-const selectedNodeId = inject<any>('selectedNodeId')
+const selectedNodeId = inject<any>("selectedNodeId")
 
 // Check if this node is selected
 const isSelected = computed(() => {
     return selectedNodeId?.value === node.id
 })
 
-// Emits
-const emit = defineEmits<{
-    enabledChange: [enabled: boolean]
-}>()
-
 // Event handlers
 const onEnabledChange = (enabled: boolean) => {
-    emit('enabledChange', enabled)
+    emit("enabledChange", enabled)
 }
 
 // Utility functions
@@ -122,20 +201,39 @@ const formatNumber = (num: number): string => {
 }
 
 const formatParameterKey = (key: string): string => {
-    return key.replace(/_/g, ' ').replace(/\b\w/g, l => l.toUpperCase())
+    return key.replace(/_/g, " ").replace(/\b\w/g, (l) => l.toUpperCase())
 }
 
 const formatParameterValue = (value: any): string => {
-    if (typeof value === 'boolean') {
-        return value ? 'Yes' : 'No'
+    if (typeof value === "boolean") {
+        return value ? "Yes" : "No"
     }
-    if (typeof value === 'number') {
+    if (typeof value === "number") {
         return value.toString()
     }
-    if (typeof value === 'string') {
+    if (typeof value === "string") {
         return value.length > 20 ? `${value.substring(0, 20)}...` : value
     }
     return String(value)
+}
+
+// Toolbar action handlers
+const handleExecuteToHere = () => {
+    console.log("Run the flow up to this node:", props.data.pluginName)
+    // TODO: Emit event to parent to run flow from start up to and including this node
+    // This would run all nodes from the source up to this plugin node
+}
+
+const handleExecuteThisNode = () => {
+    console.log("Run this node:", props.data.pluginName)
+    // TODO: Emit event to parent to run only this plugin node
+    // This would apply just this plugin to the current dataset
+}
+
+const handleExecuteFromHere = () => {
+    console.log("Run the flow from this node:", props.data.pluginName)
+    // TODO: Emit event to parent to run flow from this node onwards
+    // This would run from this plugin node to all connected downstream nodes
 }
 </script>
 
@@ -238,8 +336,9 @@ const formatParameterValue = (value: any): string => {
 }
 
 .param-value {
-    color: var(--text-color);
-    font-family: monospace;
+    color: var(--text-color-secondary);
+    font-size: 0.8rem;
+    word-break: break-all;
 }
 
 .stats-section {

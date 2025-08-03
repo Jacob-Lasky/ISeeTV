@@ -1,70 +1,107 @@
 <template>
-    <div class="rule-node" :class="{ disabled: !data.enabled }">
-        <div class="node-header">
-            <i class="pi pi-filter"></i>
-            <span class="node-title">{{ data.label }}</span>
-            <ToggleSwitch
-                v-model="data.enabled"
-                class="ml-auto"
-                @change="onEnabledChange"
-            />
-        </div>
+    <div class="rule-node-wrapper">
+        <!-- Node Toolbar -->
+        <NodeToolbar
+            :is-visible="data.toolbarVisible"
+            :position="data.toolbarPosition || 'top'"
+        >
+            <div class="toolbar-buttons">
+                <Button
+                    icon="pi pi-play-circle"
+                    size="small"
+                    severity="success"
+                    v-tooltip.top="'Run the flow up to this node'"
+                    @click="handleExecuteToHere"
+                    :loading="data.isExecutingToHere"
+                />
+                <Button
+                    icon="pi pi-step-forward"
+                    size="small"
+                    severity="info"
+                    v-tooltip.top="'Run this node'"
+                    @click="handleExecuteThisNode"
+                    :loading="data.isExecutingThisNode"
+                />
+                <Button
+                    icon="pi pi-forward"
+                    size="small"
+                    severity="warning"
+                    v-tooltip.top="'Run the flow from this node'"
+                    @click="handleExecuteFromHere"
+                    :loading="data.isExecutingFromHere"
+                />
+            </div>
+        </NodeToolbar>
 
-        <div class="node-body">
-            <div class="rule-info">
-                <!-- Valid Tables -->
-                <div
-                    class="rule-tables"
-                    v-if="data.validation?.validSourceTables"
-                >
-                    <span class="tables-label">Tables:</span>
-                    <div class="table-tags">
-                        <span
-                            v-for="table in data.validation.validSourceTables"
-                            :key="table"
-                            class="table-tag"
-                            :style="{ backgroundColor: getTableColor(table) }"
-                        >
-                            {{ table }}
-                        </span>
+        <div class="rule-node" :class="{ disabled: !data.enabled }">
+            <div class="node-header">
+                <i class="pi pi-filter"></i>
+                <span class="node-title">{{ data.label }}</span>
+                <ToggleSwitch
+                    v-model="data.enabled"
+                    class="ml-auto"
+                    @change="onEnabledChange"
+                />
+            </div>
+
+            <div class="node-body">
+                <div class="rule-info">
+                    <!-- Valid Tables -->
+                    <div
+                        class="rule-tables"
+                        v-if="data.validation?.validSourceTables"
+                    >
+                        <span class="tables-label">Tables:</span>
+                        <div class="table-tags">
+                            <span
+                                v-for="table in data.validation
+                                    .validSourceTables"
+                                :key="table"
+                                class="table-tag"
+                                :style="{
+                                    backgroundColor: getTableColor(table),
+                                }"
+                            >
+                                {{ table }}
+                            </span>
+                        </div>
+                    </div>
+
+                    <!-- Field and Pattern -->
+                    <div class="rule-details">
+                        <div class="detail-row">
+                            <span class="detail-label">Field:</span>
+                            <span class="field">{{ data.field }}</span>
+                        </div>
                     </div>
                 </div>
 
-                <!-- Field and Pattern -->
-                <div class="rule-details">
-                    <div class="detail-row">
-                        <span class="detail-label">Field:</span>
-                        <span class="field">{{ data.field }}</span>
+                <!-- Statistics Display -->
+                <div v-if="data.stats" class="stats-section">
+                    <div class="stat-row">
+                        <div class="stat-item passed">
+                            <span class="stat-label">Passed:</span>
+                            <span class="stat-value">{{
+                                formatNumber(data.stats.passed)
+                            }}</span>
+                        </div>
+                        <div class="stat-item caught">
+                            <span class="stat-label">Caught:</span>
+                            <span class="stat-value">{{
+                                formatNumber(data.stats.caught)
+                            }}</span>
+                        </div>
                     </div>
                 </div>
-            </div>
 
-            <!-- Statistics Display -->
-            <div v-if="data.stats" class="stats-section">
-                <div class="stat-row">
-                    <div class="stat-item passed">
-                        <span class="stat-label">Passed:</span>
-                        <span class="stat-value">{{
-                            formatNumber(data.stats.passed)
-                        }}</span>
-                    </div>
-                    <div class="stat-item caught">
-                        <span class="stat-label">Caught:</span>
-                        <span class="stat-value">{{
-                            formatNumber(data.stats.caught)
-                        }}</span>
-                    </div>
+                <!-- Execution Status -->
+                <div v-if="data.isExecuting" class="execution-status">
+                    <i class="pi pi-spin pi-spinner"></i>
+                    <span>Filtering...</span>
                 </div>
-            </div>
 
-            <!-- Execution Status -->
-            <div v-if="data.isExecuting" class="execution-status">
-                <i class="pi pi-spin pi-spinner"></i>
-                <span>Filtering...</span>
-            </div>
-
-            <!-- Debug Info -->
-            <!-- <div class="debug-info">
+                <!-- Debug Info -->
+                <!-- <div class="debug-info">
                 <div class="debug-line">
                     <strong>Table:</strong> {{ data.table || 'undefined' }}
                 </div>
@@ -75,52 +112,79 @@
                     <strong>Node ID:</strong> {{ id }}
                 </div>
             </div> -->
+            </div>
+
+            <!-- Input Handle -->
+            <Handle
+                id="input"
+                type="target"
+                :position="inputHandlePosition"
+                class="input-handle"
+                :style="inputHandleStyle"
+            />
+
+            <!-- Output Handles -->
+            <Handle
+                id="passed"
+                type="source"
+                :position="passedHandlePosition"
+                :style="passedHandleStyle"
+                class="output-handle passed-handle"
+            />
+            <div v-if="isSelected" :class="passedLabelClass">passed</div>
+
+            <Handle
+                id="caught"
+                type="source"
+                :position="caughtHandlePosition"
+                :style="caughtHandleStyle"
+                class="output-handle caught-handle"
+            />
+            <div v-if="isSelected" :class="caughtLabelClass">caught</div>
         </div>
-
-        <!-- Input Handle -->
-        <Handle
-            id="input"
-            type="target"
-            :position="inputHandlePosition"
-            class="input-handle"
-            :style="inputHandleStyle"
-        />
-
-        <!-- Output Handles -->
-        <Handle
-            id="passed"
-            type="source"
-            :position="passedHandlePosition"
-            :style="passedHandleStyle"
-            class="output-handle passed-handle"
-        />
-        <div v-if="isSelected" :class="passedLabelClass">passed</div>
-
-        <Handle
-            id="caught"
-            type="source"
-            :position="caughtHandlePosition"
-            :style="caughtHandleStyle"
-            class="output-handle caught-handle"
-        />
-        <div v-if="isSelected" :class="caughtLabelClass">caught</div>
     </div>
 </template>
 
 <script setup lang="ts">
 import { computed, inject, ref } from "vue"
 import { Handle, Position, useNode } from "@vue-flow/core"
+import { NodeToolbar } from "@vue-flow/node-toolbar"
 import ToggleSwitch from "primevue/toggleswitch"
 import Tag from "primevue/tag"
+import Button from "primevue/button"
 import type { RuleNodeData } from "@/types/flow-types"
 
-// Props
+// Props - Define all Vue Flow props to prevent warnings
 interface Props {
     id: string
     data: RuleNodeData
+    // Vue Flow internal props
+    type?: string
+    events?: any
+    selected?: boolean
+    resizing?: boolean
+    dragging?: boolean
+    connectable?: boolean
+    position?: { x: number; y: number }
+    dimensions?: { width: number; height: number }
+    isValidTargetPos?: boolean
+    isValidSourcePos?: boolean
+    parent?: string
+    parentNodeId?: string
+    zIndex?: number
+    targetPosition?: string
+    sourcePosition?: string
+    label?: string
+    dragHandle?: string
 }
 
 const props = defineProps<Props>()
+
+// Define emits for both Vue Flow event listeners and custom component events
+const emit = defineEmits<{
+    updateNodeInternals: [nodeId: string]
+    enabledChange: [enabled: boolean]
+}>()
 
 // Get node information and selection state
 const { node } = useNode()
@@ -189,11 +253,6 @@ const caughtLabelClass = computed(() => {
     }
 })
 
-// Emits
-const emit = defineEmits<{
-    enabledChange: [enabled: boolean]
-}>()
-
 // Event handlers
 const onEnabledChange = (enabled: boolean) => {
     emit("enabledChange", enabled)
@@ -216,6 +275,25 @@ const getTableColor = (table: string): string => {
 const truncatePattern = (pattern: string): string => {
     if (!pattern) return ""
     return pattern.length > 30 ? pattern.substring(0, 30) + "..." : pattern
+}
+
+// Toolbar action handlers
+const handleExecuteToHere = () => {
+    console.log("Run the flow up to this node:", props.data.ruleName)
+    // TODO: Emit event to parent to execute flow from start up to and including this node
+    // This would run all nodes from the source up to this rule node
+}
+
+const handleExecuteThisNode = () => {
+    console.log("Run this node:", props.data.ruleName)
+    // TODO: Emit event to parent to execute only this rule node
+    // This would apply just this rule to the current dataset
+}
+
+const handleExecuteFromHere = () => {
+    console.log("Run the flow from this node:", props.data.ruleName)
+    // TODO: Emit event to parent to execute flow from this node onwards
+    // This would run from this rule node to all connected downstream nodes
 }
 </script>
 
