@@ -13,7 +13,6 @@ from common.task_manager import IngestTaskManager, TaskManager
 from ingest.m3u_parser import parse_m3u
 from models.db_models import M3uChannelTable
 from models.models import M3uChannel
-from rules.enhanced_rules_engine import EnhancedRulesEngine
 
 logger = get_logger(__name__)
 
@@ -121,41 +120,8 @@ async def load_m3u_channels_async(
         channels = parse_m3u(file_path, source_name, task_id)
         logger.debug("Parsed %s M3U channels", len(channels))
 
-        # Apply enhanced rules engine with tracing and progress tracking
-        rules_engine = EnhancedRulesEngine()
-
-        # Create progress callback for enhanced rules processing
-        def rules_progress_callback(processed, total, current_item, accepted, rejected):
-            if task_id:
-                # Update task with enhanced rules progress
-                IngestTaskManager.update_item_progress(
-                    task_id,
-                    f"Enhanced rules: {current_item} (A:{accepted}, R:{rejected})",
-                    processed,
-                )
-
-        logger.info(
-            f"Starting enhanced rules processing for {len(channels)} M3U channels"
-        )
-        from rules.enhanced_rules_engine import apply_enhanced_rules
-        accepted_records, rejected_records = apply_enhanced_rules(
-            channels,
-            "m3u_channels",
-            source_name,
-            progress_callback=rules_progress_callback
-        )
-
-        # Convert back to M3uChannel objects for database loading
-        from models.models import M3uChannel
-
-        channels = [M3uChannel(**record) for record in accepted_records]
-
-        logger.info(
-            "Rules engine processed %s records: %s accepted, %s rejected",
-            len(accepted_records) + len(rejected_records),
-            len(accepted_records),
-            len(rejected_records),
-        )
+        # Raw ingestion: load all parsed channels without rules processing
+        logger.info(f"Loading {len(channels)} M3U channels as raw source-of-truth data")
 
         # Update task progress if task_id provided
         if task_id:

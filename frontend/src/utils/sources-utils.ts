@@ -1,4 +1,4 @@
-import { useToast } from "primevue/usetoast"
+
 import { apiGet, apiPost } from "@/utils/apiUtils"
 
 // Types for source operations
@@ -47,14 +47,11 @@ export function startProgressPolling(
 
     const interval = setInterval(async () => {
         try {
-            console.log(`[DEBUG] Polling download progress for task ${taskId}...`)
             const progressData = await apiGet(
                 `/api/downloads/progress/${taskId}`,
                 false, // No loading toast
                 { showSuccessToast: false, showErrorToast: false } // No toast messages for polling
             )
-
-            console.log(`[DEBUG] Download progress data:`, progressData)
 
             if (onProgress) {
                 onProgress(progressData)
@@ -65,7 +62,6 @@ export function startProgressPolling(
                 progressData.status === "completed" ||
                 progressData.status === "failed"
             ) {
-                console.log(`[DEBUG] Download task ${taskId} finished with status: ${progressData.status}`)
                 stopProgressPolling(taskId, fileId)
             }
         } catch (error) {
@@ -110,17 +106,14 @@ export function startIngestProgressPolling(
 
     const interval = setInterval(async () => {
         try {
-            console.log(`[DEBUG] Polling ingest progress for task ${taskId}...`)
             const progressData = await apiGet(
-                `/api/ingest/progress`, 
+                `/api/ingest/progress`,
                 false, // No loading toast
                 { showSuccessToast: false, showErrorToast: false } // No toast messages for polling
             )
             const taskProgress = progressData.find(
                 (p: any) => p.task_id === taskId
             )
-
-            console.log(`[DEBUG] Ingest progress data for task ${taskId}:`, taskProgress)
 
             if (onProgress && taskProgress) {
                 onProgress(taskProgress)
@@ -132,7 +125,6 @@ export function startIngestProgressPolling(
                 (taskProgress.status === "completed" ||
                     taskProgress.status === "failed")
             ) {
-                console.log(`[DEBUG] Ingest task ${taskId} finished with status: ${taskProgress.status}`)
                 stopIngestProgressPolling(taskId, fileId)
             }
         } catch (error) {
@@ -170,21 +162,16 @@ export function startProgressPollingAndWait(taskId: string): Promise<void> {
     return new Promise((resolve, reject) => {
         const interval = setInterval(async () => {
             try {
-                console.log(`[DEBUG] Polling and waiting for download task ${taskId}...`)
                 const progressData = await apiGet(
                     `/api/downloads/progress/${taskId}`,
                     false, // No loading toast
                     { showSuccessToast: false, showErrorToast: false } // No toast messages for polling
                 )
 
-                console.log(`[DEBUG] Download wait progress:`, progressData)
-
                 if (progressData.status === "completed") {
-                    console.log(`[DEBUG] Download task ${taskId} completed, resolving promise`)
                     clearInterval(interval)
                     resolve()
                 } else if (progressData.status === "failed") {
-                    console.log(`[DEBUG] Download task ${taskId} failed:`, progressData.error)
                     clearInterval(interval)
                     reject(
                         new Error(
@@ -193,7 +180,7 @@ export function startProgressPollingAndWait(taskId: string): Promise<void> {
                     )
                 }
             } catch (error) {
-                console.error(`[DEBUG] Error polling download task ${taskId}:`, error)
+                console.error(`Error polling download task ${taskId}:`, error)
                 clearInterval(interval)
                 reject(error)
             }
@@ -206,11 +193,12 @@ export function startProgressPollingAndWait(taskId: string): Promise<void> {
  * @param taskId - Task ID to poll for
  * @returns Promise that resolves when task completes
  */
-export function startIngestProgressPollingAndWait(taskId: string): Promise<void> {
+export function startIngestProgressPollingAndWait(
+    taskId: string
+): Promise<void> {
     return new Promise((resolve, reject) => {
         const interval = setInterval(async () => {
             try {
-                console.log(`[DEBUG] Polling and waiting for ingest task ${taskId}...`)
                 const progressData = await apiGet(
                     `/api/ingest/progress`,
                     false, // No loading toast
@@ -221,15 +209,11 @@ export function startIngestProgressPollingAndWait(taskId: string): Promise<void>
                     (p: any) => p.task_id === taskId
                 )
 
-                console.log(`[DEBUG] Ingest wait progress:`, taskProgress)
-
                 if (taskProgress) {
                     if (taskProgress.status === "completed") {
-                        console.log(`[DEBUG] Ingest task ${taskId} completed, resolving promise`)
                         clearInterval(interval)
                         resolve()
                     } else if (taskProgress.status === "failed") {
-                        console.log(`[DEBUG] Ingest task ${taskId} failed:`, taskProgress.error)
                         clearInterval(interval)
                         reject(
                             new Error(
@@ -239,7 +223,7 @@ export function startIngestProgressPollingAndWait(taskId: string): Promise<void>
                     }
                 }
             } catch (error) {
-                console.error(`[DEBUG] Error polling ingest task ${taskId}:`, error)
+                console.error(`Error polling ingest task ${taskId}:`, error)
                 clearInterval(interval)
                 reject(error)
             }
@@ -256,8 +240,6 @@ export async function refreshFile(
     fileRow: SourceFileRow,
     onProgress?: (progress: any) => void
 ): Promise<void> {
-    const toast = useToast()
-
     console.log(
         `Refreshing ${fileRow.fileType.toUpperCase()} file for source: ${fileRow.sourceName}`
     )
@@ -322,8 +304,6 @@ export async function refreshAllFilesForSource(
     sourceFiles: SourceFileRow[],
     onProgress?: (progress: any) => void
 ): Promise<void> {
-    const toast = useToast()
-
     console.log(`Refreshing all files for source: ${sourceName}`)
 
     try {
@@ -359,27 +339,11 @@ export async function refreshAllFilesForSource(
                 }
             }
         }
-
-        toast.add({
-            severity: "success",
-            summary: "Source Refresh Started",
-            detail: `Refresh started for all files in source ${sourceName}`,
-            life: 3000,
-        })
     } catch (error) {
         console.error(
             `Failed to refresh all files for source ${sourceName}:`,
             error
         )
-        toast.add({
-            severity: "error",
-            summary: "Source Refresh Failed",
-            detail:
-                error instanceof Error
-                    ? error.message
-                    : `Failed to refresh source ${sourceName}`,
-            life: 5000,
-        })
         throw error
     }
 }

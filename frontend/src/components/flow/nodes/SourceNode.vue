@@ -49,61 +49,131 @@
             <div class="node-body">
                 <!-- Progress Tracking - Only show during active download/ingestion -->
                 <div v-if="hasActiveProgress" class="progress-section">
-                    <!-- Show multi-step progress if file is being processed -->
+                    <!-- M3U Ingestion Progress -->
                     <div
-                        v-if="activeIngestProgress"
-                        class="ingest-progress-container"
+                        v-if="m3uIngestProgress"
+                        class="ingest-progress-container m3u-progress"
                     >
+                        <div class="progress-header">
+                            <i class="pi pi-list"></i>
+                            <span class="progress-type">M3U Ingestion</span>
+                        </div>
                         <div class="step-info">
                             <span class="step-indicator">
                                 Step
-                                {{ activeIngestProgress.current_step || 1 }}/{{
-                                    activeIngestProgress.total_steps || 3
+                                {{ m3uIngestProgress.current_step || 1 }}/{{
+                                    m3uIngestProgress.total_steps || 3
                                 }}:
                             </span>
                             <span class="step-name">
                                 {{
-                                    formatStepName(
-                                        activeIngestProgress.step_name
-                                    )
+                                    formatStepName(m3uIngestProgress.step_name)
                                 }}
                             </span>
                         </div>
                         <div class="progress-details">
                             <span
-                                v-if="activeIngestProgress.total_items > 0"
+                                v-if="m3uIngestProgress.total_items > 0"
                                 class="progress-items"
                             >
-                                {{ activeIngestProgress.completed_items || 0 }}
+                                {{ m3uIngestProgress.completed_items || 0 }}
                                 /
-                                {{ activeIngestProgress.total_items }}
+                                {{ m3uIngestProgress.total_items }}
                                 items
                             </span>
                             <span
                                 v-else-if="
-                                    activeIngestProgress.completed_items > 0
+                                    m3uIngestProgress.completed_items > 0
                                 "
                                 class="progress-items"
                             >
                                 {{
                                     formatNumber(
-                                        activeIngestProgress.completed_items ||
-                                            0
+                                        m3uIngestProgress.completed_items || 0
                                     )
                                 }}
                                 records processed
                             </span>
                             <span
-                                v-else-if="activeIngestProgress.current_item"
+                                v-else-if="m3uIngestProgress.current_item"
                                 class="progress-current-item"
                             >
-                                {{ activeIngestProgress.current_item }}
+                                {{ m3uIngestProgress.current_item }}
                             </span>
                         </div>
                         <!-- Progress bar: step-specific progress or indeterminate -->
                         <ProgressBar
-                            v-if="getStepProgressValue() !== null"
-                            :value="getStepProgressValue()"
+                            v-if="
+                                getStepProgressValue(m3uIngestProgress) !== null
+                            "
+                            :value="getStepProgressValue(m3uIngestProgress)"
+                            style="height: 12px; margin-top: 4px"
+                        />
+                        <ProgressBar
+                            v-else
+                            mode="indeterminate"
+                            style="height: 12px; margin-top: 4px"
+                        />
+                    </div>
+
+                    <!-- EPG Ingestion Progress -->
+                    <div
+                        v-if="epgIngestProgress"
+                        class="ingest-progress-container epg-progress"
+                    >
+                        <div class="progress-header">
+                            <i class="pi pi-calendar"></i>
+                            <span class="progress-type">EPG Ingestion</span>
+                        </div>
+                        <div class="step-info">
+                            <span class="step-indicator">
+                                Step
+                                {{ epgIngestProgress.current_step || 1 }}/{{
+                                    epgIngestProgress.total_steps || 3
+                                }}:
+                            </span>
+                            <span class="step-name">
+                                {{
+                                    formatStepName(epgIngestProgress.step_name)
+                                }}
+                            </span>
+                        </div>
+                        <div class="progress-details">
+                            <span
+                                v-if="epgIngestProgress.total_items > 0"
+                                class="progress-items"
+                            >
+                                {{ epgIngestProgress.completed_items || 0 }}
+                                /
+                                {{ epgIngestProgress.total_items }}
+                                items
+                            </span>
+                            <span
+                                v-else-if="
+                                    epgIngestProgress.completed_items > 0
+                                "
+                                class="progress-items"
+                            >
+                                {{
+                                    formatNumber(
+                                        epgIngestProgress.completed_items || 0
+                                    )
+                                }}
+                                records processed
+                            </span>
+                            <span
+                                v-else-if="epgIngestProgress.current_item"
+                                class="progress-current-item"
+                            >
+                                {{ epgIngestProgress.current_item }}
+                            </span>
+                        </div>
+                        <!-- Progress bar: step-specific progress or indeterminate -->
+                        <ProgressBar
+                            v-if="
+                                getStepProgressValue(epgIngestProgress) !== null
+                            "
+                            :value="getStepProgressValue(epgIngestProgress)"
                             style="height: 12px; margin-top: 4px"
                         />
                         <ProgressBar
@@ -119,7 +189,11 @@
                     >
                         <div class="progress-info">
                             <span class="progress-status">
-                                Downloading {{ activeDownloadProgress.file_type?.toUpperCase() || 'file' }}:
+                                Downloading
+                                {{
+                                    activeDownloadProgress.file_type?.toUpperCase() ||
+                                    "file"
+                                }}:
                             </span>
                             <span
                                 v-if="activeDownloadProgress.total_bytes > 0"
@@ -223,7 +297,7 @@
 </template>
 
 <script setup lang="ts">
-import { computed, inject, ref } from "vue"
+import { computed, inject, onMounted, ref } from "vue"
 import { Handle, Position, useNode } from "@vue-flow/core"
 import { NodeToolbar } from "@vue-flow/node-toolbar"
 import Button from "primevue/button"
@@ -241,6 +315,7 @@ import {
     stopIngestProgressPolling,
     type SourceFileRow,
 } from "@/utils/sources-utils"
+import { apiPost, apiGet } from "@/utils/apiUtils"
 
 // Progress tracking types
 interface DownloadProgress {
@@ -344,21 +419,142 @@ const formatStepName = (stepName: string | undefined): string => {
         .join(" ")
 }
 
-const getStepProgressValue = (): number | null => {
-    if (!activeIngestProgress.value) return null
+const getStepProgressValue = (
+    progress?: IngestProgress | null
+): number | null => {
+    if (!progress) return null
 
-    const progress = activeIngestProgress.value
-    if (progress.total_items > 0) {
-        return Math.round(
-            (progress.completed_items / progress.total_items) * 100
-        )
+    if (
+        progress.step_progress !== undefined &&
+        progress.step_progress !== null
+    ) {
+        return Math.round(progress.step_progress)
     }
-    return null // Indeterminate progress
+    if (
+        progress.overall_progress !== undefined &&
+        progress.overall_progress !== null
+    ) {
+        return Math.round(progress.overall_progress)
+    }
+    return null
 }
 
 // Router and toast for navigation and notifications
 const router = useRouter()
 const toast = useToast()
+
+// Resume active ingestion progress polling on mount
+const resumeActiveIngestPolling = async () => {
+    try {
+        // Check for any active ingest tasks from the backend
+        const progress = await apiGet<{
+            ingest: Record<string, IngestProgress>
+        }>(`/api/ingest/progress`, false, {
+            showSuccessToast: false,
+            showErrorToast: false,
+        })
+
+        // Resume polling for any active ingest tasks for this source
+        if (progress.ingest) {
+            for (const [taskId, taskProgress] of Object.entries(
+                progress.ingest
+            )) {
+                // Only resume tasks for this specific source
+                if (taskProgress.source_name === props.data.sourceName) {
+                    if (
+                        taskProgress.status === "ingesting" ||
+                        taskProgress.status === "pending"
+                    ) {
+                        console.log(
+                            `Resuming ingest progress polling for task ${taskId} (${taskProgress.source_name} ${taskProgress.file_type})`
+                        )
+                        // Store the progress in our tracking state
+                        ingestProgressByType.value[taskProgress.file_type] =
+                            taskProgress
+
+                        // Start polling for this task
+                        startPollingForTask(taskId, taskProgress.file_type)
+                    }
+                }
+            }
+        }
+    } catch (error) {
+        console.error("Failed to resume active ingest polling:", error)
+    }
+}
+
+// Helper function to start polling for a specific task
+const startPollingForTask = (taskId: string, fileType: string) => {
+    const maxPolls = 300 // 5 minutes max
+    let pollCount = 0
+
+    const interval = setInterval(async () => {
+        pollCount++
+        try {
+            const progress = await apiGet<{
+                ingest: Record<string, IngestProgress>
+            }>(`/api/ingest/progress`, false, {
+                showSuccessToast: false,
+                showErrorToast: false,
+            })
+
+            const taskProgress = progress.ingest?.[taskId]
+            if (taskProgress) {
+                console.log(
+                    `[DEBUG] Resumed ingest progress for task ${taskId}:`,
+                    taskProgress
+                )
+                // Update progress tracking state by file type
+                ingestProgressByType.value[fileType] = taskProgress
+
+                // Check if ingest is complete
+                if (
+                    taskProgress.status === "completed" ||
+                    taskProgress.status === "failed" ||
+                    taskProgress.status === "cancelled"
+                ) {
+                    console.log(
+                        `Resumed ingest task ${taskId} completed with status: ${taskProgress.status}`
+                    )
+                    clearInterval(interval)
+                    // Remove completed task from progress tracking
+                    delete ingestProgressByType.value[fileType]
+                    return
+                }
+            } else if (pollCount > 10) {
+                // If task disappears from progress after 10 polls, assume it completed
+                console.log(
+                    `Resumed task ${taskId} no longer in progress response, assuming completed ${pollCount}`
+                )
+                clearInterval(interval)
+                // Remove completed task from progress tracking
+                delete ingestProgressByType.value[fileType]
+                return
+            }
+
+            // Stop polling if we've exceeded max polls
+            if (pollCount >= maxPolls) {
+                console.log(
+                    `Max polls reached for resumed task ${taskId}, stopping polling`
+                )
+                clearInterval(interval)
+                // Remove timed-out task from progress tracking
+                delete ingestProgressByType.value[fileType]
+                return
+            }
+        } catch (error) {
+            console.error(
+                `Resume ingest progress polling error for task ${taskId}:`,
+                error instanceof Error ? error.message : String(error),
+                error
+            )
+            clearInterval(interval)
+            // Remove errored task from progress tracking
+            delete ingestProgressByType.value[fileType]
+            return
+        }
+    }, 1000) // Poll every second
+}
 
 // Loading states for toolbar buttons
 const isRedownloading = ref(false)
@@ -367,13 +563,24 @@ const isRefreshing = ref(false)
 
 // Progress tracking state
 const activeDownloadProgress = ref<DownloadProgress | null>(null)
-const activeIngestProgress = ref<IngestProgress | null>(null)
+
+// Separate ingestion progress tracking by file type
+const ingestProgressByType = ref<Record<string, IngestProgress>>({})
+
+// Computed properties for individual file type progress
+const m3uIngestProgress = computed(
+    () => ingestProgressByType.value["m3u"] || null
+)
+const epgIngestProgress = computed(
+    () => ingestProgressByType.value["epg"] || null
+)
 
 // Computed property to check if there's any active progress
 const hasActiveProgress = computed(() => {
     return (
         activeDownloadProgress.value !== null ||
-        activeIngestProgress.value !== null
+        m3uIngestProgress.value !== null ||
+        epgIngestProgress.value !== null
     )
 })
 
@@ -413,7 +620,6 @@ const createSourceFileRows = (): SourceFileRow[] => {
         })
     }
 
-    console.log("Created file rows for download:", fileRows)
     return fileRows
 }
 
@@ -457,6 +663,128 @@ const handleRedownload = async () => {
     }
 }
 
+/**
+ * Reingest a file with progress tracking (using SourcesTable.vue approach)
+ */
+const reingestFileWithProgress = async (fileRow: SourceFileRow) => {
+    console.log(
+        `Reingesting ${fileRow.fileType.toUpperCase()} file for source: ${fileRow.sourceName}`
+    )
+
+    try {
+        const ingestEndpoint = `/api/${encodeURIComponent(fileRow.sourceName)}/loads/${fileRow.fileType}`
+        const ingestResponse = await apiPost<{ task_id: string }>(
+            ingestEndpoint,
+            {},
+            true,
+            {
+                successMessage: `${fileRow.fileType.toUpperCase()} processing started`,
+                errorPrefix: `${fileRow.fileType.toUpperCase()} processing failed`,
+            }
+        )
+
+        const taskId = ingestResponse.task_id
+        console.log(
+            `[DEBUG] Starting ingest progress polling for task ${taskId}...`
+        )
+
+        // Start polling for ingest progress using SourcesTable.vue approach
+        let pollCount = 0
+        const maxPolls = 300 // Stop after 5 minutes if no completion detected
+
+        const interval = setInterval(async () => {
+            pollCount++
+
+            try {
+                console.log(`[DEBUG] Polling ingest progress (attempt ${pollCount}) for task ${taskId}...`)
+                const progress = await apiGet<{
+                    ingest: Record<string, any>
+                }>(`/api/ingest/progress`, false, {
+                    showSuccessToast: false,
+                    showErrorToast: false,
+                })
+                
+                if (!progress) {
+                    console.warn(`[DEBUG] No progress response received for task ${taskId} on attempt ${pollCount}`)
+                    return
+                }
+                
+                console.log(`[DEBUG] Progress response received:`, Object.keys(progress.ingest || {}).length, 'tasks')
+
+                // Find our specific task in the progress response
+                const taskProgress = progress.ingest?.[taskId]
+                if (taskProgress) {
+                    // Update progress tracking state by file type
+                    ingestProgressByType.value[fileRow.fileType] = taskProgress
+
+                    // Check if ingest is complete
+                    if (
+                        taskProgress.status === "completed" ||
+                        taskProgress.status === "failed" ||
+                        taskProgress.status === "cancelled"
+                    ) {
+                        console.log(
+                            `Ingest task ${taskId} completed with status: ${taskProgress.status}`
+                        )
+                        clearInterval(interval)
+                        // Remove completed task from progress tracking
+                        delete ingestProgressByType.value[fileRow.fileType]
+                        return
+                    }
+                } else if (pollCount > 10) {
+                    // If task disappears from progress after 10 polls, assume it completed
+                    console.log(
+                        `Task ${taskId} no longer in progress response, assuming completed ${pollCount}`
+                    )
+                    clearInterval(interval)
+                    // Remove completed task from progress tracking
+                    delete ingestProgressByType.value[fileRow.fileType]
+                    return
+                }
+
+                // Stop polling if we've exceeded max polls
+                if (pollCount >= maxPolls) {
+                    console.log(
+                        `Max polls reached for task ${taskId}, stopping polling`
+                    )
+                    clearInterval(interval)
+                    // Remove timed-out task from progress tracking
+                    delete ingestProgressByType.value[fileRow.fileType]
+                    return
+                }
+            } catch (error) {
+                console.error(
+                    `Ingest progress polling error for task ${taskId}:`,
+                    error instanceof Error ? error.message : String(error),
+                    error
+                )
+                clearInterval(interval)
+                // Remove errored task from progress tracking
+                delete ingestProgressByType.value[fileRow.fileType]
+                return
+            }
+        }, 1000) // Poll every second
+
+        // Wait for the polling to complete
+        return new Promise<void>((resolve) => {
+            const checkComplete = () => {
+                if (!ingestProgressByType.value[fileRow.fileType]) {
+                    resolve()
+                } else {
+                    setTimeout(checkComplete, 1000)
+                }
+            }
+            checkComplete()
+        })
+    } catch (error) {
+        console.error(
+            `Failed to reingest ${fileRow.fileType} for ${fileRow.sourceName}:`,
+            error
+        )
+        throw error
+    }
+}
+
 const handleReingest = async () => {
     console.log("Reingest source:", props.data.sourceName)
 
@@ -464,12 +792,22 @@ const handleReingest = async () => {
         isReingesting.value = true
         const sourceFiles = createSourceFileRows()
 
-        // Reingest all files for this source
-        for (const fileRow of sourceFiles) {
-            await reingestFile(fileRow, (progress) => {
-                // Update progress tracking state
-                activeIngestProgress.value = progress
-            })
+        // Reingest all files for this source IN SERIES (one at a time)
+        console.log(
+            `Processing ${sourceFiles.length} files in series for ${props.data.sourceName}`
+        )
+        for (let i = 0; i < sourceFiles.length; i++) {
+            const fileRow = sourceFiles[i]
+            console.log(
+                `[SERIAL] Processing file ${i + 1}/${sourceFiles.length}: ${fileRow.fileType} for ${fileRow.sourceName}`
+            )
+
+            // Wait for this file to complete before starting the next one
+            await reingestFileWithProgress(fileRow)
+
+            console.log(
+                `[SERIAL] Completed file ${i + 1}/${sourceFiles.length}: ${fileRow.fileType} for ${fileRow.sourceName}`
+            )
         }
 
         toast.add({
@@ -491,8 +829,8 @@ const handleReingest = async () => {
         })
     } finally {
         isReingesting.value = false
-        // Clear progress when done
-        activeIngestProgress.value = null
+        // Clear all progress when done
+        ingestProgressByType.value = {}
     }
 }
 
@@ -521,10 +859,23 @@ const handleRefresh = async () => {
             }
         )
 
-        // Note: refreshAllFilesForSource already shows success toast
+        toast.add({
+            severity: "success",
+            summary: "Source Refresh Started",
+            detail: `Refresh started for all files in source ${props.data.sourceName}`,
+            life: 3000,
+        })
     } catch (error) {
         console.error("Failed to refresh source:", error)
-        // Error toast is already shown by refreshAllFilesForSource
+        toast.add({
+            severity: "error",
+            summary: "Source Refresh Failed",
+            detail:
+                error instanceof Error
+                    ? error.message
+                    : `Failed to refresh source ${props.data.sourceName}`,
+            life: 5000,
+        })
     } finally {
         isRefreshing.value = false
         // Clear progress when done
@@ -546,6 +897,11 @@ const handleSettings = () => {
         life: 3000,
     })
 }
+
+// Component lifecycle - resume active tasks when component mounts
+onMounted(async () => {
+    await resumeActiveIngestPolling()
+})
 </script>
 
 <style scoped>
@@ -686,6 +1042,118 @@ const handleSettings = () => {
     position: absolute;
     right: -0.375rem;
     transform: translateX(50%) translateY(-50%);
+}
+
+/* Progress Container Styles */
+.ingest-progress-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+/* Dual Progress Containers */
+.dual-progress-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+    margin-top: 0.5rem;
+}
+
+.progress-section {
+    background: var(--surface-50);
+    border: 1px solid var(--surface-200);
+    border-radius: 0.5rem;
+    padding: 0.75rem;
+    position: relative;
+}
+
+.progress-section.m3u {
+    border-left: 4px solid #10b981; /* Green accent for M3U */
+}
+
+.progress-section.epg {
+    border-left: 4px solid #3b82f6; /* Blue accent for EPG */
+}
+
+.progress-header {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    font-weight: 600;
+    font-size: 0.875rem;
+    color: var(--text-color);
+}
+
+.progress-header i {
+    font-size: 1rem;
+}
+
+.progress-header.m3u {
+    color: #059669; /* Darker green for M3U */
+}
+
+.progress-header.epg {
+    color: #2563eb; /* Darker blue for EPG */
+}
+
+.step-info {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-size: 0.875rem;
+}
+
+.step-indicator {
+    font-weight: 600;
+    color: var(--p-primary-color);
+    font-size: 0.75rem;
+}
+
+.step-name {
+    font-weight: 500;
+    color: var(--p-text-color);
+    text-transform: capitalize;
+}
+
+.progress-details {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+    color: var(--p-text-muted-color);
+}
+
+.progress-items {
+    font-weight: 500;
+}
+
+.progress-current-item {
+    font-weight: 500;
+    color: var(--p-text-color);
+}
+
+.download-progress-container {
+    display: flex;
+    flex-direction: column;
+    gap: 0.25rem;
+}
+
+.progress-info {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    font-size: 0.75rem;
+    color: var(--p-text-muted-color);
+}
+
+.progress-status {
+    font-weight: 500;
+    color: var(--p-text-color);
+}
+
+.progress-bytes {
+    font-weight: 500;
 }
 
 /* Toolbar Styles */
