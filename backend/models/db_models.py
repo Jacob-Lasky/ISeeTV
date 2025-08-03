@@ -2,11 +2,12 @@
 table definitions for EpgChannel, M3uChannel, and Program.
 """
 
-from sqlalchemy import Column, DateTime, Index, Integer, String
+from sqlalchemy import Column, DateTime, Index, Integer, String, Boolean, JSON
 from sqlalchemy.inspection import inspect
 from sqlalchemy.sql import func
 
 from common.db import Base
+from typing import Optional, Type
 
 
 class MetadataMixin:
@@ -35,8 +36,14 @@ class EpgChannelTable(Base, MetadataMixin):
     display_name = Column(String, nullable=False)
     icon_url = Column(String, nullable=True)
     filter_reasons = Column(
-        String, nullable=True
-    )  # JSON array of assignment IDs for multi-rule assignments
+        JSON, nullable=True
+    )  # JSON object mapping rule names to boolean results
+    _trace = Column(
+        JSON, nullable=True
+    )  # JSON array of rule execution trace steps
+    accepted = Column(
+        Boolean, nullable=True, default=None
+    )  # Whether this record was accepted for streams table
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -61,8 +68,14 @@ class M3uChannelTable(Base, MetadataMixin):
     group = Column(String, nullable=True)
     stream_mode = Column(String, nullable=False, default="live")
     filter_reasons = Column(
-        String, nullable=True
-    )  # JSON array of assignment IDs for multi-rule assignments
+        JSON, nullable=True
+    )  # JSON object mapping rule names to boolean results
+    _trace = Column(
+        JSON, nullable=True
+    )  # JSON array of rule execution trace steps
+    accepted = Column(
+        Boolean, nullable=True, default=None
+    )  # Whether this record was accepted for streams table
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -88,8 +101,14 @@ class ProgramTable(Base, MetadataMixin):
     title = Column(String, nullable=True)
     description = Column(String, nullable=True)
     filter_reasons = Column(
-        String, nullable=True
-    )  # JSON array of assignment IDs for multi-rule assignments
+        JSON, nullable=True
+    )  # JSON object mapping rule names to boolean results
+    _trace = Column(
+        JSON, nullable=True
+    )  # JSON array of rule execution trace steps
+    accepted = Column(
+        Boolean, nullable=True, default=None
+    )  # Whether this record was accepted for streams table
     created_at = Column(DateTime, server_default=func.now())
     updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
 
@@ -130,3 +149,22 @@ class FilterValueTable(Base):
         ),
         Index("idx_filter_table_column", "table_name", "column_name"),
     )
+
+
+def get_table_model(table_name: str) -> Optional[Type[Base]]:
+    """Get SQLAlchemy table model by table name.
+    
+    Args:
+        table_name: Name of the table (e.g., 'epg_channels', 'm3u_channels', 'programs')
+        
+    Returns:
+        SQLAlchemy model class or None if table not found
+    """
+    table_mapping = {
+        'epg_channels': EpgChannelTable,
+        'm3u_channels': M3uChannelTable,
+        'programs': ProgramTable,
+        'filter_values': FilterValueTable
+    }
+    
+    return table_mapping.get(table_name)

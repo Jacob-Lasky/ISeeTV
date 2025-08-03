@@ -268,3 +268,137 @@ export interface ApiRequests {
     "/api/settings": GlobalSettings
     "/api/sources": Source[]
 }
+
+/**
+ * Backend ingestion rule model matching backend/rules/ingestion_rules.py
+ */
+export interface IngestionRule {
+    name: string
+    tables: string[] // Array of table names (e.g., ["m3u_channels", "programs"])
+    field: string
+    regex: string // Backend uses 'regex' not 'pattern'
+    is_whitelist: boolean
+    enabled: boolean
+    id?: string
+    description?: string
+}
+
+/**
+ * Backend plugin model matching backend plugin system
+ */
+export interface BackendPlugin {
+    name: string
+    description: string
+    version: string
+    enabled: boolean
+    default_parameters: Record<string, any>
+    supported_tables: string[]
+}
+
+/**
+ * Source rule assignment model
+ */
+export interface SourceRuleAssignment {
+    source_name: string
+    assignment_name: string
+    rule_names: string[]
+    enabled: boolean
+}
+
+/**
+ * API response structures
+ */
+export interface RulesResponse {
+    rules: IngestionRule[]
+    source_assignments: SourceRuleAssignment[]
+}
+
+export interface PluginsResponse {
+    success: boolean
+    plugins: Record<string, BackendPlugin>
+}
+
+/**
+ * Frontend-transformed types for FlowEditor compatibility
+ */
+export interface FrontendSource {
+    name: string
+    totalRecords: number
+    enabled: boolean
+    type: string // Primary file type ('m3u' or 'epg')
+    url: string // Primary URL
+    file_metadata: Record<string, FileMetadata>
+}
+
+export interface FrontendRule {
+    name: string
+    pattern: string // Transformed from 'regex'
+    field: string
+    table: string // First table from 'tables' array
+    id?: string
+    enabled: boolean
+    description?: string
+}
+
+export interface FrontendPlugin {
+    name: string
+    type: string
+    description: string
+    version: string
+    enabled: boolean
+    parameters: Record<string, any>
+    supported_tables: string[]
+}
+
+/**
+ * Backend data transformation utilities following atomic design principles
+ */
+export class BackendDataTransformer {
+    /**
+     * Transform backend source to frontend format
+     */
+    static transformSource(backendSource: Source): FrontendSource {
+        const fileTypes = Object.keys(backendSource.file_metadata || {})
+        const primaryFileType = fileTypes[0] || 'unknown'
+        const primaryUrl = backendSource.file_metadata?.[primaryFileType]?.url || ''
+        
+        return {
+            name: backendSource.name,
+            totalRecords: 0, // Will be populated from actual data queries
+            enabled: backendSource.enabled,
+            type: primaryFileType,
+            url: primaryUrl,
+            file_metadata: backendSource.file_metadata,
+        }
+    }
+
+    /**
+     * Transform backend rule to frontend format
+     */
+    static transformRule(backendRule: IngestionRule): FrontendRule {
+        return {
+            name: backendRule.name,
+            pattern: backendRule.regex, // Backend uses 'regex' field
+            field: backendRule.field,
+            table: backendRule.tables?.[0] || 'unknown', // Use first table from array
+            id: backendRule.id,
+            enabled: backendRule.enabled,
+            description: backendRule.description,
+        }
+    }
+
+    /**
+     * Transform backend plugin to frontend format
+     */
+    static transformPlugin(key: string, backendPlugin: BackendPlugin): FrontendPlugin {
+        return {
+            name: backendPlugin.name || key,
+            type: key,
+            description: backendPlugin.description,
+            version: backendPlugin.version,
+            enabled: backendPlugin.enabled,
+            parameters: backendPlugin.default_parameters || {},
+            supported_tables: backendPlugin.supported_tables || [],
+        }
+    }
+}

@@ -19,6 +19,9 @@
     "dependencies": {
         "@primeuix/themes": "^1.1.2",
         "@primevue/core": "^4.3.6",
+        "@vue-flow/core": "^1.45.0",
+        "@vue-flow/node-toolbar": "^1.1.1",
+        "dagre": "^0.8.5",
         "pinia": "^3.0.3",
         "primeicons": "^7.0.0",
         "primevue": "^4.3.5",

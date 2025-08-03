@@ -6,7 +6,7 @@ from typing import Annotated, Any, Literal
 
 import httpx
 import uvicorn
-from fastapi import Body, Depends, FastAPI, HTTPException, status
+from fastapi import Body, Depends, FastAPI, HTTPException, Query, status
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import RedirectResponse, Response, StreamingResponse
 from pydantic import ValidationError
@@ -132,6 +132,7 @@ app = FastAPI(
         {"name": "Metadata", "description": "View metadata"},
         {"name": "Tables", "description": "Manage database tables"},
         {"name": "Streams", "description": "Browse and filter merged channel streams"},
+        {"name": "Flow Management", "description": "Manage rule flows"},
         {"name": "Rules", "description": "Ingestion rules management and filtering"},
         {"name": "Sources", "description": "Manage IPTV sources (M3U, EPG, metadata)"},
         {"name": "Download", "description": "Download the M3U and EPG files"},
@@ -648,6 +649,7 @@ async def load_file_to_db(
             job_function=background_load_task,
             task_id=task_id,
             file_path=file_path,
+            source_timezone=source_obj.source_timezone,
         )
 
         return {
@@ -2340,25 +2342,24 @@ def get_available_plugins():
     try:
         from rules.plugin_integration import get_plugin_integration
         from rules.plugins.registry import get_plugin_registry, load_all_plugins
-        
+
         # Load all plugins
         load_all_plugins()
         registry = get_plugin_registry()
         integration = get_plugin_integration()
-        
+
         # Get available plugins with default configuration
-        plugins = integration.get_plugins_config()  # This returns default config when no source specified
-        
-        return {
-            "success": True,
-            "plugins": plugins
-        }
-    
+        plugins = (
+            integration.get_plugins_config()
+        )  # This returns default config when no source specified
+
+        return {"success": True, "plugins": plugins}
+
     except Exception as e:
         logger.exception("Error getting available plugins")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error getting available plugins: {str(e)}"
+            detail=f"Error getting available plugins: {str(e)}",
         )
 
 
@@ -2367,27 +2368,23 @@ def get_source_plugins(source: str):
     """Get plugins configuration for a specific source."""
     try:
         from rules.plugin_integration import get_plugin_integration
-        
+
         integration = get_plugin_integration()
-        
+
         # Get source-specific plugin configuration
         source_plugins = integration.get_plugins_config(source)
-        
+
         # If no source-specific config, return available plugins with default config
         if not source_plugins:
             source_plugins = integration.get_plugins_config()  # Get defaults
-        
-        return {
-            "success": True,
-            "source": source,
-            "plugins": source_plugins
-        }
-    
+
+        return {"success": True, "source": source, "plugins": source_plugins}
+
     except Exception as e:
         logger.exception(f"Error getting plugins for source {source}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error getting plugins for source {source}: {str(e)}"
+            detail=f"Error getting plugins for source {source}: {str(e)}",
         )
 
 
@@ -2397,25 +2394,25 @@ def get_plugin(plugin_name: str):
     try:
         from rules.plugin_integration import get_plugin_integration
         from rules.plugins.registry import get_plugin_registry, load_all_plugins
-        
+
         # Load all available plugins
         load_all_plugins()
         registry = get_plugin_registry()
         integration = get_plugin_integration()
-        
+
         # Get available plugins
         available_plugins = registry.get_available_plugins()
-        
+
         if plugin_name not in available_plugins:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Plugin '{plugin_name}' not found"
+                detail=f"Plugin '{plugin_name}' not found",
             )
-        
+
         plugin_info = available_plugins[plugin_name]
         current_config = integration.get_plugins_config()
         plugin_config = current_config.get(plugin_name, {})
-        
+
         return {
             "success": True,
             "plugin": {
@@ -2426,61 +2423,62 @@ def get_plugin(plugin_name: str):
                 "parameters_schema": plugin_info.get("parameters_schema", {}),
                 "default_parameters": plugin_info.get("default_parameters", {}),
                 "enabled": plugin_config.get("enabled", False),
-                "parameters": plugin_config.get("parameters", plugin_info.get("default_parameters", {}))
-            }
+                "parameters": plugin_config.get(
+                    "parameters", plugin_info.get("default_parameters", {})
+                ),
+            },
         }
-    
+
     except HTTPException:
         raise
     except Exception as e:
         logger.exception(f"Error getting plugin {plugin_name}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error getting plugin: {str(e)}"
+            detail=f"Error getting plugin: {str(e)}",
         )
 
 
 @app.post("/api/{source}/plugins/save")
 def save_source_plugins_config(
-    source: str,
-    plugins_config: Annotated[dict[str, dict[str, Any]], Body()]
+    source: str, plugins_config: Annotated[dict[str, dict[str, Any]], Body()]
 ):
     """Save built-in plugins configuration for a specific source."""
     try:
         from rules.plugin_integration import get_plugin_integration
-        
+
         integration = get_plugin_integration()
-        
+
         # Validate configuration
         is_valid, errors = integration.validate_plugins_config(plugins_config)
         if not is_valid:
             return {
                 "success": False,
                 "errors": errors,
-                "message": "Plugin configuration validation failed"
+                "message": "Plugin configuration validation failed",
             }
-        
+
         # Save all plugins configuration for the source
         success = integration.update_plugins_config_for_source(source, plugins_config)
-        
+
         if not success:
             return {
                 "success": False,
-                "message": f"Failed to save plugin configuration for source {source}"
+                "message": f"Failed to save plugin configuration for source {source}",
             }
-        
+
         return {
             "success": True,
             "message": f"Successfully saved configuration for {len(plugins_config)} plugins on source {source}",
             "source": source,
-            "saved_plugins": list(plugins_config.keys())
+            "saved_plugins": list(plugins_config.keys()),
         }
-    
+
     except Exception as e:
         logger.exception(f"Error saving plugins configuration for source {source}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error saving plugins configuration for source {source}: {str(e)}"
+            detail=f"Error saving plugins configuration for source {source}: {str(e)}",
         )
 
 
@@ -2491,24 +2489,26 @@ def validate_plugins_config(
     """Validate built-in plugins configuration without saving."""
     try:
         from rules.plugin_integration import get_plugin_integration
-        
+
         integration = get_plugin_integration()
-        
+
         # Validate configuration
         is_valid, errors = integration.validate_plugins_config(plugins_config)
-        
+
         return {
             "success": True,
             "valid": is_valid,
             "errors": errors if not is_valid else [],
-            "message": "Configuration is valid" if is_valid else "Configuration has errors"
+            "message": (
+                "Configuration is valid" if is_valid else "Configuration has errors"
+            ),
         }
-    
+
     except Exception as e:
         logger.exception("Error validating plugins configuration")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error validating plugins configuration: {str(e)}"
+            detail=f"Error validating plugins configuration: {str(e)}",
         )
 
 
@@ -2518,51 +2518,56 @@ def enable_plugin(plugin_name: str):
     try:
         from rules.plugin_integration import get_plugin_integration
         from rules.plugins.registry import get_plugin_registry, load_all_plugins
-        
+
         # Load all available plugins
         load_all_plugins()
         registry = get_plugin_registry()
         integration = get_plugin_integration()
-        
+
         # Check if plugin exists
         available_plugins = registry.get_available_plugins()
         if plugin_name not in available_plugins:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Plugin '{plugin_name}' not found"
+                detail=f"Plugin '{plugin_name}' not found",
             )
-        
+
         # Get current configuration
         current_config = integration.get_plugins_config()
-        plugin_config = current_config.get(plugin_name, {
-            "enabled": False,
-            "parameters": available_plugins[plugin_name].get("default_parameters", {})
-        })
-        
+        plugin_config = current_config.get(
+            plugin_name,
+            {
+                "enabled": False,
+                "parameters": available_plugins[plugin_name].get(
+                    "default_parameters", {}
+                ),
+            },
+        )
+
         # Enable the plugin
         plugin_config["enabled"] = True
-        
+
         # Save configuration
         success = integration.update_plugin_config(plugin_name, plugin_config)
-        
+
         if success:
             return {
                 "success": True,
-                "message": f"Plugin '{plugin_name}' enabled successfully"
+                "message": f"Plugin '{plugin_name}' enabled successfully",
             }
         else:
             return {
                 "success": False,
-                "message": f"Failed to enable plugin '{plugin_name}'"
+                "message": f"Failed to enable plugin '{plugin_name}'",
             }
-    
+
     except HTTPException:
         raise
     except Exception as e:
         logger.exception(f"Error enabling plugin {plugin_name}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error enabling plugin: {str(e)}"
+            detail=f"Error enabling plugin: {str(e)}",
         )
 
 
@@ -2572,77 +2577,81 @@ def disable_plugin(plugin_name: str):
     try:
         from rules.plugin_integration import get_plugin_integration
         from rules.plugins.registry import get_plugin_registry, load_all_plugins
-        
+
         # Load all available plugins
         load_all_plugins()
         registry = get_plugin_registry()
         integration = get_plugin_integration()
-        
+
         # Check if plugin exists
         available_plugins = registry.get_available_plugins()
         if plugin_name not in available_plugins:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Plugin '{plugin_name}' not found"
+                detail=f"Plugin '{plugin_name}' not found",
             )
-        
+
         # Get current configuration
         current_config = integration.get_plugins_config()
-        plugin_config = current_config.get(plugin_name, {
-            "enabled": False,
-            "parameters": available_plugins[plugin_name].get("default_parameters", {})
-        })
-        
+        plugin_config = current_config.get(
+            plugin_name,
+            {
+                "enabled": False,
+                "parameters": available_plugins[plugin_name].get(
+                    "default_parameters", {}
+                ),
+            },
+        )
+
         # Disable the plugin
         plugin_config["enabled"] = False
-        
+
         # Save configuration
         success = integration.update_plugin_config(plugin_name, plugin_config)
-        
+
         if success:
             return {
                 "success": True,
-                "message": f"Plugin '{plugin_name}' disabled successfully"
+                "message": f"Plugin '{plugin_name}' disabled successfully",
             }
         else:
             return {
                 "success": False,
-                "message": f"Failed to disable plugin '{plugin_name}'"
+                "message": f"Failed to disable plugin '{plugin_name}'",
             }
-    
+
     except HTTPException:
         raise
     except Exception as e:
         logger.exception(f"Error disabling plugin {plugin_name}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error disabling plugin: {str(e)}"
+            detail=f"Error disabling plugin: {str(e)}",
         )
 
 
 @app.post("/api/plugins/{plugin_name}/configure")
 def configure_plugin(
-    plugin_name: str,
-    plugin_config: Annotated[dict[str, Any], Body()]
+    plugin_name: str, plugin_config: Annotated[dict[str, Any], Body()]
 ):
     """Configure parameters for a specific built-in plugin."""
     try:
         from rules.plugin_integration import get_plugin_integration
         from rules.plugins.registry import get_plugin_registry, load_all_plugins
-        
+
         # Load all available plugins
         load_all_plugins()
         registry = get_plugin_registry()
         integration = get_plugin_integration()
-        
+
         # Check if plugin exists
         available_plugins = registry.get_available_plugins()
         if plugin_name not in available_plugins:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
-                detail=f"Plugin '{plugin_name}' not found"
+                detail=f"Plugin '{plugin_name}' not found",
             )
-        
+
         # Validate the configuration
         temp_config = {plugin_name: plugin_config}
         is_valid, errors = integration.validate_plugins_config(temp_config)
@@ -2650,30 +2659,357 @@ def configure_plugin(
             return {
                 "success": False,
                 "errors": errors,
-                "message": "Plugin configuration validation failed"
+                "message": "Plugin configuration validation failed",
             }
-        
+
         # Save configuration
         success = integration.update_plugin_config(plugin_name, plugin_config)
-        
+
         if success:
             return {
                 "success": True,
-                "message": f"Plugin '{plugin_name}' configured successfully"
+                "message": f"Plugin '{plugin_name}' configured successfully",
             }
         else:
             return {
                 "success": False,
-                "message": f"Failed to configure plugin '{plugin_name}'"
+                "message": f"Failed to configure plugin '{plugin_name}'",
             }
-    
+
     except HTTPException:
         raise
     except Exception as e:
         logger.exception(f"Error configuring plugin {plugin_name}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Error configuring plugin: {str(e)}"
+            detail=f"Error configuring plugin: {str(e)}",
+        )
+
+
+# Flow Management API Endpoints
+
+
+@app.post(
+    "/api/{source}/flows",
+    response_model=dict[str, Any],
+    tags=["Flow Management"],
+    status_code=status.HTTP_200_OK,
+)
+async def save_flow_for_source(
+    source: str, flow_data: Annotated[dict[str, Any], Body()]
+) -> dict[str, Any]:
+    """Save flow configuration for a specific source."""
+    try:
+        from common.flow_storage import save_flow, validate_flow_data
+
+        # Validate flow data structure
+        if not validate_flow_data(flow_data):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid flow data structure",
+            )
+
+        # Save flow
+        success = save_flow(source, flow_data)
+
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to save flow configuration",
+            )
+
+        return {
+            "message": f"Flow saved successfully for source '{source}'",
+            "source": source,
+            "timestamp": flow_data.get("timestamp"),
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error saving flow for source {source}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error saving flow: {str(e)}",
+        )
+
+
+@app.get(
+    "/api/{source}/flows",
+    response_model=dict[str, Any],
+    tags=["Flow Management"],
+    status_code=status.HTTP_200_OK,
+)
+async def load_flow_for_source(source: str) -> dict[str, Any]:
+    """Load flow configuration for a specific source."""
+    try:
+        from common.flow_storage import load_flow
+
+        # Load flow
+        flow_data = load_flow(source)
+
+        if flow_data is None:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"No flow configuration found for source '{source}'",
+            )
+
+        return flow_data
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error loading flow for source {source}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error loading flow: {str(e)}",
+        )
+
+
+@app.delete(
+    "/api/{source}/flows",
+    response_model=dict[str, Any],
+    tags=["Flow Management"],
+    status_code=status.HTTP_200_OK,
+)
+async def delete_flow_for_source(source: str) -> dict[str, Any]:
+    """Delete flow configuration for a specific source."""
+    try:
+        from common.flow_storage import delete_flow
+
+        # Delete flow
+        success = delete_flow(source)
+
+        if not success:
+            raise HTTPException(
+                status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+                detail="Failed to delete flow configuration",
+            )
+
+        return {
+            "message": f"Flow deleted successfully for source '{source}'",
+            "source": source,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error deleting flow for source {source}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error deleting flow: {str(e)}",
+        )
+
+
+@app.get(
+    "/api/flows",
+    response_model=dict[str, Any],
+    tags=["Flow Management"],
+    status_code=status.HTTP_200_OK,
+)
+async def list_all_flows() -> dict[str, Any]:
+    """List all saved flow configurations."""
+    try:
+        from common.flow_storage import list_saved_flows
+
+        flows = list_saved_flows()
+
+        return {"flows": flows, "count": len(flows)}
+
+    except Exception as e:
+        logger.exception("Error listing flows")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error listing flows: {str(e)}",
+        )
+
+
+@app.post(
+    "/api/{source}/flows/execute",
+    response_model=dict[str, Any],
+    tags=["Flow Management"],
+    status_code=status.HTTP_200_OK,
+)
+async def execute_flow_for_source(
+    source: str,
+    flow_data: Annotated[dict[str, Any], Body()],
+    table_name: str = Query(
+        default="m3u_channels", description="Table to execute flow on"
+    ),
+    limit: int = Query(
+        default=100, ge=1, le=10000, description="Maximum records to process"
+    ),
+) -> dict[str, Any]:
+    """Execute a flow configuration on real data from a specific source and table."""
+    logger.info(
+        f"Executing flow for source {source} on table {table_name} with limit {limit}"
+    )
+
+    try:
+        from rules.enhanced_rules_engine import EnhancedRulesEngine
+        from common.database import get_session
+        from models.db_models import get_table_model
+        from common.flow_storage import validate_flow_data
+        import tempfile
+        import json
+        import os
+
+        # Validate flow data structure
+        if not validate_flow_data(flow_data):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid flow data structure",
+            )
+
+        # Get table model
+        table_model = get_table_model(table_name)
+        if not table_model:
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=f"Invalid table name: {table_name}",
+            )
+
+        # Create temporary flow configuration file
+        with tempfile.NamedTemporaryFile(
+            mode="w", suffix=".json", delete=False
+        ) as temp_file:
+            json.dump(flow_data, temp_file, indent=2)
+            temp_flow_path = temp_file.name
+
+        try:
+            # Initialize enhanced rules engine
+            rules_engine = EnhancedRulesEngine()
+
+            # Get sample data from the specified table and source
+            with get_session() as session:
+                query = session.query(table_model)
+
+                # Filter by source if the table has a source column
+                if hasattr(table_model, "source"):
+                    query = query.filter(table_model.source == source)
+
+                # Limit the number of records for execution
+                records = query.limit(limit).all()
+
+                if not records:
+                    return {
+                        "success": True,
+                        "data": {
+                            "message": f"No records found for source '{source}' in table '{table_name}'",
+                            "source": source,
+                            "table_name": table_name,
+                            "total_records": 0,
+                            "execution_results": {
+                                "accepted": [],
+                                "rejected": [],
+                                "stats": {
+                                    "total": 0,
+                                    "accepted": 0,
+                                    "rejected": 0,
+                                    "with_trace": 0,
+                                    "with_filter_reasons": 0,
+                                },
+                            },
+                        },
+                    }
+
+                # Convert ORM objects to dictionaries for processing
+                record_dicts = []
+                for record in records:
+                    record_dict = {}
+                    for column in table_model.__table__.columns:
+                        value = getattr(record, column.name)
+                        # Handle JSON columns
+                        if hasattr(value, "__dict__") or isinstance(
+                            value, (dict, list)
+                        ):
+                            record_dict[column.name] = value
+                        else:
+                            record_dict[column.name] = value
+                    record_dicts.append(record_dict)
+
+                # Execute flow using enhanced rules engine
+                logger.info(f"Processing {len(record_dicts)} records through flow")
+                accepted_records, rejected_records = (
+                    rules_engine.apply_flow_to_records_batch(
+                        record_dicts, temp_flow_path
+                    )
+                )
+
+                # Calculate comprehensive statistics
+                total_records = len(record_dicts)
+                accepted_count = len(accepted_records)
+                rejected_count = len(rejected_records)
+
+                # Calculate tracing statistics
+                records_with_trace = len(
+                    [
+                        r
+                        for r in accepted_records + rejected_records
+                        if r.get("_trace") and len(r.get("_trace", [])) > 0
+                    ]
+                )
+
+                records_with_filter_reasons = len(
+                    [
+                        r
+                        for r in accepted_records + rejected_records
+                        if r.get("filter_reasons")
+                        and (
+                            (
+                                isinstance(r["filter_reasons"], dict)
+                                and len(r["filter_reasons"]) > 0
+                            )
+                            or (
+                                isinstance(r["filter_reasons"], str)
+                                and r["filter_reasons"] not in ["{}", "[]", ""]
+                            )
+                        )
+                    ]
+                )
+
+                # Prepare execution results
+                execution_results = {
+                    "accepted": accepted_records,
+                    "rejected": rejected_records,
+                    "stats": {
+                        "total": total_records,
+                        "accepted": accepted_count,
+                        "rejected": rejected_count,
+                        "with_trace": records_with_trace,
+                        "with_filter_reasons": records_with_filter_reasons,
+                    },
+                }
+
+                logger.info(
+                    f"Flow execution completed: {accepted_count} accepted, "
+                    f"{rejected_count} rejected out of {total_records} total records"
+                )
+
+                return {
+                    "success": True,
+                    "data": {
+                        "message": f"Flow executed successfully on {total_records} records",
+                        "source": source,
+                        "table_name": table_name,
+                        "total_records": total_records,
+                        "execution_results": execution_results,
+                        "flow_config": flow_data,
+                    },
+                }
+
+        finally:
+            # Clean up temporary file
+            if os.path.exists(temp_flow_path):
+                os.unlink(temp_flow_path)
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error executing flow for source {source}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error executing flow: {str(e)}",
         )
 
 

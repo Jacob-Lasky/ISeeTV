@@ -12,9 +12,9 @@ from models.db_models import FilterValueTable
 logger = get_logger(__name__)
 
 FILTERABLE_COLUMNS_CONFIG = {
-    "epg_channels": ["source", "filter_reasons"],
-    "m3u_channels": ["source", "group", "stream_mode", "filter_reasons"],
-    "programs": ["source", "filter_reasons"],
+    "epg_channels": ["source", "filter_reasons", "accepted"],
+    "m3u_channels": ["source", "group", "stream_mode", "filter_reasons", "accepted"],
+    "programs": ["source", "filter_reasons", "accepted"],
     "streams": ["source", "group", "stream_mode", "filter_reasons"],
 }
 
@@ -46,8 +46,12 @@ SPECIAL_FILTER_QUERIES = {
             WITH filter_values AS (
                 SELECT
                     CASE
-                        WHEN filter_reasons IS NULL OR filter_reasons = '' OR filter_reasons = '[]' THEN 'Passed'
-                        ELSE TRIM(REPLACE(REPLACE(filter_reasons, '["', ''), '"]', ''))
+                        WHEN filter_reasons IS NULL OR JSON_EXTRACT(filter_reasons, '$') IS NULL THEN 'Passed'
+                        WHEN JSON_TYPE(filter_reasons) = 'object' THEN (
+                            SELECT GROUP_CONCAT(key || ':' || value)
+                            FROM JSON_EACH(filter_reasons)
+                        )
+                        ELSE 'Unknown'
                     END as value
                 FROM m3u_channels
             )
@@ -87,8 +91,12 @@ def _get_filter_query(table_name: str, column_name: str) -> str:
             WITH filter_values AS (
                 SELECT
                     CASE
-                        WHEN filter_reasons IS NULL OR filter_reasons = '' OR filter_reasons = '[]' THEN 'Passed'
-                        ELSE TRIM(REPLACE(REPLACE(filter_reasons, '["', ''), '"]', ''))
+                        WHEN filter_reasons IS NULL OR JSON_EXTRACT(filter_reasons, '$') IS NULL THEN 'Passed'
+                        WHEN JSON_TYPE(filter_reasons) = 'object' THEN (
+                            SELECT GROUP_CONCAT(key || ':' || value)
+                            FROM JSON_EACH(filter_reasons)
+                        )
+                        ELSE 'Unknown'
                     END as value
                 FROM {table_name}
             )
@@ -99,6 +107,21 @@ def _get_filter_query(table_name: str, column_name: str) -> str:
             WHERE value IS NOT NULL
             GROUP BY value
             ORDER BY value
+        """
+
+    # Handle accepted as a special case for boolean values
+    if column_name == "accepted":
+        return f"""
+            SELECT
+                CASE
+                    WHEN accepted = 1 THEN 'Accepted'
+                    WHEN accepted = 0 THEN 'Rejected'
+                    ELSE 'Unknown'
+                END as value,
+                COUNT(*) as count
+            FROM {table_name}
+            GROUP BY accepted
+            ORDER BY accepted DESC
         """
 
     # Standard column query

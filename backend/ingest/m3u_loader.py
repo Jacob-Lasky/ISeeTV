@@ -13,7 +13,7 @@ from common.task_manager import IngestTaskManager, TaskManager
 from ingest.m3u_parser import parse_m3u
 from models.db_models import M3uChannelTable
 from models.models import M3uChannel
-from rules.post_load_rules import apply_post_load_rules
+from rules.enhanced_rules_engine import EnhancedRulesEngine
 
 logger = get_logger(__name__)
 
@@ -121,6 +121,42 @@ async def load_m3u_channels_async(
         channels = parse_m3u(file_path, source_name, task_id)
         logger.debug("Parsed %s M3U channels", len(channels))
 
+        # Apply enhanced rules engine with tracing and progress tracking
+        rules_engine = EnhancedRulesEngine()
+
+        # Create progress callback for enhanced rules processing
+        def rules_progress_callback(processed, total, current_item, accepted, rejected):
+            if task_id:
+                # Update task with enhanced rules progress
+                IngestTaskManager.update_item_progress(
+                    task_id,
+                    f"Enhanced rules: {current_item} (A:{accepted}, R:{rejected})",
+                    processed,
+                )
+
+        logger.info(
+            f"Starting enhanced rules processing for {len(channels)} M3U channels"
+        )
+        from rules.enhanced_rules_engine import apply_enhanced_rules
+        accepted_records, rejected_records = apply_enhanced_rules(
+            channels,
+            "m3u_channels",
+            source_name,
+            progress_callback=rules_progress_callback
+        )
+
+        # Convert back to M3uChannel objects for database loading
+        from models.models import M3uChannel
+
+        channels = [M3uChannel(**record) for record in accepted_records]
+
+        logger.info(
+            "Rules engine processed %s records: %s accepted, %s rejected",
+            len(accepted_records) + len(rejected_records),
+            len(accepted_records),
+            len(rejected_records),
+        )
+
         # Update task progress if task_id provided
         if task_id:
             # Update total_items with actual parsed count
@@ -182,17 +218,6 @@ async def load_m3u_file_async(
 
     logger.debug("Completed M3U file load for %s", source_name)
 
-    logger.info("Applying post-load rules to M3U channels for %s", source_name)
-    try:
-        rule_results = apply_post_load_rules("m3u_channels", source_name)
-
-        # Yield a result for rule application
-        yield LoadResult(
-            "M3U_CHANNEL",
-            "RULES",
-            "success",
-            f"Applied rules: {rule_results['filtered']} filtered, {rule_results['passed']} passed",
-        )
-    except Exception as e:
-        logger.exception("Error applying post-load rules")
-        yield LoadResult("M3U_CHANNEL", "RULES", "error", str(e))
+    # Rules are now applied during the loading process with tracing
+    # No separate post-load rules step needed
+    logger.info("M3U channels loaded with enhanced rules tracing for %s", source_name)

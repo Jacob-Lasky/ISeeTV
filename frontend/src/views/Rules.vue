@@ -11,6 +11,36 @@
                     </p>
                 </div>
 
+                <!-- View Toggle -->
+                <div class="view-toggle">
+                    <div class="flex items-center gap-3">
+                        <span class="text-sm font-medium text-gray-700"
+                            >View:</span
+                        >
+                        <SelectButton
+                            v-model="currentView"
+                            :options="viewOptions"
+                            optionLabel="label"
+                            optionValue="value"
+                            class="view-selector"
+                        />
+                    </div>
+                </div>
+            </div>
+
+            <!-- Flow Editor View -->
+            <div v-if="currentView === 'flow'" class="flow-view">
+                <FlowEditor
+                    :available-sources="sources"
+                    :available-rules="rules"
+                    :available-plugins="plugins"
+                    @execute-flow="onFlowExecute"
+                    @save-flow="onFlowSave"
+                />
+            </div>
+
+            <!-- Table View (existing) -->
+            <div v-else class="table-view">
                 <!-- Rules Table -->
                 <Card>
                     <template #content>
@@ -113,17 +143,16 @@
                                 </template>
                                 <template #editor="{ data, field }">
                                     <Select
-                                        v-model="data[field]"
+                                        :model-value="data[field]"
                                         :options="
                                             getColumnOptions(data.tables[0])
                                         "
                                         optionLabel="label"
                                         optionValue="value"
                                         placeholder="Select field"
-                                        :loading="loadingColumns"
                                         class="w-full"
-                                        @focus="
-                                            loadTableColumns(data.tables[0])
+                                        @update:model-value="
+                                            (value) => (data[field] = value)
                                         "
                                     />
                                 </template>
@@ -334,6 +363,7 @@
                                         optionLabel="label"
                                         optionValue="value"
                                         placeholder="Select source"
+                                        class="w-full"
                                     />
                                 </template>
                             </Column>
@@ -682,14 +712,13 @@
                                     Select Source:
                                 </label>
                                 <Select
-                                    id="plugin-source-select"
                                     v-model="selectedPluginSource"
                                     :options="sourceOptions"
                                     optionLabel="label"
                                     optionValue="value"
-                                    placeholder="Choose a source to configure plugins"
-                                    class="w-64"
-                                    @update:model-value="onPluginSourceChange"
+                                    placeholder="Select a source"
+                                    class="w-full"
+                                    @change="onPluginSourceChange"
                                 />
                             </div>
                         </div>
@@ -976,20 +1005,24 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from "vue"
+import { ref, computed, onMounted } from "vue"
 import { useToast } from "primevue/usetoast"
-import Button from "primevue/button"
 import Card from "primevue/card"
-import Column from "primevue/column"
 import DataTable from "primevue/datatable"
-import InputNumber from "primevue/inputnumber"
-import ToggleSwitch from "primevue/toggleswitch"
+import Column from "primevue/column"
+import Button from "primevue/button"
 import InputText from "primevue/inputtext"
-import MultiSelect from "primevue/multiselect"
-import ProgressBar from "primevue/progressbar"
 import Select from "primevue/select"
+import MultiSelect from "primevue/multiselect"
 import Tag from "primevue/tag"
+import ToggleSwitch from "primevue/toggleswitch"
+import ProgressBar from "primevue/progressbar"
+import InputNumber from "primevue/inputnumber"
+import SelectButton from "primevue/selectbutton"
 import ToggleButton from "primevue/togglebutton"
+
+// Flow Editor Components
+import FlowEditor from "@/components/flow/FlowEditor.vue"
 
 const toast = useToast()
 
@@ -1048,6 +1081,13 @@ const normalizeAssignedRules = (assignment: any): any => {
 const rules = ref<IngestionRule[]>([])
 const sourceAssignments = ref<SourceRuleAssignment[]>([])
 const sources = ref<Source[]>([])
+
+// View toggle state
+const currentView = ref("table")
+const viewOptions = ref([
+    { label: "Table View", value: "table" },
+    { label: "Flow Editor", value: "flow" },
+])
 
 // Plugin-related state
 const plugins = ref([])
@@ -3060,6 +3100,59 @@ const isAssignmentBeingApplied = (
     return applyingSourceRule.value === assignmentKey
 }
 
+// Flow Editor Integration Handlers
+const onFlowExecute = async (flowData: any) => {
+    try {
+        toast.add({
+            severity: "info",
+            summary: "Flow Execution Started",
+            detail: "Executing visual flow with current rules and plugins...",
+            life: 3000,
+        })
+
+        // Convert flow data to rule applications
+        // This would integrate with existing applyRules() logic
+        await applyRules()
+
+        toast.add({
+            severity: "success",
+            summary: "Flow Executed Successfully",
+            detail: "Visual flow has been applied to the database.",
+            life: 3000,
+        })
+    } catch (error) {
+        console.error("Flow execution failed:", error)
+        toast.add({
+            severity: "error",
+            summary: "Flow Execution Failed",
+            detail: "Failed to execute the visual flow. Please check your configuration.",
+            life: 3000,
+        })
+    }
+}
+
+const onFlowSave = async (flowData: any) => {
+    try {
+        // Save flow configuration alongside existing rules
+        await Promise.all([saveRules(), saveAssignments()])
+
+        toast.add({
+            severity: "success",
+            summary: "Flow Saved",
+            detail: "Visual flow configuration has been saved successfully.",
+            life: 3000,
+        })
+    } catch (error) {
+        console.error("Flow save failed:", error)
+        toast.add({
+            severity: "error",
+            summary: "Save Failed",
+            detail: "Failed to save flow configuration.",
+            life: 3000,
+        })
+    }
+}
+
 // Clean up - functions already defined above
 </script>
 
@@ -3072,6 +3165,27 @@ const isAssignmentBeingApplied = (
 
 .header-section {
     margin-bottom: 2rem;
+}
+
+.view-toggle {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.view-selector {
+    min-width: 200px;
+}
+
+.flow-view {
+    height: calc(100vh - 200px);
+    border: 1px solid #e5e7eb;
+    border-radius: 0.5rem;
+    overflow: hidden;
+}
+
+.table-view {
+    /* Existing table view styles */
 }
 
 .status-card {

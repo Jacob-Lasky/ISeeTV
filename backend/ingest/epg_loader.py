@@ -13,6 +13,7 @@ from common.task_manager import IngestTaskManager, TaskManager
 from ingest.epg_parser import parse_epg_for_channels, parse_epg_for_programs
 from models.db_models import EpgChannelTable, ProgramTable
 from models.models import EpgChannel, Program
+from rules.enhanced_rules_engine import EnhancedRulesEngine
 
 logger = get_logger(__name__)
 
@@ -249,7 +250,9 @@ async def _bulk_upsert_programs(
                 "PROGRAM",
                 f"{program.source}:{program.program_id}",
                 status,
-                message_template.format(title=program.title, channel_id=program.channel_id),
+                message_template.format(
+                    title=program.title, channel_id=program.channel_id
+                ),
             )
             for program in programs
         ]
@@ -289,6 +292,42 @@ async def load_epg_channels_async(
         # Parse channels (this is synchronous but usually fast)
         channels = parse_epg_for_channels(file_path, source_name, task_id)
         logger.info("Parsed %s EPG channels", len(channels))
+
+        # Apply enhanced rules engine with tracing and progress tracking
+        rules_engine = EnhancedRulesEngine()
+
+        # Create progress callback for enhanced rules processing
+        def rules_progress_callback(processed, total, current_item, accepted, rejected):
+            if task_id:
+                # Update task with enhanced rules progress
+                IngestTaskManager.update_item_progress(
+                    task_id,
+                    f"Enhanced rules (channels): {current_item} (A:{accepted}, R:{rejected})",
+                    processed,
+                )
+
+        logger.info(
+            f"Starting enhanced rules processing for {len(channels)} EPG channels"
+        )
+        from rules.enhanced_rules_engine import apply_enhanced_rules
+        accepted_records, rejected_records = apply_enhanced_rules(
+            channels,
+            "epg_channels",
+            source_name,
+            progress_callback=rules_progress_callback
+        )
+
+        # Convert back to EpgChannel objects for database loading
+        from models.models import EpgChannel
+
+        channels = [EpgChannel(**record) for record in accepted_records]
+
+        logger.info(
+            "Rules engine processed %s records: %s accepted, %s rejected",
+            len(accepted_records) + len(rejected_records),
+            len(accepted_records),
+            len(rejected_records),
+        )
 
         # Update task progress if task_id provided
         if task_id:
@@ -360,6 +399,41 @@ async def load_programs_async(
             file_path, source_name, source_timezone, task_id
         )
         logger.info("Parsed %s programs", len(programs))
+
+        # Apply enhanced rules engine with tracing and progress tracking
+        rules_engine = EnhancedRulesEngine()
+
+        # Create progress callback for enhanced rules processing
+        def rules_progress_callback(processed, total, current_item, accepted, rejected):
+            if task_id:
+                # Update task with enhanced rules progress
+                IngestTaskManager.update_item_progress(
+                    task_id,
+                    f"Enhanced rules (programs): {current_item} (A:{accepted}, R:{rejected})",
+                    processed,
+                )
+
+        logger.info(
+            f"Starting enhanced rules processing for {len(programs)} EPG programs"
+        )
+        accepted_records, rejected_records = apply_enhanced_rules(
+            programs,
+            "programs",
+            source_name,
+            progress_callback=rules_progress_callback
+        )
+
+        # Convert back to Program objects for database loading
+        from models.models import Program
+
+        programs = [Program(**record) for record in accepted_records]
+
+        logger.info(
+            "Rules engine processed %s records: %s accepted, %s rejected",
+            len(accepted_records) + len(rejected_records),
+            len(accepted_records),
+            len(rejected_records),
+        )
 
         # Update task progress if task_id provided
         if task_id:

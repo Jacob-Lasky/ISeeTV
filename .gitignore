@@ -9,6 +9,9 @@ data/iseetv.db
 data/iseetv.db-journal
 data/assignments.json
 data/rules.json
+data/plugins.json
+data/flows/*
 data/ingestion_rules_logs/*
 *.coverage
 *.windsurf
+
