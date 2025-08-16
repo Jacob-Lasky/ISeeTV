@@ -51,6 +51,7 @@ class IngestionRule:
     regex: str  # Regular expression pattern
     enabled: bool = True
     not_: bool = False  # If True, inverts the regex match (NOT matching the pattern)
+    labels: dict[str, str] | None = None  # Custom labels for match/noMatch states
 
     def __post_init__(self):
         """Validate rule configuration."""

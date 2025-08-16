@@ -34,16 +34,52 @@ def save_rules(rules: list[dict[str, Any]]) -> dict[str, Any]:
     """
     logger.info("Saving %s rules to %s", len(rules), RULES_FILE)
 
+    # Debug: Log incoming rules data
+    for i, rule_data in enumerate(rules):
+        logger.debug("Rule %d incoming data: %s", i, rule_data)
+
     try:
         # Validate rules structure
-        for rule_data in rules:
-            IngestionRule(**rule_data)  # This will raise if invalid
+        validated_rules = []
+        for i, rule_data in enumerate(rules):
+            logger.debug("Validating rule %d: %s", i, rule_data)
+
+            # Create IngestionRule object for validation
+            ingestion_rule = IngestionRule(**rule_data)
+            logger.debug(
+                "Rule %d validation passed, IngestionRule object: %s", i, ingestion_rule
+            )
+
+            # Convert back to dict to preserve all fields
+            rule_dict = {
+                "name": ingestion_rule.name,
+                "tables": ingestion_rule.tables,
+                "field": ingestion_rule.field,
+                "regex": ingestion_rule.regex,
+                "enabled": ingestion_rule.enabled,
+                "not_": ingestion_rule.not_,
+            }
+            
+            # Preserve labels if present in original data
+            if 'labels' in rule_data:
+                rule_dict['labels'] = rule_data['labels']
+
+            validated_rules.append(rule_dict)
+            logger.debug("Rule %d final dict: %s", i, rule_dict)
+
+        # Debug: Log what we're about to save
+        logger.debug("About to save %d rules to file:", len(validated_rules))
+        for i, rule in enumerate(validated_rules):
+            logger.debug("Final rule %d: %s", i, rule)
 
         # Atomically write rules to file
-        atomic_write_json(RULES_FILE, rules)
+        atomic_write_json(RULES_FILE, validated_rules)
 
-        logger.info("Successfully saved %s rules", len(rules))
-        return {"success": True, "message": f"Successfully saved {len(rules)} rules"}
+        logger.info("Successfully saved %s rules", len(validated_rules))
+        return {
+            "success": True,
+            "message": f"Successfully saved {len(validated_rules)} rules",
+        }
 
     except Exception as e:
         logger.exception("Error saving rules: %s", e)

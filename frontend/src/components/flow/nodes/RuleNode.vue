@@ -83,13 +83,13 @@
                 <div v-if="data.stats" class="stats-section">
                     <div class="stat-row">
                         <div class="stat-item passed">
-                            <span class="stat-label">Passed:</span>
+                            <span class="stat-label">{{ matchLabel }}:</span>
                             <span class="stat-value">{{
                                 formatNumber(data.stats.passed)
                             }}</span>
                         </div>
                         <div class="stat-item caught">
-                            <span class="stat-label">Caught:</span>
+                            <span class="stat-label">{{ noMatchLabel }}:</span>
                             <span class="stat-value">{{
                                 formatNumber(data.stats.caught)
                             }}</span>
@@ -134,7 +134,7 @@
                 :style="passedHandleStyle"
                 class="output-handle passed-handle"
             />
-            <div v-if="isSelected" :class="passedLabelClass">passed</div>
+            <div v-if="isSelected" :class="passedLabelClass">{{ matchLabel }}</div>
 
             <Handle
                 id="caught"
@@ -143,7 +143,7 @@
                 :style="caughtHandleStyle"
                 class="output-handle caught-handle"
             />
-            <div v-if="isSelected" :class="caughtLabelClass">caught</div>
+            <div v-if="isSelected" :class="caughtLabelClass">{{ noMatchLabel }}</div>
         </div>
     </div>
 </template>
@@ -289,6 +289,15 @@ const truncatePattern = (pattern: string): string => {
     if (!pattern) return ""
     return pattern.length > 30 ? pattern.substring(0, 30) + "..." : pattern
 }
+
+// Custom label computed properties
+const matchLabel = computed(() => {
+    return props.data.labels?.match || "Passed"
+})
+
+const noMatchLabel = computed(() => {
+    return props.data.labels?.noMatch || "Caught"
+})
 
 // Toolbar action handlers
 const handleExecuteToHere = async () => {

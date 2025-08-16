@@ -281,6 +281,10 @@ export interface IngestionRule {
     enabled: boolean
     id?: string
     description?: string
+    labels?: {
+        match: string // Custom label for when rule matches (default: "passed")
+        noMatch: string // Custom label for when rule doesn't match (default: "caught")
+    }
 }
 
 /**
@@ -339,6 +343,10 @@ export interface FrontendRule {
     id?: string
     enabled: boolean
     description?: string
+    labels?: {
+        match: string // Custom label for when rule matches (default: "passed")
+        noMatch: string // Custom label for when rule doesn't match (default: "caught")
+    }
 }
 
 export interface FrontendPlugin {
@@ -386,6 +394,7 @@ export class BackendDataTransformer {
             id: backendRule.id,
             enabled: backendRule.enabled,
             description: backendRule.description,
+            labels: backendRule.labels || { match: "passed", noMatch: "caught" },
         }
     }
 

@@ -810,6 +810,7 @@ const createNode = (
                 field: data.field,
                 table: ruleTable,
                 enabled: true,
+                labels: data.labels || { match: "passed", noMatch: "caught" },
                 stats: { processed: 0, passed: 0, caught: 0 },
                 validation: {
                     validSourceTables: [ruleTable], // Use the actual assigned table
@@ -1480,6 +1481,7 @@ const deleteRule = async (rule: any) => {
                 regex: r.regex || r.pattern,
                 not_: r.not_ || false,
                 enabled: r.enabled !== false,
+                labels: r.labels,
             }))
 
         const response = await fetch("/api/rules/save", {
@@ -1531,6 +1533,7 @@ const onRuleSaved = async (ruleData: any) => {
                     regex: r.regex || r.pattern,
                     not_: r.not_ || false,
                     enabled: r.enabled !== false,
+                    labels: r.labels,
                 })),
                 {
                     name: ruleData.name,
@@ -1541,6 +1544,7 @@ const onRuleSaved = async (ruleData: any) => {
                     regex: ruleData.regex,
                     not_: ruleData.not_,
                     enabled: ruleData.enabled,
+                    labels: ruleData.labels,
                 },
             ]
         } else {
@@ -1556,6 +1560,7 @@ const onRuleSaved = async (ruleData: any) => {
                         regex: ruleData.regex,
                         not_: ruleData.not_,
                         enabled: ruleData.enabled,
+                        labels: ruleData.labels,
                     }
                 }
                 return {
@@ -1565,6 +1570,7 @@ const onRuleSaved = async (ruleData: any) => {
                     regex: r.regex || r.pattern,
                     not_: r.not_ || false,
                     enabled: r.enabled !== false,
+                    labels: r.labels,
                 }
             })
         }

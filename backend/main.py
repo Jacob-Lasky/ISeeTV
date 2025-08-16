@@ -1709,6 +1709,12 @@ async def get_rules() -> dict[str, Any]:
 async def save_rules_only(rules_data: list[dict[str, Any]]) -> dict[str, Any]:
     """Save only ingestion rules to rules.json file."""
     logger.info("Saving ingestion rules only")
+
+    # Debug: Log what the API endpoint receives
+    logger.debug("API endpoint received %d rules", len(rules_data))
+    for i, rule in enumerate(rules_data):
+        logger.debug("API rule %d: %s", i, rule)
+
     try:
         result = save_rules(rules_data)
 

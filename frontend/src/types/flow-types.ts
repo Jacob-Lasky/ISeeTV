@@ -48,6 +48,10 @@ export interface RuleNodeData extends BaseNodeData {
     field: string
     table: string
     enabled: boolean
+    labels?: {
+        match: string // Custom label for when rule matches (default: "passed")
+        noMatch: string // Custom label for when rule doesn't match (default: "caught")
+    }
 }
 
 // Plugin node - complex filtering logic

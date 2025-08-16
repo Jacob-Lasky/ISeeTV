@@ -102,6 +102,41 @@
                     <label for="rule-enabled" class="ml-2">Enabled</label>
                 </div>
             </div>
+
+            <!-- Custom Labels Section -->
+            <div class="field">
+                <label class="block mb-2">Custom Labels</label>
+                <div class="grid grid-cols-2 gap-3">
+                    <div class="field">
+                        <label for="match-label" class="text-sm"
+                            >Match Label</label
+                        >
+                        <InputText
+                            id="match-label"
+                            v-model="formData.labels.match"
+                            placeholder="passed"
+                            class="w-full"
+                        />
+                        <small class="text-muted"
+                            >Label when rule matches</small
+                        >
+                    </div>
+                    <div class="field">
+                        <label for="no-match-label" class="text-sm"
+                            >No Match Label</label
+                        >
+                        <InputText
+                            id="no-match-label"
+                            v-model="formData.labels.noMatch"
+                            placeholder="caught"
+                            class="w-full"
+                        />
+                        <small class="text-muted"
+                            >Label when rule doesn't match</small
+                        >
+                    </div>
+                </div>
+            </div>
         </div>
 
         <template #footer>
@@ -170,6 +205,10 @@ const formData = ref<IngestionRule>({
     regex: ".*",
     not_: false,
     enabled: true,
+    labels: {
+        match: "passed",
+        noMatch: "caught",
+    },
 })
 
 // Form validation
@@ -253,12 +292,9 @@ watch(
                 Object.keys(newRule).length > 0 &&
                 newRule.name // Ensure it's a valid rule object with a name
             ) {
-                // Handle both 'table' (singular) and 'tables' (array) properties
                 const tables =
                     newRule.tables ||
                     (newRule.table ? [newRule.table] : ["m3u_channels"])
-
-                console.log("📋 Resolved tables:", tables)
 
                 formData.value = {
                     name: newRule.name || "",
@@ -267,6 +303,10 @@ watch(
                     regex: newRule.regex || newRule.pattern || ".*",
                     not_: Boolean(newRule.not_),
                     enabled: newRule.enabled !== false,
+                    labels: newRule.labels || {
+                        match: "passed",
+                        noMatch: "caught",
+                    },
                 }
 
                 // Load field options for the current table first
@@ -286,6 +326,10 @@ watch(
                     regex: ".*",
                     not_: false,
                     enabled: true,
+                    labels: {
+                        match: "passed",
+                        noMatch: "caught",
+                    },
                 }
                 await loadTableColumns("m3u_channels")
             }
@@ -301,6 +345,10 @@ watch(
                 regex: ".*",
                 not_: false,
                 enabled: true,
+                labels: {
+                    match: "passed",
+                    noMatch: "caught",
+                },
             }
             errors.value = {}
         }
@@ -368,6 +416,7 @@ const saveRule = async () => {
             regex: formData.value.regex,
             not_: formData.value.not_,
             enabled: formData.value.enabled,
+            labels: formData.value.labels,
         }
         console.log("Rule object being saved:", rule)
 
