@@ -335,6 +335,7 @@ export interface FrontendRule {
     pattern: string // Transformed from 'regex'
     field: string
     table: string // First table from 'tables' array
+    tables?: string[] // Preserve tables array for editing
     id?: string
     enabled: boolean
     description?: string
@@ -381,6 +382,7 @@ export class BackendDataTransformer {
             pattern: backendRule.regex, // Backend uses 'regex' field
             field: backendRule.field,
             table: backendRule.tables?.[0] || 'unknown', // Use first table from array
+            tables: backendRule.tables || ['unknown'], // Preserve tables array for editing
             id: backendRule.id,
             enabled: backendRule.enabled,
             description: backendRule.description,

@@ -107,7 +107,27 @@
 
                     <!-- Rules Section -->
                     <div class="palette-group">
-                        <h5>Rules</h5>
+                        <div class="palette-group-header">
+                            <h5>Rules</h5>
+                            <div class="rule-management-buttons">
+                                <Button
+                                    icon="pi pi-plus"
+                                    severity="success"
+                                    size="small"
+                                    @click="openCreateRuleDialog"
+                                    title="Create new rule"
+                                    text
+                                />
+                                <Button
+                                    icon="pi pi-refresh"
+                                    severity="secondary"
+                                    size="small"
+                                    @click="fetchRules"
+                                    title="Refresh rules"
+                                    text
+                                />
+                            </div>
+                        </div>
                         <div v-if="loading.rules" class="loading-state">
                             <i class="pi pi-spin pi-spinner"></i>
                             <span>Loading rules...</span>
@@ -135,14 +155,46 @@
                             @dragstart="onDragStart($event, 'rule', rule)"
                             :title="
                                 rule.description ||
-                                `${rule.name} - ${rule.pattern}`
+                                `Pattern: ${rule.pattern || rule.regex || 'No pattern'}`
                             "
                         >
-                            <div>
-                                <i class="pi pi-filter"></i>
-                                <span>{{ rule.name }}</span>
+                            <div class="rule-content">
+                                <div class="rule-main">
+                                    <i class="pi pi-filter"></i>
+                                    <span>{{ rule.name }}</span>
+                                </div>
+                                <div class="rule-actions">
+                                    <Button
+                                        icon="pi pi-pencil"
+                                        severity="info"
+                                        size="small"
+                                        @click.stop="openEditRuleDialog(rule)"
+                                        title="Edit rule"
+                                        text
+                                    />
+                                    <Button
+                                        icon="pi pi-copy"
+                                        severity="secondary"
+                                        size="small"
+                                        @click.stop="duplicateRule(rule)"
+                                        title="Duplicate rule"
+                                        text
+                                    />
+                                    <Button
+                                        icon="pi pi-trash"
+                                        severity="danger"
+                                        size="small"
+                                        @click.stop="deleteRule(rule)"
+                                        title="Delete rule"
+                                        text
+                                    />
+                                </div>
                             </div>
-                            <small v-if="rule.table">{{ rule.table }}</small>
+                            <small>{{
+                                rule.table ||
+                                (rule.tables && rule.tables[0]) ||
+                                "Unknown table"
+                            }}</small>
                         </div>
                     </div>
 
@@ -278,8 +330,8 @@
                             id="source-select"
                             v-model="selectedSource"
                             :options="sourceOptions"
-                            option-label="name"
-                            option-value="name"
+                            option-label="label"
+                            option-value="value"
                             placeholder="Select source"
                             class="source-dropdown"
                             :disabled="loading.sources"
@@ -354,6 +406,14 @@
             </div>
         </div>
     </div>
+
+    <!-- Rule Dialog -->
+    <RuleDialog
+        v-model:visible="showRuleDialog"
+        :rule="editingRule"
+        :is-editing="ruleDialogMode === 'edit'"
+        @rule-saved="onRuleSaved"
+    />
 </template>
 
 <script setup lang="ts">
@@ -364,11 +424,33 @@ import Button from "primevue/button"
 import Select from "primevue/select"
 import { useToast } from "primevue/usetoast"
 
+// Props
+interface Props {
+    availableSources?: Source[]
+    availableRules?: IngestionRule[]
+    availablePlugins?: BackendPlugin[]
+}
+
+const props = withDefaults(defineProps<Props>(), {
+    availableSources: () => [],
+    availableRules: () => [],
+    availablePlugins: () => [],
+})
+
+// Emits
+interface Emits {
+    (e: "execute-flow", data: any): void
+    (e: "save-flow", data: any): void
+}
+
+const emit = defineEmits<Emits>()
+
 // Import node components
 import SourceNode from "./nodes/SourceNode.vue"
 import RuleNode from "./nodes/RuleNode.vue"
 import PluginNode from "./nodes/PluginNode.vue"
 import StreamNode from "./nodes/StreamNode.vue"
+import RuleDialog from "./RuleDialog.vue"
 
 // Import types
 import type {
@@ -412,8 +494,13 @@ const draggedItem = ref<any>(null)
 const selectedNodeId = ref<string | null>(null)
 
 // Source selection and flow management
-const selectedSource = ref<string | null>(null)
-const sourceOptions = ref<Source[]>([])
+const selectedSource = ref<string>("")
+const sourceOptions = ref<Array<{ label: string; value: string }>>([])
+
+// Rule dialog state
+const showRuleDialog = ref(false)
+const ruleDialogMode = ref<"create" | "edit">("create")
+const editingRule = ref<any>(null)
 
 // Provide selection state to node components
 provide("selectedNodeId", selectedNodeId)
@@ -1291,6 +1378,234 @@ const fetchPlugins = async () => {
     }
 }
 
+// Rule management functions
+const openCreateRuleDialog = () => {
+    ruleDialogMode.value = "create"
+    editingRule.value = null
+    showRuleDialog.value = true
+}
+
+const openEditRuleDialog = (rule: any) => {
+    ruleDialogMode.value = "edit"
+    editingRule.value = { ...rule }
+    showRuleDialog.value = true
+}
+
+const duplicateRule = async (rule: any) => {
+    try {
+        const duplicatedRule = {
+            ...rule,
+            name: `${rule.name} (Copy)`,
+        }
+
+        const updatedRules = [
+            ...availableRules.value.map((r) => ({
+                name: r.name,
+                tables: r.tables || [r.table || "m3u_channels"],
+                field: r.field,
+                regex: r.regex || r.pattern,
+                not_: r.not_ || false,
+                enabled: r.enabled !== false,
+            })),
+            {
+                name: duplicatedRule.name,
+                tables: duplicatedRule.tables || [
+                    duplicatedRule.table || "m3u_channels",
+                ],
+                field: duplicatedRule.field,
+                regex: duplicatedRule.regex || duplicatedRule.pattern,
+                not_: duplicatedRule.not_ || false,
+                enabled: duplicatedRule.enabled !== false,
+            },
+        ]
+
+        console.log("Duplicating rule - payload:", updatedRules)
+
+        const response = await fetch("/api/rules/save", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(updatedRules),
+        })
+
+        if (!response.ok) {
+            throw new Error(`Failed to duplicate rule: ${response.statusText}`)
+        }
+
+        // Refresh rules list
+        await fetchRules()
+
+        // Find the duplicated rule in the refreshed list and open it for editing
+        const newRule = availableRules.value.find(
+            (r) => r.name === duplicatedRule.name
+        )
+        if (newRule) {
+            const transformedRule =
+                BackendDataTransformer.transformRule(newRule)
+            editingRule.value = { ...transformedRule }
+            ruleDialogMode.value = "edit"
+            showRuleDialog.value = true
+        }
+
+        toast.add({
+            severity: "success",
+            summary: "Rule Duplicated",
+            detail: `Rule "${duplicatedRule.name}" has been created and opened for editing`,
+            life: 3000,
+        })
+    } catch (error) {
+        console.error("Error duplicating rule:", error)
+        toast.add({
+            severity: "error",
+            summary: "Duplication Failed",
+            detail:
+                error instanceof Error
+                    ? error.message
+                    : "Failed to duplicate rule",
+            life: 5000,
+        })
+    }
+}
+
+const deleteRule = async (rule: any) => {
+    try {
+        // Remove the rule from the current list
+        const updatedRules = availableRules.value
+            .filter((r) => r.name !== rule.name)
+            .map((r) => ({
+                name: r.name,
+                tables: r.tables || [r.table || "m3u_channels"],
+                field: r.field,
+                regex: r.regex || r.pattern,
+                not_: r.not_ || false,
+                enabled: r.enabled !== false,
+            }))
+
+        const response = await fetch("/api/rules/save", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(updatedRules),
+        })
+
+        if (!response.ok) {
+            throw new Error(`Failed to delete rule: ${response.statusText}`)
+        }
+
+        // Refresh rules list
+        await fetchRules()
+
+        toast.add({
+            severity: "success",
+            summary: "Rule Deleted",
+            detail: `Rule "${rule.name}" has been deleted successfully`,
+            life: 3000,
+        })
+    } catch (error) {
+        console.error("Error deleting rule:", error)
+        toast.add({
+            severity: "error",
+            summary: "Deletion Failed",
+            detail:
+                error instanceof Error
+                    ? error.message
+                    : "Failed to delete rule",
+            life: 5000,
+        })
+    }
+}
+
+const onRuleSaved = async (ruleData: any) => {
+    try {
+        let updatedRules
+
+        if (ruleDialogMode.value === "create") {
+            // Add new rule
+            updatedRules = [
+                ...availableRules.value.map((r) => ({
+                    name: r.name,
+                    tables: r.tables || [r.table || "m3u_channels"],
+                    field: r.field,
+                    regex: r.regex || r.pattern,
+                    not_: r.not_ || false,
+                    enabled: r.enabled !== false,
+                })),
+                {
+                    name: ruleData.name,
+                    tables: ruleData.tables || [ruleData.table] || [
+                            "m3u_channels",
+                        ],
+                    field: ruleData.field,
+                    regex: ruleData.regex,
+                    not_: ruleData.not_,
+                    enabled: ruleData.enabled,
+                },
+            ]
+        } else {
+            // Update existing rule
+            updatedRules = availableRules.value.map((r) => {
+                if (r.name === editingRule.value?.name) {
+                    return {
+                        name: ruleData.name,
+                        tables: ruleData.tables || [ruleData.table] || [
+                                "m3u_channels",
+                            ],
+                        field: ruleData.field,
+                        regex: ruleData.regex,
+                        not_: ruleData.not_,
+                        enabled: ruleData.enabled,
+                    }
+                }
+                return {
+                    name: r.name,
+                    tables: r.tables || [r.table || "m3u_channels"],
+                    field: r.field,
+                    regex: r.regex || r.pattern,
+                    not_: r.not_ || false,
+                    enabled: r.enabled !== false,
+                }
+            })
+        }
+
+        const response = await fetch("/api/rules/save", {
+            method: "POST",
+            headers: {
+                "Content-Type": "application/json",
+            },
+            body: JSON.stringify(updatedRules),
+        })
+
+        if (!response.ok) {
+            throw new Error(`Failed to save rule: ${response.statusText}`)
+        }
+
+        // Close dialog and refresh rules
+        showRuleDialog.value = false
+        await fetchRules()
+
+        toast.add({
+            severity: "success",
+            summary:
+                ruleDialogMode.value === "create"
+                    ? "Rule Created"
+                    : "Rule Updated",
+            detail: `Rule "${ruleData.name}" has been ${ruleDialogMode.value === "create" ? "created" : "updated"} successfully`,
+            life: 3000,
+        })
+    } catch (error) {
+        console.error("Error saving rule:", error)
+        toast.add({
+            severity: "error",
+            summary: "Save Failed",
+            detail:
+                error instanceof Error ? error.message : "Failed to save rule",
+            life: 5000,
+        })
+    }
+}
+
 // Load all data
 const loadAllData = async () => {
     await Promise.all([fetchSources(), fetchRules(), fetchPlugins()])
@@ -1340,10 +1655,62 @@ watch(selectedSource, async (newSource, oldSource) => {
     }
 })
 
+// Watch for prop changes and update internal state
+watch(
+    () => props.availableSources,
+    (newSources) => {
+        if (newSources && newSources.length > 0) {
+            loading.value.sources = false
+            error.value.sources = null
+
+            // Transform sources to dropdown options
+            const sources = newSources.map((source: any) => ({
+                label: `${source.name} (${formatNumber(source.totalRecords || 0)} records)`,
+                value: source.name,
+            }))
+
+            // Populate source options for dropdown
+            sourceOptions.value = sources
+
+            // Auto-select single source
+            if (sources.length === 1 && !selectedSource.value) {
+                selectedSource.value = sources[0].value
+            }
+        }
+    },
+    { immediate: true }
+)
+
+watch(
+    () => props.availableRules,
+    (newRules) => {
+        if (newRules && newRules.length > 0) {
+            loading.value.rules = false
+            error.value.rules = null
+            availableRules.value = newRules
+        }
+    },
+    { immediate: true }
+)
+
+watch(
+    () => props.availablePlugins,
+    (newPlugins) => {
+        if (newPlugins && newPlugins.length > 0) {
+            loading.value.plugins = false
+            error.value.plugins = null
+            availablePlugins.value = newPlugins
+        }
+    },
+    { immediate: true }
+)
+
 // Lifecycle
 onMounted(async () => {
-    // Load real data from backend
-    await loadAllData()
+    // If props are not provided, fallback to loading data directly
+    if (!props.availableSources?.length) {
+        await loadAllData()
+    }
 
     // Start with empty flow - let users build their own
     nodes.value = []
@@ -1461,11 +1828,6 @@ onMounted(async () => {
     gap: 4px;
     padding: 8px 12px;
     margin: 4px 0;
-    background: var(--surface-card);
-    border: 1px solid var(--surface-border);
-    border-radius: 6px;
-    cursor: grab;
-    transition: all 0.2s ease;
     font-size: 0.9rem;
     width: 100%;
     box-sizing: border-box;
@@ -1476,6 +1838,31 @@ onMounted(async () => {
     border-color: var(--primary-color);
     transform: translateY(-1px);
     box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.rule-content {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    width: 100%;
+}
+
+.rule-main {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    flex: 1;
+}
+
+.rule-actions {
+    display: flex;
+    gap: 0.25rem;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+}
+
+.palette-node:hover .rule-actions {
+    opacity: 1;
 }
 
 .palette-node:active {

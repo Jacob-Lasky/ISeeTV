@@ -1713,6 +1713,7 @@ async def save_rules_only(rules_data: list[dict[str, Any]]) -> dict[str, Any]:
         result = save_rules(rules_data)
 
         if not result["success"]:
+            logger.error("Save rules failed: %s", result)
             return result
 
         logger.info("Successfully saved rules")
@@ -3065,37 +3066,37 @@ async def execute_single_node(
 ) -> dict[str, Any]:
     """Execute a single node from a flow configuration."""
     logger.info(f"Executing single node {node_id} for source {source}")
-    
+
     try:
         from rules.node_executor import NodeExecutor
         from common.flow_storage import validate_flow_data
-        
+
         # Validate flow data structure
         if not validate_flow_data(flow_data):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid flow data structure",
             )
-        
+
         # Find the target node
         target_node = None
         for node in flow_data.get("nodes", []):
             if node.get("id") == node_id:
                 target_node = node
                 break
-        
+
         if not target_node:
             raise HTTPException(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail=f"Node {node_id} not found in flow",
             )
-        
+
         if target_node.get("type") == "source":
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Cannot execute source nodes directly",
             )
-        
+
         # Execute single node
         executor = NodeExecutor()
         result = await executor.execute_single_node(
@@ -3103,18 +3104,14 @@ async def execute_single_node(
             node=target_node,
             flow_data=flow_data,
             table_name=table_name,
-            limit=limit
+            limit=limit,
         )
-        
+
         return {
             "success": True,
-            "data": {
-                "node_id": node_id,
-                "execution_type": "single_node",
-                **result
-            }
+            "data": {"node_id": node_id, "execution_type": "single_node", **result},
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -3144,18 +3141,18 @@ async def execute_flow_to_node(
 ) -> dict[str, Any]:
     """Execute flow from start up to (and including) the specified node."""
     logger.info(f"Executing flow to node {node_id} for source {source}")
-    
+
     try:
         from rules.node_executor import NodeExecutor
         from common.flow_storage import validate_flow_data
-        
+
         # Validate flow data structure
         if not validate_flow_data(flow_data):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid flow data structure",
             )
-        
+
         # Execute flow up to node
         executor = NodeExecutor()
         result = await executor.execute_flow_to_node(
@@ -3163,18 +3160,18 @@ async def execute_flow_to_node(
             target_node_id=node_id,
             flow_data=flow_data,
             table_name=table_name,
-            limit=limit
+            limit=limit,
         )
-        
+
         return {
             "success": True,
             "data": {
                 "target_node_id": node_id,
                 "execution_type": "flow_to_node",
-                **result
-            }
+                **result,
+            },
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
@@ -3204,18 +3201,18 @@ async def execute_flow_from_node(
 ) -> dict[str, Any]:
     """Execute flow from the specified node to the end."""
     logger.info(f"Executing flow from node {node_id} for source {source}")
-    
+
     try:
         from rules.node_executor import NodeExecutor
         from common.flow_storage import validate_flow_data
-        
+
         # Validate flow data structure
         if not validate_flow_data(flow_data):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Invalid flow data structure",
             )
-        
+
         # Execute flow from node
         executor = NodeExecutor()
         result = await executor.execute_flow_from_node(
@@ -3223,22 +3220,24 @@ async def execute_flow_from_node(
             start_node_id=node_id,
             flow_data=flow_data,
             table_name=table_name,
-            limit=limit
+            limit=limit,
         )
-        
+
         return {
             "success": True,
             "data": {
                 "start_node_id": node_id,
                 "execution_type": "flow_from_node",
-                **result
-            }
+                **result,
+            },
         }
-        
+
     except HTTPException:
         raise
     except Exception as e:
-        logger.exception(f"Error executing flow from node {node_id} for source {source}")
+        logger.exception(
+            f"Error executing flow from node {node_id} for source {source}"
+        )
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error executing flow from node: {str(e)}",
