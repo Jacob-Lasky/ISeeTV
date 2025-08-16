@@ -166,13 +166,15 @@ class EnhancedRulesEngine:
 
             return False
         except Exception as e:
-            logger.warning(f"Error checking source {source_name} modification times: {e}")
+            logger.warning(
+                f"Error checking source {source_name} modification times: {e}"
+            )
             return True
 
     def _reload_source_cache(self, source_name: str) -> None:
         """Reload flow configuration for a specific source only."""
         logger.info(f"Reloading flow configuration for source: {source_name}")
-        
+
         try:
             # Load flow configuration for this specific source
             flow_config = self._load_flow_from_file(source_name)
@@ -188,7 +190,9 @@ class EnhancedRulesEngine:
             self._cache_timestamp = datetime.now().timestamp()
 
         except Exception as e:
-            logger.error(f"Error reloading flow configuration for source {source_name}: {e}")
+            logger.error(
+                f"Error reloading flow configuration for source {source_name}: {e}"
+            )
 
     def _reload_cache(self) -> None:
         """Reload all flow configurations from files (for bulk operations)."""
@@ -526,13 +530,9 @@ class EnhancedRulesEngine:
                         "node_id": f"source:{source_name.lower()}",
                         "type": "source",
                         "input_table": table_name,
-                        "output": table_name
+                        "output": table_name,
                     },
-                    {
-                        "node_id": "stream:accepted",
-                        "type": "sink",
-                        "accepted": True
-                    }
+                    {"node_id": "stream:accepted", "type": "sink", "accepted": True},
                 ]
                 record["filter_reasons"] = {}
                 record["accepted"] = True
@@ -545,90 +545,104 @@ class EnhancedRulesEngine:
         if not os.path.exists(flow_file_path):
             logger.error(f"Flow file not found: {flow_file_path}")
             return records_data, []  # Fallback to accepting all
-            
-        with open(flow_file_path, 'r') as f:
+
+        with open(flow_file_path, "r") as f:
             flow_data = json.load(f)
-            
-        nodes = flow_data.get('nodes', [])
-        edges = flow_data.get('edges', [])
-        
+
+        nodes = flow_data.get("nodes", [])
+        edges = flow_data.get("edges", [])
+
         # Build node lookup
-        node_lookup = {node['id']: node for node in nodes}
-        
+        node_lookup = {node["id"]: node for node in nodes}
+
         # Build edge lookup for path routing
         edge_lookup = {}
         for edge in edges:
-            source_id = edge['source']
-            target_id = edge['target']
-            source_handle = edge.get('sourceHandle', 'default')
-            target_handle = edge.get('targetHandle', 'default')
-            
+            source_id = edge["source"]
+            target_id = edge["target"]
+            source_handle = edge.get("sourceHandle", "default")
+            target_handle = edge.get("targetHandle", "default")
+
             if source_id not in edge_lookup:
                 edge_lookup[source_id] = {}
             if source_handle not in edge_lookup[source_id]:
                 edge_lookup[source_id][source_handle] = []
-            edge_lookup[source_id][source_handle].append({
-                'target_id': target_id,
-                'target_handle': target_handle,
-                'edge_id': edge['id']
-            })
+            edge_lookup[source_id][source_handle].append(
+                {
+                    "target_id": target_id,
+                    "target_handle": target_handle,
+                    "edge_id": edge["id"],
+                }
+            )
 
         # Find source node for this table
         source_node = None
         for node in nodes:
-            if node['type'] == 'source' and node['data']['sourceName'] == source_name:
+            if node["type"] == "source" and node["data"]["sourceName"] == source_name:
                 source_node = node
                 break
-                
+
         if not source_node:
             logger.error(f"Source node not found for {source_name}")
             return records_data, []  # Fallback
-            
+
         # Process each record through the flow
         accepted_records = []
         rejected_records = []
-        
+
         for i, record in enumerate(records_data):
             if i % 1000 == 0:  # Log progress every 1k records
                 logger.debug(f"Processing record {i}/{total_records}")
-                
+
             # Initialize record tracing
             record["_trace"] = []
             record["filter_reasons"] = {}
             record["accepted"] = False
-            
+
             # Start at source node
-            record["_trace"].append({
-                "node_id": source_node['id'],
-                "type": "source",
-                "input_table": table_name,
-                "output": table_name
-            })
-            
+            record["_trace"].append(
+                {
+                    "node_id": source_node["id"],
+                    "type": "source",
+                    "input_table": table_name,
+                    "output": table_name,
+                }
+            )
+
             # Find the path from source to first rule for this table
             table_handle = f"table-{table_name}"
-            if source_node['id'] not in edge_lookup or table_handle not in edge_lookup[source_node['id']]:
+            if (
+                source_node["id"] not in edge_lookup
+                or table_handle not in edge_lookup[source_node["id"]]
+            ):
                 # No path from this table, reject record
                 record["accepted"] = False
                 rejected_records.append(record)
                 continue
-                
+
             # Follow the flow path
-            current_connections = edge_lookup[source_node['id']][table_handle]
+            current_connections = edge_lookup[source_node["id"]][table_handle]
             record_accepted = False
-            
+
             for connection in current_connections:
-                target_node_id = connection['target_id']
+                target_node_id = connection["target_id"]
                 target_node = node_lookup.get(target_node_id)
-                
+
                 if not target_node:
                     continue
-                    
+
                 # Process through the flow starting from this target
-                if self._process_record_through_flow(record, target_node, edge_lookup, node_lookup, flow_config, table_name):
+                if self._process_record_through_flow(
+                    record,
+                    target_node,
+                    edge_lookup,
+                    node_lookup,
+                    flow_config,
+                    table_name,
+                ):
                     record_accepted = True
                     break
-                    
+
             record["accepted"] = record_accepted
             if record_accepted:
                 accepted_records.append(record)
@@ -659,49 +673,51 @@ class EnhancedRulesEngine:
         return accepted_records, rejected_records
 
     def _process_record_through_flow(
-        self, 
-        record: Dict[str, Any], 
-        current_node: Dict[str, Any], 
-        edge_lookup: Dict[str, Any], 
-        node_lookup: Dict[str, Any], 
-        flow_config: FlowConfiguration, 
-        table_name: str
+        self,
+        record: Dict[str, Any],
+        current_node: Dict[str, Any],
+        edge_lookup: Dict[str, Any],
+        node_lookup: Dict[str, Any],
+        flow_config: FlowConfiguration,
+        table_name: str,
     ) -> bool:
         """Process a single record through the flow starting from current_node.
-        
+
         Returns True if record reaches an accepted sink, False otherwise.
         """
         # Handle different node types
-        if current_node['type'] == 'rule':
-            return self._process_rule_node(record, current_node, edge_lookup, node_lookup, flow_config, table_name)
-        elif current_node['type'] == 'stream':
+        if current_node["type"] == "rule":
+            return self._process_rule_node(
+                record, current_node, edge_lookup, node_lookup, flow_config, table_name
+            )
+        elif current_node["type"] == "stream":
             return self._process_stream_node(record, current_node)
         else:
             logger.warning(f"Unknown node type: {current_node['type']}")
             return False
-            
+
     def _process_rule_node(
-        self, 
-        record: Dict[str, Any], 
-        rule_node: Dict[str, Any], 
-        edge_lookup: Dict[str, Any], 
-        node_lookup: Dict[str, Any], 
-        flow_config: FlowConfiguration, 
-        table_name: str
+        self,
+        record: Dict[str, Any],
+        rule_node: Dict[str, Any],
+        edge_lookup: Dict[str, Any],
+        node_lookup: Dict[str, Any],
+        flow_config: FlowConfiguration,
+        table_name: str,
     ) -> bool:
         """Process a record through a rule node."""
-        rule_name = rule_node['data']['ruleName']
+        rule_name = rule_node["data"]["ruleName"]
         rule = flow_config.get_rule_by_name(rule_name)
-        
+
         if not rule or table_name not in rule.tables:
             logger.debug(f"Rule {rule_name} not applicable to table {table_name}")
             return False
-            
+
         # Evaluate the rule
         field_value = record.get(rule.field, "")
         if field_value is None:
             field_value = ""
-            
+
         # Get or compile regex pattern
         pattern_key = f"{rule.name}:{rule.regex}"
         if pattern_key not in self._compiled_patterns:
@@ -712,75 +728,83 @@ class EnhancedRulesEngine:
             except re.error as e:
                 logger.error(f"Invalid regex in rule {rule.name}: {e}")
                 return False
-                
+
         pattern = self._compiled_patterns[pattern_key]
         match = bool(pattern.search(str(field_value)))
-        
+
         # Apply NOT logic if specified
         if rule.not_:
             match = not match
-            
+
         # Record the rule result
         record["filter_reasons"][f"rule:{rule_name.lower().replace(' ', '_')}"] = match
-        
+
         # Determine which path to take
         path = "passed" if match else "caught"
-        
+
         # Add trace entry
-        record["_trace"].append({
-            "node_id": f"rule:{rule_name.lower().replace(' ', '_')}",
-            "type": "rule",
-            "field": rule.field,
-            "result": match,
-            "path": path,
-            "continued": True  # Will be updated if we actually continue
-        })
-        
+        record["_trace"].append(
+            {
+                "node_id": f"rule:{rule_name.lower().replace(' ', '_')}",
+                "type": "rule",
+                "field": rule.field,
+                "result": match,
+                "path": path,
+                "continued": True,  # Will be updated if we actually continue
+            }
+        )
+
         # Find outgoing connections for this path
-        rule_node_id = rule_node['id']
+        rule_node_id = rule_node["id"]
         if rule_node_id not in edge_lookup:
             # No outgoing connections, record stops here
             record["_trace"][-1]["continued"] = False
             return False
-            
+
         # Look for connections from the appropriate handle (passed/caught)
         handle_name = path  # "passed" or "caught"
         if handle_name not in edge_lookup[rule_node_id]:
             # No connection for this path, record stops here
             record["_trace"][-1]["continued"] = False
             return False
-            
+
         # Follow the connected path
         connections = edge_lookup[rule_node_id][handle_name]
         for connection in connections:
-            target_node_id = connection['target_id']
+            target_node_id = connection["target_id"]
             target_node = node_lookup.get(target_node_id)
-            
+
             if not target_node:
                 continue
-                
+
             # Recursively process the next node
-            if self._process_record_through_flow(record, target_node, edge_lookup, node_lookup, flow_config, table_name):
+            if self._process_record_through_flow(
+                record, target_node, edge_lookup, node_lookup, flow_config, table_name
+            ):
                 return True
-                
+
         # No successful path found
         record["_trace"][-1]["continued"] = False
         return False
-        
-    def _process_stream_node(self, record: Dict[str, Any], stream_node: Dict[str, Any]) -> bool:
+
+    def _process_stream_node(
+        self, record: Dict[str, Any], stream_node: Dict[str, Any]
+    ) -> bool:
         """Process a record through a stream (sink) node."""
-        stream_name = stream_node['data'].get('streamName', 'unknown')
-        
+        stream_name = stream_node["data"].get("streamName", "unknown")
+
         # Determine if this is an accepting stream
-        is_accepting = stream_name.lower() in ['accepted', 'accept', 'pass']
-        
+        is_accepting = stream_name.lower() in ["accepted", "accept", "pass"]
+
         # Add trace entry
-        record["_trace"].append({
-            "node_id": f"stream:{stream_name.lower()}",
-            "type": "sink",
-            "accepted": is_accepting
-        })
-        
+        record["_trace"].append(
+            {
+                "node_id": f"stream:{stream_name.lower()}",
+                "type": "sink",
+                "accepted": is_accepting,
+            }
+        )
+
         return is_accepting
 
 

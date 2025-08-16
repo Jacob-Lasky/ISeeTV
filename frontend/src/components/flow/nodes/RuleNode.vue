@@ -7,28 +7,31 @@
         >
             <div class="toolbar-buttons">
                 <Button
-                    icon="pi pi-play-circle"
-                    size="small"
-                    severity="success"
-                    v-tooltip.top="'Run the flow up to this node'"
-                    @click="handleExecuteToHere"
-                    :loading="data.isExecutingToHere"
-                />
-                <Button
                     icon="pi pi-step-forward"
                     size="small"
-                    severity="info"
-                    v-tooltip.top="'Run this node'"
-                    @click="handleExecuteThisNode"
-                    :loading="data.isExecutingThisNode"
+                    severity="secondary"
+                    text
+                    :loading="isExecuting"
+                    @click="handleExecuteToHere"
+                    v-tooltip.top="'Run flow up to this node'"
                 />
                 <Button
-                    icon="pi pi-forward"
+                    icon="pi pi-play-circle"
                     size="small"
-                    severity="warning"
-                    v-tooltip.top="'Run the flow from this node'"
+                    severity="info"
+                    text
+                    :loading="isExecuting"
+                    @click="handleExecuteThisNode"
+                    v-tooltip.top="'Run this node only'"
+                />
+                <Button
+                    icon="pi pi-fast-forward"
+                    size="small"
+                    severity="success"
+                    text
+                    :loading="isExecuting"
                     @click="handleExecuteFromHere"
-                    :loading="data.isExecutingFromHere"
+                    v-tooltip.top="'Run flow from this node'"
                 />
             </div>
         </NodeToolbar>
@@ -153,6 +156,7 @@ import ToggleSwitch from "primevue/toggleswitch"
 import Tag from "primevue/tag"
 import Button from "primevue/button"
 import type { RuleNodeData } from "@/types/flow-types"
+import { useNodeExecution } from "@/composables/useNodeExecution"
 
 // Props - Define all Vue Flow props to prevent warnings
 interface Props {
@@ -189,6 +193,7 @@ const emit = defineEmits<{
 // Get node information and selection state
 const { node } = useNode()
 const selectedNodeId = inject<any>("selectedNodeId")
+const flowContext = inject<any>("flowContext")
 
 // Check if this node is selected
 const isSelected = computed(() => {
@@ -197,6 +202,14 @@ const isSelected = computed(() => {
 
 // Inject layout direction from FlowEditor
 const layoutDirection = inject<any>("layoutDirection", ref("LR"))
+
+// Node execution functionality
+const {
+    executeSingleNode,
+    executeFlowToNode,
+    executeFlowFromNode,
+    isExecuting,
+} = useNodeExecution()
 
 // Computed properties for layout direction awareness
 const inputHandlePosition = computed(() => {
@@ -278,22 +291,70 @@ const truncatePattern = (pattern: string): string => {
 }
 
 // Toolbar action handlers
-const handleExecuteToHere = () => {
-    console.log("Run the flow up to this node:", props.data.ruleName)
-    // TODO: Emit event to parent to execute flow from start up to and including this node
-    // This would run all nodes from the source up to this rule node
+const handleExecuteToHere = async () => {
+    if (!flowContext?.selectedSource?.value) {
+        console.error("No source selected for flow execution")
+        return
+    }
+
+    const flowData = {
+        nodes: flowContext.nodes.value,
+        edges: flowContext.edges.value,
+        layout: flowContext.getDirection(),
+        source: flowContext.selectedSource.value,
+    }
+
+    await executeFlowToNode({
+        source: flowContext.selectedSource.value,
+        nodeId: props.id,
+        flowData,
+        tableName: props.data.table || "m3u_channels",
+        limit: 100,
+    })
 }
 
-const handleExecuteThisNode = () => {
-    console.log("Run this node:", props.data.ruleName)
-    // TODO: Emit event to parent to execute only this rule node
-    // This would apply just this rule to the current dataset
+const handleExecuteThisNode = async () => {
+    if (!flowContext?.selectedSource?.value) {
+        console.error("No source selected for flow execution")
+        return
+    }
+
+    const flowData = {
+        nodes: flowContext.nodes.value,
+        edges: flowContext.edges.value,
+        layout: flowContext.getDirection(),
+        source: flowContext.selectedSource.value,
+    }
+
+    await executeSingleNode({
+        source: flowContext.selectedSource.value,
+        nodeId: props.id,
+        flowData,
+        tableName: props.data.table || "m3u_channels",
+        limit: 100,
+    })
 }
 
-const handleExecuteFromHere = () => {
-    console.log("Run the flow from this node:", props.data.ruleName)
-    // TODO: Emit event to parent to execute flow from this node onwards
-    // This would run from this rule node to all connected downstream nodes
+const handleExecuteFromHere = async () => {
+    if (!flowContext?.selectedSource?.value) {
+        console.error("No source selected for flow execution")
+        return
+    }
+
+    const flowData = {
+        nodes: flowContext.nodes.value,
+        edges: flowContext.edges.value,
+        layout: flowContext.getDirection(),
+        source: flowContext.selectedSource.value,
+    }
+
+    await executeFlowFromNode({
+        source: flowContext.selectedSource.value,
+        nodeId: props.id,
+        flowData,
+        tableName: props.data.table || "m3u_channels",
+        limit: 100,
+    })
 }
 </script>
 

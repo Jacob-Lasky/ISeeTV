@@ -268,10 +268,12 @@
                         @click="toggleSidebar"
                         aria-label="Show Node Palette"
                     />
-                    
+
                     <!-- Source Selection -->
                     <div class="source-selector">
-                        <label for="source-select" class="source-label">Source:</label>
+                        <label for="source-select" class="source-label"
+                            >Source:</label
+                        >
                         <Select
                             id="source-select"
                             v-model="selectedSource"
@@ -283,7 +285,7 @@
                             :disabled="loading.sources"
                         />
                     </div>
-                    
+
                     <Button
                         icon="pi pi-upload"
                         label="Load Flow"
@@ -415,6 +417,14 @@ const sourceOptions = ref<Source[]>([])
 
 // Provide selection state to node components
 provide("selectedNodeId", selectedNodeId)
+
+// Provide flow context for node execution
+provide("flowContext", {
+    selectedSource,
+    nodes,
+    edges,
+    getDirection,
+})
 
 // Node types registration
 const nodeTypes = {
@@ -810,7 +820,7 @@ const executeFlow = async () => {
     try {
         // Convert visual flow to backend format
         const flowConfig = convertFlowToBackendFormat()
-        
+
         // Execute flow on real data
         await executeFlowOnRealData(flowConfig)
 
@@ -821,11 +831,14 @@ const executeFlow = async () => {
             life: 3000,
         })
     } catch (error) {
-        console.error('Flow execution error:', error)
+        console.error("Flow execution error:", error)
         toast.add({
             severity: "error",
             summary: "Execution Failed",
-            detail: error instanceof Error ? error.message : "Failed to execute flow. Please check your configuration.",
+            detail:
+                error instanceof Error
+                    ? error.message
+                    : "Failed to execute flow. Please check your configuration.",
             life: 5000,
         })
     } finally {
@@ -866,14 +879,14 @@ const saveFlow = async () => {
             edges: edges.value,
             layout: getDirection(),
             source: selectedSource.value,
-            timestamp: new Date().toISOString()
+            timestamp: new Date().toISOString(),
         }
 
         // Send POST request to backend
         const response = await fetch(`/api/${selectedSource.value}/flows`, {
-            method: 'POST',
+            method: "POST",
             headers: {
-                'Content-Type': 'application/json',
+                "Content-Type": "application/json",
             },
             body: JSON.stringify(flowData),
         })
@@ -924,7 +937,7 @@ const loadFlow = async () => {
                     severity: "info",
                     summary: "No Flow Found",
                     detail: `No saved flow found for source '${selectedSource.value}'`,
-                    life: 3000
+                    life: 3000,
                 })
                 return
             }
@@ -1044,47 +1057,47 @@ const convertFlowToBackendFormat = () => {
         sources: [] as any[],
         rules: [] as any[],
         streams: [] as any[],
-        connections: [] as any[]
+        connections: [] as any[],
     }
 
     // Process nodes
-    nodes.value.forEach(node => {
+    nodes.value.forEach((node) => {
         switch (node.type) {
-            case 'source':
+            case "source":
                 flowConfig.sources.push({
                     id: node.id,
                     name: node.data.label,
-                    type: node.data.type || 'unknown',
-                    url: node.data.url || '',
-                    enabled: node.data.enabled !== false
+                    type: node.data.type || "unknown",
+                    url: node.data.url || "",
+                    enabled: node.data.enabled !== false,
                 })
                 break
-            case 'rule':
+            case "rule":
                 flowConfig.rules.push({
                     id: node.id,
                     name: node.data.label,
-                    pattern: node.data.pattern || '',
-                    table: node.data.table || 'm3u_channels',
+                    pattern: node.data.pattern || "",
+                    table: node.data.table || "m3u_channels",
                     enabled: node.data.enabled !== false,
-                    action: node.data.action || 'filter'
+                    action: node.data.action || "filter",
                 })
                 break
-            case 'stream':
+            case "stream":
                 flowConfig.streams.push({
                     id: node.id,
                     name: node.data.label,
-                    enabled: node.data.enabled !== false
+                    enabled: node.data.enabled !== false,
                 })
                 break
         }
     })
 
     // Process edges as connections
-    edges.value.forEach(edge => {
+    edges.value.forEach((edge) => {
         flowConfig.connections.push({
             from: edge.source,
             to: edge.target,
-            type: edge.type || 'default'
+            type: edge.type || "default",
         })
     })
 
@@ -1093,66 +1106,75 @@ const convertFlowToBackendFormat = () => {
 
 const executeFlowOnRealData = async (flowConfig: any) => {
     if (!selectedSource.value) {
-        throw new Error('No source selected for execution')
+        throw new Error("No source selected for execution")
     }
 
     // Determine table name based on flow configuration
-    const tableNames = ['m3u_channels', 'epg_channels', 'programs']
-    const tableName = tableNames.find(table => 
-        flowConfig.rules.some((rule: any) => rule.table === table)
-    ) || 'm3u_channels'
+    const tableNames = ["m3u_channels", "epg_channels", "programs"]
+    const tableName =
+        tableNames.find((table) =>
+            flowConfig.rules.some((rule: any) => rule.table === table)
+        ) || "m3u_channels"
 
     try {
-        const response = await fetch(`/api/${selectedSource.value}/flows/execute?table_name=${tableName}&limit=500`, {
-            method: 'POST',
-            headers: {
-                'Content-Type': 'application/json',
-            },
-            body: JSON.stringify(flowConfig)
-        })
+        const response = await fetch(
+            `/api/${selectedSource.value}/flows/execute?table_name=${tableName}&limit=500`,
+            {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                },
+                body: JSON.stringify(flowConfig),
+            }
+        )
 
         if (!response.ok) {
-            const errorData = await response.json().catch(() => ({ detail: 'Unknown error' }))
-            throw new Error(errorData.detail || `HTTP ${response.status}: ${response.statusText}`)
+            const errorData = await response
+                .json()
+                .catch(() => ({ detail: "Unknown error" }))
+            throw new Error(
+                errorData.detail ||
+                    `HTTP ${response.status}: ${response.statusText}`
+            )
         }
 
         const result = await response.json()
-        
+
         if (!result.success) {
-            throw new Error(result.message || 'Flow execution failed')
+            throw new Error(result.message || "Flow execution failed")
         }
 
         // Update nodes with real execution results
         updateNodesWithExecutionResults(result.data)
-        
+
         return result.data
     } catch (error) {
-        console.error('Flow execution API error:', error)
+        console.error("Flow execution API error:", error)
         throw error
     }
 }
 
 const updateNodesWithExecutionResults = (executionData: any) => {
     const { execution_results } = executionData
-    
+
     if (!execution_results) {
-        console.warn('No execution results found in response')
+        console.warn("No execution results found in response")
         return
     }
 
     const { stats, accepted, rejected } = execution_results
-    
+
     // Update all nodes with execution timestamp
     const executionTime = new Date()
-    
-    nodes.value.forEach(node => {
+
+    nodes.value.forEach((node) => {
         if (node.data.stats) {
             // Update with real execution data
             node.data.stats.processed = stats.total || 0
             node.data.stats.passed = stats.accepted || 0
             node.data.stats.caught = stats.rejected || 0
             node.data.lastExecuted = executionTime
-            
+
             // Add tracing information if available
             if (stats.with_trace > 0) {
                 node.data.stats.with_trace = stats.with_trace
@@ -1162,14 +1184,14 @@ const updateNodesWithExecutionResults = (executionData: any) => {
             }
         }
     })
-    
+
     // Store detailed results for potential inspection
     if (accepted?.length > 0 || rejected?.length > 0) {
-        console.log('Flow execution results:', {
+        console.log("Flow execution results:", {
             accepted: accepted?.length || 0,
             rejected: rejected?.length || 0,
             sample_accepted: accepted?.slice(0, 3),
-            sample_rejected: rejected?.slice(0, 3)
+            sample_rejected: rejected?.slice(0, 3),
         })
     }
 }
@@ -1198,7 +1220,7 @@ const fetchSources = async () => {
         availableSources.value = sources.map((source) =>
             BackendDataTransformer.transformSource(source)
         )
-        
+
         // Populate source options for dropdown
         sourceOptions.value = sources
     } catch (error) {
@@ -1285,11 +1307,11 @@ watch(selectedSource, async (newSource, oldSource) => {
             const response = await fetch(`/api/${newSource}/flows`)
             if (response.ok) {
                 const flowData = await response.json()
-                
+
                 // Clear existing flow
                 nodes.value = []
                 edges.value = []
-                
+
                 // Load the saved flow
                 if (flowData.nodes) {
                     nodes.value = flowData.nodes
@@ -1297,22 +1319,22 @@ watch(selectedSource, async (newSource, oldSource) => {
                 if (flowData.edges) {
                     edges.value = flowData.edges
                 }
-                
+
                 // Apply layout if saved
                 if (flowData.layout) {
                     await layout(nodes.value, edges.value, flowData.layout)
                 }
-                
+
                 toast.add({
-                    severity: 'success',
-                    summary: 'Flow Loaded',
+                    severity: "success",
+                    summary: "Flow Loaded",
                     detail: `Automatically loaded saved flow for ${newSource}`,
-                    life: 3000
+                    life: 3000,
                 })
             }
             // If no saved flow exists, that's fine - just start with empty flow
         } catch (error) {
-            console.error('Error auto-loading flow:', error)
+            console.error("Error auto-loading flow:", error)
             // Don't show error toast for auto-load failures - it's not user-initiated
         }
     }
