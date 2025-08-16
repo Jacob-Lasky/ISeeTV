@@ -36,6 +36,20 @@
             </div>
         </NodeToolbar>
 
+        <!-- Bottom Toolbar for View Data -->
+        <NodeToolbar :is-visible="data.toolbarVisible" position="bottom">
+            <div class="toolbar-buttons">
+                <Button
+                    icon="pi pi-table"
+                    size="medium"
+                    severity="help"
+                    text
+                    @click="handleViewData"
+                    v-tooltip.bottom="'View data for this node'"
+                />
+            </div>
+        </NodeToolbar>
+
         <div class="rule-node" :class="{ disabled: !data.enabled }">
             <div class="node-header">
                 <i class="pi pi-filter"></i>
@@ -134,7 +148,9 @@
                 :style="passedHandleStyle"
                 class="output-handle passed-handle"
             />
-            <div v-if="isSelected" :class="passedLabelClass">{{ matchLabel }}</div>
+            <div v-if="isSelected" :class="passedLabelClass">
+                {{ matchLabel }}
+            </div>
 
             <Handle
                 id="caught"
@@ -143,7 +159,9 @@
                 :style="caughtHandleStyle"
                 class="output-handle caught-handle"
             />
-            <div v-if="isSelected" :class="caughtLabelClass">{{ noMatchLabel }}</div>
+            <div v-if="isSelected" :class="caughtLabelClass">
+                {{ noMatchLabel }}
+            </div>
         </div>
     </div>
 </template>
@@ -155,6 +173,7 @@ import { NodeToolbar } from "@vue-flow/node-toolbar"
 import ToggleSwitch from "primevue/toggleswitch"
 import Tag from "primevue/tag"
 import Button from "primevue/button"
+import { useRouter } from "vue-router"
 import type { RuleNodeData } from "@/types/flow-types"
 import { useNodeExecution } from "@/composables/useNodeExecution"
 
@@ -194,6 +213,7 @@ const emit = defineEmits<{
 const { node } = useNode()
 const selectedNodeId = inject<any>("selectedNodeId")
 const flowContext = inject<any>("flowContext")
+const router = useRouter()
 
 // Check if this node is selected
 const isSelected = computed(() => {
@@ -363,6 +383,25 @@ const handleExecuteFromHere = async () => {
         flowData,
         tableName: props.data.table || "m3u_channels",
         limit: 100,
+    })
+}
+
+const handleViewData = () => {
+    const sourceName = flowContext?.selectedSource?.value
+    const tableName = props.data.table || "m3u_channels"
+    
+    if (!sourceName) {
+        console.error("No source selected for viewing data")
+        return
+    }
+    
+    // Navigate to TableViewer with source and table parameters
+    router.push({
+        name: "TableViewer",
+        params: {
+            sourceName: sourceName,
+            tableName: tableName
+        }
     })
 }
 </script>

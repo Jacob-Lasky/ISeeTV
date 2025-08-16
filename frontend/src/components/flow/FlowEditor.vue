@@ -810,7 +810,7 @@ const createNode = (
                 field: data.field,
                 table: ruleTable,
                 enabled: true,
-                labels: data.labels || { match: "passed", noMatch: "caught" },
+                labels: data.labels || { match: "Passed", noMatch: "Caught" },
                 stats: { processed: 0, passed: 0, caught: 0 },
                 validation: {
                     validSourceTables: [ruleTable], // Use the actual assigned table
