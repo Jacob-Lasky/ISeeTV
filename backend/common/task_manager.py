@@ -10,7 +10,7 @@ from common.state import get_progress
 
 logger = get_logger(__name__)
 
-TASK_TYPES = Literal["download", "ingest"]
+TASK_TYPES = Literal["download", "ingest", "indexing"]
 
 
 class TaskManager:
@@ -335,3 +335,53 @@ class IngestTaskManager:
                 step_progress,
                 task.get("total_steps", 3),
             )
+
+
+class IndexingTaskManager:
+    """Specialized task manager for indexing tasks.
+    Provides helpers to create and update indexing progress.
+    """
+
+    @staticmethod
+    def create_indexing_task(
+        task_id: str,
+        index_name: str,
+        source_name: str | None = None,
+        total_items: int = 0,
+    ) -> None:
+        """Create a new indexing task with indexing-specific fields."""
+        logger.debug("Creating indexing task %s for index %s", task_id, index_name)
+        indexing_fields = {
+            "index_name": index_name,
+            "source_name": source_name,
+        }
+
+        base_fields = {
+            "total_items": total_items,
+        }
+
+        TaskManager.create_task(task_id, "indexing", base_fields, **indexing_fields)
+
+    @staticmethod
+    def update_item_progress(
+        task_id: str,
+        processed_items: int,
+        current_item: str = "",
+    ) -> None:
+        """Update progress for a specific item in an indexing task."""
+        logger.debug("Updating indexing task %s item progress: %d processed", task_id, processed_items)
+        TaskManager.update_item_progress(
+            task_id, "indexing", current_item, processed_items
+        )
+
+    @staticmethod
+    def complete_task(task_id: str) -> None:
+        """Mark an indexing task as completed."""
+        logger.debug("Completing indexing task %s", task_id)
+        TaskManager.complete_task(task_id, "indexing")
+
+    @staticmethod
+    def fail_task(task_id: str, error_message: str) -> None:
+        """Mark an indexing task as failed."""
+        logger.debug("Failing indexing task %s: %s", task_id, error_message)
+        TaskManager.fail_task(task_id, "indexing", error_message)

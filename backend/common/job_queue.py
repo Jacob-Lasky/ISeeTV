@@ -35,6 +35,7 @@ class JobType(Enum):
     INGEST = "ingest"
     REFRESH = "refresh"
     BULK_DOWNLOAD = "bulk_download"
+    INDEXING = "indexing"
 
 
 @dataclass
@@ -423,6 +424,26 @@ async def enqueue_bulk_download_job(
     queue = await get_job_queue()
     return await queue.enqueue_job(
         JobType.BULK_DOWNLOAD, source_name, job_function, **kwargs
+    )
+
+
+async def enqueue_indexing_job(
+    source_name: str, job_function: Callable, **kwargs
+) -> str:
+    """Enqueue an indexing job.
+
+    Args:
+        source_name: Name of the source
+        job_function: Indexing function to execute
+        **kwargs: Additional arguments
+
+    Returns:
+        Job ID for tracking
+
+    """
+    queue = await get_job_queue()
+    return await queue.enqueue_job(
+        JobType.INDEXING, source_name, job_function, **kwargs
     )
 
 

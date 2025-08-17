@@ -8,36 +8,42 @@ from common.log_utils import get_logger
 
 logger = get_logger(__name__)
 
-# Global state for tracking download progress
-# This is the single source of truth for all download progress data
+# Global state for tracking task progress
+# This is the single source of truth for all task progress data
 download_progress: dict[str, dict] = {}
 ingest_progress: dict[str, dict] = {}
+indexing_progress: dict[str, dict] = {}
 
 # Global state for tracking cancelled downloads
 # Tasks in this set should be cancelled
 cancelled_tasks: set = set()
 
 
-def get_progress(task_type: Literal["download", "ingest"]) -> dict[str, dict]:
-    """Get the global download progress dictionary."""
+def get_progress(task_type: Literal["download", "ingest", "indexing"]) -> dict[str, dict]:
+    """Get the global progress dictionary for a given task type."""
     if task_type == "download":
         return download_progress
     if task_type == "ingest":
         return ingest_progress
+    if task_type == "indexing":
+        return indexing_progress
     return None
 
 
-def clear_progress(task_type: Literal["download", "ingest"]) -> None:
-    """Clear all download progress (useful for testing)."""
+def clear_progress(task_type: Literal["download", "ingest", "indexing"]) -> None:
+    """Clear all progress for a given task type (useful for testing)."""
     if task_type == "download":
         global download_progress
         download_progress.clear()
     elif task_type == "ingest":
         global ingest_progress
         ingest_progress.clear()
+    elif task_type == "indexing":
+        global indexing_progress
+        indexing_progress.clear()
 
 
-def cancel_task(task_id: str, task_type: Literal["download", "ingest"]) -> bool:
+def cancel_task(task_id: str, task_type: Literal["download", "ingest", "indexing"]) -> bool:
     """Cancel a download task by adding it to the cancelled tasks set."""
     global cancelled_tasks
 

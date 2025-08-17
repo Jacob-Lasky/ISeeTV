@@ -44,53 +44,70 @@ RUN --mount=type=cache,target=/root/.cache/uv \
 FROM python:3.11-slim-bookworm
 WORKDIR /app
 
-# Install Nginx for serving the frontend
-RUN apt-get update && apt-get install -y nginx && rm -rf /var/lib/apt/lists/*
+# Install runtime deps (nginx, curl, tini for proper PID 1)
+RUN apt-get update && apt-get install -y nginx curl ca-certificates \
+  && rm -rf /var/lib/apt/lists/* \
+  && mkdir -p /app/data/meili_data
 
-# Copy virtual environment from backend-builder (no source code needed)
+# --- Meilisearch install ---
+ARG MEILI_VERSION=v1.7.0
+RUN curl -L "https://github.com/meilisearch/meilisearch/releases/download/${MEILI_VERSION}/meilisearch-linux-amd64" \
+  -o /usr/local/bin/meilisearch && \
+  chmod +x /usr/local/bin/meilisearch
+
+# Copy virtual environment and frontend artifacts
 COPY --from=backend-builder /app/.venv /app/.venv
-
-# Copy frontend build from frontend-builder
 COPY --from=frontend-builder /app/frontend/dist /app/frontend/dist
 
-# Configure Nginx to serve the frontend and proxy API requests to the backend
+# Nginx config
 RUN rm -f /etc/nginx/sites-enabled/default
-
-# Create Nginx configuration file
 RUN printf '%s\n' \
   'server {' \
   '    listen 80;' \
-  '    server_name localhost;' \
-  '' \
+  '    server_name _;' \
   '    location / {' \
   '        alias /app/frontend/dist/;' \
   '        index index.html;' \
   '        try_files $uri $uri/ /index.html;' \
   '    }' \
-  '' \
   '    location /api/ {' \
-  '        proxy_pass http://localhost:1314;' \
+  '        proxy_pass http://127.0.0.1:1314;' \
   '        proxy_set_header Host $host;' \
   '        proxy_set_header X-Real-IP $remote_addr;' \
   '    }' \
-  '}' > /etc/nginx/sites-available/default
+  '}' > /etc/nginx/sites-available/default && \
+  ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/
 
-RUN ln -s /etc/nginx/sites-available/default /etc/nginx/sites-enabled/
-
-# Create a startup script
+# Start script (runs Meili + API + Nginx)
 RUN printf '%s\n' \
-  '#!/bin/bash' \
-  '# Start the backend API server using venv binary directly' \
-  'cd /app && /app/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 1314 &' \
-  '' \
-  '# Start Nginx' \
-  'nginx -g "daemon off;"' \
-  > /app/start.sh
+'#!/usr/bin/env bash' \
+'set -euo pipefail' \
+'trap "echo Shutting down...; kill 0" SIGTERM SIGINT' \
+'' \
+': "${MEILI_MASTER_KEY:=meili_prod_master_key}"' \
+': "${MEILI_HTTP_ADDR:=127.0.0.1:7700}"' \
+': "${MEILI_ENV:=production}"' \
+': "${MEILI_NO_ANALYTICS:=true}"' \
+'' \
+'echo "Starting Meilisearch..."' \
+'meilisearch \\' \
+'  --master-key "$MEILI_MASTER_KEY" \\' \
+'  --db-path "/app/data/meili_data" \\' \
+'  --http-addr "$MEILI_HTTP_ADDR" \\' \
+'  $( [ "$MEILI_NO_ANALYTICS" = "true" ] && echo "--no-analytics" ) \\' \
+'  & MEILI_PID=$!' \
+'' \
+'echo "Starting API (Uvicorn)..."' \
+'/app/.venv/bin/uvicorn main:app --host 0.0.0.0 --port 1314 & API_PID=$!' \
+'' \
+'echo "Starting Nginx..."' \
+'nginx -g "daemon off;" & NGINX_PID=$!' \
+'' \
+'wait -n $MEILI_PID $API_PID $NGINX_PID' \
+'EXIT_CODE=$?' \
+'kill 0 || true' \
+'exit "$EXIT_CODE"' \
+> /app/start.sh && chmod +x /app/start.sh
 
-RUN chmod +x /app/start.sh
-
-# Expose port 80 for the web server
 EXPOSE 80
-
-# Start both services
 CMD ["/app/start.sh"]

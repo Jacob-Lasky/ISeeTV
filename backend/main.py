@@ -2,7 +2,7 @@ import json
 import logging
 import operator
 import os
-from typing import Annotated, Any, Literal
+from typing import Annotated, Any, Literal, Optional
 
 import httpx
 import uvicorn
@@ -13,6 +13,14 @@ from pydantic import ValidationError
 from sqlalchemy import inspect, text
 
 from common.constants import DATA_PATH
+from common.search_client import get_meili_client, meili_enabled
+from common.index_manager import (
+    ensure_index_exists,
+    sync_table_to_index,
+    initialize_all_indexes,
+    sync_all_indexes,
+    index_manager,
+)
 from common.db import SessionLocal, engine, init_db
 from common.job_queue import (
     cancel_job,
@@ -60,12 +68,15 @@ from models.models import (
     Message,
     Source,
     TableResponse,
+    TablePaginatedResponse,
+    TableQueryParams,
 )
 from models.stream_models import (
     StreamProgramsResponse,
     StreamQueryParams,
     StreamsResponse,
 )
+from models.search_models import SearchResponse
 from rules.ingestion_rules import (
     INGESTION_RULES_LOGS,
     IngestionRule,
@@ -87,6 +98,7 @@ from common.streams_utils import (
     get_streams_filter_values,
     get_streams_internal,
 )
+from common.table_utils import get_table_internal
 from common.file_generators import (
     apply_unified_channel_filtering,
     generate_epg_content,
@@ -145,6 +157,7 @@ app = FastAPI(
         {"name": "Job Queue", "description": "Job operations"},
         {"name": "Scheduler", "description": "Refresh scheduling operations"},
         {"name": "Progress", "description": "Progress tracking"},
+        {"name": "Search", "description": "Full-text search via Meilisearch"},
         {"name": "Redirect", "description": "Redirect operations"},
     ],
 )
@@ -213,6 +226,287 @@ async def get_health() -> Message:
     """Return a health check."""
     logger.info("Health check")
     return Message(message="ok")
+
+
+@app.get(
+    "/api/health/meilisearch",
+    tags=["Health"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_meilisearch_health() -> dict[str, Any]:
+    """Return Meilisearch health and version when enabled."""
+    try:
+        if not meili_enabled():
+            return {"enabled": False, "status": "disabled"}
+
+        client = get_meili_client()
+        if client is None:
+            return {"enabled": False, "status": "disabled"}
+
+        health = await client.health()
+        version = await client.version()
+        return {
+            "enabled": True,
+            "status": "ok" if health.get("status") == "available" else health.get("status", "unknown"),
+            "health": health,
+            "version": version,
+        }
+    except Exception as e:
+        logger.exception("Meilisearch health check failed: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail=f"Meilisearch health check failed: {e!s}",
+        )
+
+
+@app.get(
+    "/api/{source}/tables/{table}/page",
+    response_model=TablePaginatedResponse,
+    tags=["Tables"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_table_paginated(
+    source: str,
+    table: str,
+    params: TableQueryParams = Depends(),
+) -> TablePaginatedResponse:
+    """Return paginated, sortable, and filterable table data.
+
+    Mirrors the streams endpoint pattern using dependency-injected query params.
+    """
+    logger.info("Fetching paginated table data for %s from source %s", table, source)
+    # Validate table name to prevent SQL injection
+    validate_table_name(table, include_streams=False)
+
+    try:
+        with SessionLocal() as session:
+            return get_table_internal(session, table=table, source=source, params=params)
+    except Exception as e:
+        logger.exception("Error fetching paginated table data for %s: %s", table, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to fetch paginated table data: {e!s}",
+        )
+
+
+@app.get(
+    "/api/{source}/search/{index}",
+    response_model=SearchResponse,
+    tags=["Search"],
+    status_code=status.HTTP_200_OK,
+)
+async def search_index(
+    source: str,
+    index: str,
+    q: str = Query("", description="Search query string"),
+    offset: int = Query(0, ge=0, description="Number of results to skip"),
+    limit: int = Query(20, ge=1, le=1000, description="Max results to return"),
+    filter_expr: str | None = Query(
+        None, alias="filter", description="Meilisearch filter expression"
+    ),
+    sort: list[str] | None = Query(None, description="Sort rules, e.g., field:asc"),
+    facets: list[str] | None = Query(None, description="Facet fields"),
+) -> SearchResponse:
+    """Proxy search to Meilisearch for a given index."""
+    try:
+        if not meili_enabled():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Meilisearch is disabled",
+            )
+
+        client = get_meili_client()
+        if client is None:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Meilisearch client is not initialized",
+            )
+
+        payload: dict[str, Any] = {
+            "q": q,
+            "offset": offset,
+            "limit": limit,
+        }
+        if filter_expr:
+            payload["filter"] = filter_expr
+        if sort:
+            payload["sort"] = sort
+        if facets:
+            payload["facets"] = facets
+
+        result = await client.search(index, payload)
+        # Pass through Meili response; SearchResponse allows extra fields
+        return SearchResponse(**result)
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Meilisearch search failed: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_502_BAD_GATEWAY,
+            detail=f"Meilisearch search failed: {e!s}",
+        )
+
+
+# Meilisearch Index Management Endpoints
+@app.post(
+    "/api/{source}/search/indexes/initialize",
+    tags=["Search"],
+    status_code=status.HTTP_200_OK,
+)
+async def initialize_search_indexes(source: str) -> dict[str, Any]:
+    """Initialize all Meilisearch indexes."""
+    try:
+        if not meili_enabled():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Meilisearch is disabled",
+            )
+
+        results = await initialize_all_indexes()
+        
+        success_count = sum(1 for success in results.values() if success)
+        total_count = len(results)
+        
+        return {
+            "message": f"Initialized {success_count}/{total_count} indexes",
+            "results": results,
+            "success": success_count == total_count,
+        }
+    except Exception as e:
+        logger.exception("Failed to initialize indexes: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to initialize indexes: {e!s}",
+        )
+
+
+@app.post(
+    "/api/{source}/search/indexes/sync",
+    tags=["Search"],
+    status_code=status.HTTP_200_OK,
+)
+async def sync_search_indexes(source: str) -> dict[str, Any]:
+    """Sync all Meilisearch indexes with database data."""
+    try:
+        if not meili_enabled():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Meilisearch is disabled",
+            )
+
+        results = await sync_all_indexes()
+        
+        success_count = sum(1 for success in results.values() if success)
+        total_count = len(results)
+        
+        return {
+            "message": f"Synced {success_count}/{total_count} indexes",
+            "results": results,
+            "success": success_count == total_count,
+        }
+    except Exception as e:
+        logger.exception("Failed to sync indexes: %s", e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to sync indexes: {e!s}",
+        )
+
+
+@app.post(
+    "/api/{source}/search/indexes/{index_name}/ensure",
+    tags=["Search"],
+    status_code=status.HTTP_200_OK,
+)
+async def ensure_search_index(source: str, index_name: str) -> dict[str, Any]:
+    """Ensure a specific Meilisearch index exists."""
+    try:
+        if not meili_enabled():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Meilisearch is disabled",
+            )
+
+        success = await ensure_index_exists(index_name)
+        
+        return {
+            "message": f"Index {index_name} {'exists' if success else 'failed to create'}",
+            "index_name": index_name,
+            "success": success,
+        }
+    except Exception as e:
+        logger.exception("Failed to ensure index %s: %s", index_name, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to ensure index {index_name}: {e!s}",
+        )
+
+
+@app.post(
+    "/api/{source}/search/indexes/{index_name}/sync",
+    tags=["Search"],
+    status_code=status.HTTP_200_OK,
+)
+async def sync_search_index(
+    source: str,
+    index_name: str,
+    source_name: Optional[str] = Query(None, description="Optional source filter"),
+) -> dict[str, Any]:
+    """Sync a specific Meilisearch index with database data."""
+    try:
+        if not meili_enabled():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Meilisearch is disabled",
+            )
+
+        success = await sync_table_to_index(index_name, source_name)
+        
+        return {
+            "message": f"Index {index_name} {'synced successfully' if success else 'sync failed'}",
+            "index_name": index_name,
+            "source_name": source_name,
+            "success": success,
+        }
+    except Exception as e:
+        logger.exception("Failed to sync index %s: %s", index_name, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to sync index {index_name}: {e!s}",
+        )
+
+
+@app.post(
+    "/api/{source}/search/indexes/{index_name}/rebuild",
+    tags=["Search"],
+    status_code=status.HTTP_200_OK,
+)
+async def rebuild_search_index(
+    source: str,
+    index_name: str,
+    source_name: Optional[str] = Query(None, description="Optional source filter"),
+) -> dict[str, Any]:
+    """Rebuild a specific Meilisearch index from scratch."""
+    try:
+        if not meili_enabled():
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="Meilisearch is disabled",
+            )
+
+        success = await index_manager.rebuild_index(index_name, source_name)
+        
+        return {
+            "message": f"Index {index_name} {'rebuilt successfully' if success else 'rebuild failed'}",
+            "index_name": index_name,
+            "source_name": source_name,
+            "success": success,
+        }
+    except Exception as e:
+        logger.exception("Failed to rebuild index %s: %s", index_name, e)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Failed to rebuild index {index_name}: {e!s}",
+        )
 
 
 @app.get(
@@ -1174,30 +1468,30 @@ async def precompute_table_filters(source: str, table: str) -> dict[str, str]:
     This is typically called after data ingestion to update filter options.
 
     Args:
-        table_name: Name of the table/view to precompute filters for
+        table: Name of the table/view to precompute filters for
 
     Returns:
         Success message
 
     """
-    logger.info("Precomputing filter values for table: %s", table_name)
+    logger.info("Precomputing filter values for table: %s", table)
 
-    validate_table_name(table_name)
+    validate_table_name(table)
 
     try:
         with SessionLocal() as session:
-            precompute_filter_values(session, table_name)
+            precompute_filter_values(session, table)
 
             return {
-                "message": f"Successfully precomputed filter values for {table_name}",
-                "table_name": table_name,
+                "message": f"Successfully precomputed filter values for {table}",
+                "table_name": table,
             }
 
     except Exception:
-        logger.exception("Error precomputing filter values for %s", table_name)
+        logger.exception("Error precomputing filter values for %s", table)
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail=f"Failed to precompute filter values for {table_name}",
+            detail=f"Failed to precompute filter values for {table}",
         )
 
 
@@ -3482,18 +3776,38 @@ async def get_source_epg(source: str):
 
 @app.on_event("startup")
 async def startup_event() -> None:
-    """Initialize job queue and scheduler on application startup."""
-    logger.info("Application startup - initializing job queue and scheduler")
+    """Initialize job queue, scheduler, and Meilisearch indexes on application startup."""
+    logger.info("Application startup - initializing job queue, scheduler, and search indexes")
     try:
-        # Initialize job queue first
-        await initialize_job_queue()
-        logger.debug("Job queue initialized successfully")
+        # Initialize database
+        init_db()
+        logger.info("Database initialized")
 
-        # Start the scheduler
-        start_scheduler()
-        logger.debug("Scheduler started successfully on application startup")
-    except Exception:
-        logger.exception("Failed to start job queue and scheduler on startup")
+        # Initialize job queue
+        initialize_job_queue()
+        logger.info("Job queue initialized")
+
+        # Initialize Meilisearch indexes if enabled
+        if meili_enabled():
+            try:
+                logger.info("Initializing Meilisearch indexes...")
+                results = await initialize_all_indexes()
+                success_count = sum(1 for success in results.values() if success)
+                total_count = len(results)
+                logger.info("Meilisearch indexes initialized: %d/%d successful", success_count, total_count)
+                
+                if success_count > 0:
+                    logger.info("Meilisearch integration is ready")
+                else:
+                    logger.warning("No Meilisearch indexes were successfully initialized")
+            except Exception as e:
+                logger.warning("Failed to initialize Meilisearch indexes: %s", e)
+                logger.info("Application will continue without search functionality")
+        else:
+            logger.info("Meilisearch is disabled - skipping index initialization")
+            
+    except Exception as e:
+        logger.exception("Failed to initialize application: %s", e)
         # Don't fail the entire application if startup fails
 
 

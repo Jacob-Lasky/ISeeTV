@@ -33,7 +33,7 @@
                 scroll-height="calc(100vh - 320px)"
                 table-style="min-width: 50rem"
                 striped-rows
-                class="virtual-table skeleton-table"
+                class="skeleton-table"
             >
                 <template #header>
                     <div class="flex justify-end">
@@ -60,22 +60,50 @@
         </div>
 
         <!-- Main data table with search and filters -->
-        <div v-else-if="!error && tableData.length > 0" class="data-container">
+        <div v-else-if="!error" class="data-container">
             <DataTable
                 v-model:filters="filters"
                 :value="tableData"
                 scrollable
                 scroll-height="calc(100vh - 320px)"
-                :virtual-scroller-options="{ itemSize: 44 }"
                 table-style="min-width: 50rem"
                 striped-rows
                 :loading="loading"
                 filter-display="row"
                 :global-filter-fields="globalFilterFields"
-                class="virtual-table"
+                paginator
+                :rows="pageSize"
+                :rowsPerPageOptions="[50, 100, 200, 500]"
+                :totalRecords="totalRecords"
+                :lazy="true"
+                @page="onPage"
+                dataKey="id"
+                :sortField="sortField"
+                :sortOrder="sortOrderNum"
+                @sort="onSort"
             >
                 <template #header>
-                    <div class="flex justify-end">
+                    <div class="flex justify-between items-center gap-2">
+                        <div class="flex items-center gap-2">
+                            <Button
+                                size="small"
+                                :outlined="filterView !== 'all'"
+                                label="All"
+                                @click="setFilterView('all')"
+                            />
+                            <Button
+                                size="small"
+                                :outlined="filterView !== 'normal'"
+                                label="Passed"
+                                @click="setFilterView('normal')"
+                            />
+                            <Button
+                                size="small"
+                                :outlined="filterView !== 'inverse'"
+                                label="Filtered"
+                                @click="setFilterView('inverse')"
+                            />
+                        </div>
                         <IconField>
                             <InputIcon>
                                 <i class="pi pi-search" />
@@ -104,11 +132,12 @@
                 <Column
                     field="id"
                     header="ID"
-                    style="width: 20px; height: 44px"
+                    style="max-width: 60px"
                     :sortable="true"
+                    :showFilterMenu="false"
                 >
                     <template #body="{ data }">
-                        {{ data.id }}
+                        {{ data?.id ?? "" }}
                     </template>
                     <template #filter="{ filterModel, filterCallback }">
                         <InputText
@@ -116,6 +145,7 @@
                             type="text"
                             placeholder="Search ID..."
                             class="w-full"
+                            style="max-width: 40px"
                             @input="filterCallback()"
                         />
                     </template>
@@ -125,15 +155,21 @@
                 <Column
                     field="filter_reasons"
                     header="Filter Reason"
-                    style="width: 200px; height: 44px"
+                    style="width: 200px"
                     :sortable="true"
                     :showFilterMenu="false"
                 >
                     <template #body="{ data }">
                         <Tag
-                            :value="formatFilterReasons(data.filter_reasons)"
+                            :value="
+                                formatFilterReasons(
+                                    data?.filter_reasons ?? null
+                                )
+                            "
                             :severity="
-                                getFilterReasonSeverity(data.filter_reasons)
+                                getFilterReasonSeverity(
+                                    data?.filter_reasons ?? null
+                                )
                             "
                         />
                     </template>
@@ -168,11 +204,11 @@
                     <Column
                         field="channel_id"
                         header="Channel ID"
-                        style="width: 150px; height: 44px"
+                        style="width: 150px"
                         :sortable="true"
                     >
                         <template #body="{ data }">
-                            {{ data.channel_id }}
+                            {{ data?.channel_id ?? "" }}
                         </template>
                         <template #filter="{ filterModel, filterCallback }">
                             <InputText
@@ -189,11 +225,11 @@
                     <Column
                         field="display_name"
                         header="Display Name"
-                        style="width: 200px; height: 44px"
+                        style="width: 200px"
                         :sortable="true"
                     >
                         <template #body="{ data }">
-                            {{ data.display_name }}
+                            {{ data?.display_name ?? "" }}
                         </template>
                         <template #filter="{ filterModel, filterCallback }">
                             <InputText
@@ -210,18 +246,18 @@
                     <Column
                         field="icon_url"
                         header="Icon URL"
-                        style="width: 300px; height: 44px"
+                        style="width: 300px"
                         :sortable="true"
                     >
                         <template #body="{ data }">
                             <a
-                                v-if="data.icon_url"
-                                :href="data.icon_url"
+                                v-if="data?.icon_url"
+                                :href="data?.icon_url"
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 class="url-link"
                             >
-                                {{ data.icon_url }}
+                                {{ data?.icon_url }}
                             </a>
                         </template>
                         <template #filter="{ filterModel, filterCallback }">
@@ -241,14 +277,14 @@
                     <Column
                         field="stream_mode"
                         header="Stream Mode"
-                        style="width: 150px; height: 44px"
+                        style="width: 150px"
                         :sortable="true"
                         :showFilterMenu="false"
                     >
                         <template #body="{ data }">
                             <Tag
-                                v-if="data.stream_mode"
-                                :value="data.stream_mode"
+                                v-if="data?.stream_mode"
+                                :value="data?.stream_mode"
                                 severity="secondary"
                             />
                         </template>
@@ -274,14 +310,14 @@
                     <Column
                         field="group"
                         header="Group"
-                        style="width: 150px; height: 44px"
+                        style="width: 150px"
                         :sortable="true"
                         :showFilterMenu="false"
                     >
                         <template #body="{ data }">
                             <Tag
-                                v-if="data.group"
-                                :value="data.group"
+                                v-if="data?.group"
+                                :value="data?.group"
                                 severity="secondary"
                             />
                         </template>
@@ -308,11 +344,11 @@
                     <Column
                         field="tvg_id"
                         header="TVG ID"
-                        style="width: 150px; height: 44px"
+                        style="width: 150px"
                         :sortable="true"
                     >
                         <template #body="{ data }">
-                            <code>{{ data.tvg_id }}</code>
+                            <code>{{ data?.tvg_id ?? "" }}</code>
                         </template>
                         <template #filter="{ filterModel, filterCallback }">
                             <InputText
@@ -329,11 +365,11 @@
                     <Column
                         field="name"
                         header="Name"
-                        style="width: 200px; height: 44px"
+                        style="width: 250px"
                         :sortable="true"
                     >
                         <template #body="{ data }">
-                            {{ data.name }}
+                            {{ data?.name ?? "" }}
                         </template>
                         <template #filter="{ filterModel, filterCallback }">
                             <InputText
@@ -350,17 +386,17 @@
                     <Column
                         field="stream_url"
                         header="Stream URL"
-                        style="width: 300px; height: 44px"
+                        style="width: 600px"
                         :sortable="true"
                     >
                         <template #body="{ data }">
                             <a
-                                :href="data.stream_url"
+                                :href="data?.stream_url"
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 class="url-link"
                             >
-                                {{ data.stream_url }}
+                                {{ data?.stream_url }}
                             </a>
                         </template>
                         <template #filter="{ filterModel, filterCallback }">
@@ -378,18 +414,18 @@
                     <Column
                         field="logo_url"
                         header="Logo URL"
-                        style="width: 300px; height: 44px"
+                        style="width: 400px"
                         :sortable="true"
                     >
                         <template #body="{ data }">
                             <a
-                                v-if="data.logo_url"
-                                :href="data.logo_url"
+                                v-if="data?.logo_url"
+                                :href="data?.logo_url"
                                 target="_blank"
                                 rel="noopener noreferrer"
                                 class="url-link"
                             >
-                                {{ data.logo_url }}
+                                {{ data?.logo_url }}
                             </a>
                         </template>
                         <template #filter="{ filterModel, filterCallback }">
@@ -409,11 +445,11 @@
                     <Column
                         field="program_id"
                         header="Program ID"
-                        style="width: 150px; height: 44px"
+                        style="width: 150px"
                         :sortable="true"
                     >
                         <template #body="{ data }">
-                            {{ data.program_id }}
+                            {{ data?.program_id ?? "" }}
                         </template>
                         <template #filter="{ filterModel, filterCallback }">
                             <InputText
@@ -430,11 +466,11 @@
                     <Column
                         field="channel_id"
                         header="Channel ID"
-                        style="width: 150px; height: 44px"
+                        style="width: 150px"
                         :sortable="true"
                     >
                         <template #body="{ data }">
-                            {{ data.channel_id }}
+                            {{ data?.channel_id ?? "" }}
                         </template>
                         <template #filter="{ filterModel, filterCallback }">
                             <InputText
@@ -451,11 +487,11 @@
                     <Column
                         field="title"
                         header="Title"
-                        style="width: 250px; height: 44px"
+                        style="width: 250px"
                         :sortable="true"
                     >
                         <template #body="{ data }">
-                            {{ data.title }}
+                            {{ data?.title ?? "" }}
                         </template>
                         <template #filter="{ filterModel, filterCallback }">
                             <InputText
@@ -472,11 +508,11 @@
                     <Column
                         field="description"
                         header="Description"
-                        style="width: 400px; height: 44px"
+                        style="width: 600px"
                         :sortable="true"
                     >
                         <template #body="{ data }">
-                            {{ data.description }}
+                            {{ data?.description ?? "" }}
                         </template>
                         <template #filter="{ filterModel, filterCallback }">
                             <InputText
@@ -493,11 +529,11 @@
                     <Column
                         field="start_time"
                         header="Start Time"
-                        style="width: 180px; height: 44px"
+                        style="width: 180px"
                         :sortable="true"
                     >
                         <template #body="{ data }">
-                            {{ formatDateTime(data.start_time) }}
+                            {{ formatDateTime(data?.start_time) }}
                         </template>
                         <template #filter="{ filterModel, filterCallback }">
                             <DatePicker
@@ -516,11 +552,11 @@
                     <Column
                         field="end_time"
                         header="End Time"
-                        style="width: 180px; height: 44px"
+                        style="width: 180px"
                         :sortable="true"
                     >
                         <template #body="{ data }">
-                            {{ formatDateTime(data.end_time) }}
+                            {{ formatDateTime(data?.end_time) }}
                         </template>
                         <template #filter="{ filterModel, filterCallback }">
                             <DatePicker
@@ -540,11 +576,11 @@
                 <Column
                     field="created_at"
                     header="Created"
-                    style="width: 180px; height: 44px"
+                    style="width: 180px"
                     :sortable="true"
                 >
                     <template #body="{ data }">
-                        {{ formatDateTime(data.created_at) }}
+                        {{ formatDateTime(data?.created_at) }}
                     </template>
                     <template #filter="{ filterModel, filterCallback }">
                         <DatePicker
@@ -562,11 +598,11 @@
                 <Column
                     field="updated_at"
                     header="Updated"
-                    style="width: 180px; height: 44px"
+                    style="width: 180px"
                     :sortable="true"
                 >
                     <template #body="{ data }">
-                        {{ formatDateTime(data.updated_at) }}
+                        {{ formatDateTime(data?.updated_at) }}
                     </template>
                     <template #filter="{ filterModel, filterCallback }">
                         <DatePicker
@@ -597,7 +633,7 @@
         </div>
 
         <!-- Empty state -->
-        <div v-else-if="tableData.length === 0" class="empty-state">
+        <div v-else-if="totalRecords === 0" class="empty-state">
             <i class="pi pi-inbox"></i>
             <h3>No Data Available</h3>
             <p>This table doesn't contain any data yet.</p>
@@ -606,13 +642,14 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from "vue"
+import { ref, computed, onMounted, watch } from "vue"
 import { useRoute, useRouter } from "vue-router"
 import { FilterMatchMode, FilterService } from "@primevue/core/api"
 import { useToast } from "primevue/usetoast"
-import { apiGet } from "@/utils/apiUtils"
 import { getFileTypeIcon } from "@/utils/fileUtils"
 import { useToastListener } from "@/services/toastService"
+import { fetchTablePage } from "@/api/tables"
+import { searchIndex } from "@/api/search"
 
 // PrimeVue components
 import DataTable from "primevue/datatable"
@@ -641,11 +678,25 @@ const tableName = computed(() => route.params.tableName as string)
 // Reactive state
 const loading = ref(true)
 const error = ref("")
-const tableData = ref([])
+const tableData = ref([]) // rows for current page (server-side pagination)
 
 // Search and filtering state
 const filters = ref({})
 const globalFilterFields = ref([])
+
+// Meilisearch availability cache for this session (null = unknown)
+const meiliAvailable = ref<null | boolean>(null)
+
+// Pagination & sorting state
+const page = ref(1)
+const pageSize = ref(50)
+const sortField = ref<string>("id")
+const sortOrder = ref<"asc" | "desc">("asc")
+const sortOrderNum = computed(() => (sortOrder.value === "asc" ? 1 : -1))
+
+// Rules/filter view
+const filterView = ref<"all" | "normal" | "inverse">("all")
+const applyRules = ref(true)
 
 // Filter statistics
 const totalRecords = ref(0)
@@ -660,6 +711,9 @@ const streamModeOptions = ref([])
 
 // Skeleton data for loading state (20 empty rows)
 const skeletonData = ref(new Array(20).fill({}))
+
+// Initialization guard to prevent duplicate loads
+const isInitializing = ref(true)
 
 // Table configuration interface
 interface TableColumn {
@@ -689,40 +743,40 @@ const getTableConfig = (tableName: string): TableConfig => {
                     {
                         field: "id",
                         header: "ID",
-                        style: "width: 80px; height: 44px",
+                        style: "width: 60px",
                         type: "id",
                     },
                     {
                         field: "filter_reasons",
                         header: "Filter Reason",
-                        style: "width: 200px; height: 44px",
+                        style: "width: 200px",
                     },
                     {
                         field: "channel_id",
                         header: "Channel ID",
-                        style: "width: 150px; height: 44px",
+                        style: "width: 150px",
                     },
                     {
                         field: "display_name",
                         header: "Display Name",
-                        style: "width: 200px; height: 44px",
+                        style: "width: 200px",
                     },
                     {
                         field: "icon_url",
                         header: "Icon URL",
-                        style: "width: 300px; height: 44px",
+                        style: "width: 300px",
                         type: "url",
                     },
                     {
                         field: "created_at",
                         header: "Created",
-                        style: "width: 180px; height: 44px",
+                        style: "width: 180px",
                         type: "datetime",
                     },
                     {
                         field: "updated_at",
                         header: "Updated",
-                        style: "width: 180px; height: 44px",
+                        style: "width: 180px",
                         type: "datetime",
                     },
                 ],
@@ -736,56 +790,56 @@ const getTableConfig = (tableName: string): TableConfig => {
                     {
                         field: "id",
                         header: "ID",
-                        style: "width: 80px; height: 44px",
+                        style: "width: 60px",
                         type: "id",
                     },
                     {
                         field: "filter_reasons",
                         header: "Filter Reason",
-                        style: "width: 200px; height: 44px",
+                        style: "width: 200px",
                     },
                     {
                         field: "group",
                         header: "Group",
-                        style: "width: 150px; height: 44px",
+                        style: "width: 150px",
                     },
                     {
                         field: "stream_mode",
                         header: "Stream Mode",
-                        style: "width: 120px; height: 44px",
+                        style: "width: 120px",
                     },
                     {
                         field: "tvg_id",
                         header: "TVG ID",
-                        style: "width: 150px; height: 44px",
+                        style: "width: 150px",
                     },
                     {
                         field: "name",
                         header: "Name",
-                        style: "width: 200px; height: 44px",
+                        style: "width: 250px",
                     },
                     {
                         field: "stream_url",
                         header: "Stream URL",
-                        style: "width: 300px; height: 44px",
+                        style: "width: 300px",
                         type: "url",
                     },
                     {
                         field: "logo_url",
                         header: "Logo URL",
-                        style: "width: 300px; height: 44px",
+                        style: "width: 300px",
                         type: "url",
                     },
                     {
                         field: "created_at",
                         header: "Created",
-                        style: "width: 180px; height: 44px",
+                        style: "width: 180px",
                         type: "datetime",
                     },
                     {
                         field: "updated_at",
                         header: "Updated",
-                        style: "width: 180px; height: 44px",
+                        style: "width: 180px",
                         type: "datetime",
                     },
                 ],
@@ -799,56 +853,56 @@ const getTableConfig = (tableName: string): TableConfig => {
                     {
                         field: "id",
                         header: "ID",
-                        style: "width: 80px; height: 44px",
+                        style: "width: 60px",
                         type: "id",
                     },
                     {
                         field: "filter_reasons",
                         header: "Filter Reason",
-                        style: "width: 200px; height: 44px",
+                        style: "width: 200px",
                     },
                     {
                         field: "program_id",
                         header: "Program ID",
-                        style: "width: 150px; height: 44px",
+                        style: "width: 150px",
                     },
                     {
                         field: "channel_id",
                         header: "Channel ID",
-                        style: "width: 150px; height: 44px",
+                        style: "width: 150px",
                     },
                     {
                         field: "title",
                         header: "Title",
-                        style: "width: 250px; height: 44px",
+                        style: "width: 250px",
                     },
                     {
                         field: "description",
                         header: "Description",
-                        style: "width: 400px; height: 44px",
+                        style: "width: 600px",
                     },
                     {
                         field: "start_time",
                         header: "Start Time",
-                        style: "width: 180px; height: 44px",
+                        style: "width: 180px",
                         type: "datetime",
                     },
                     {
                         field: "end_time",
                         header: "End Time",
-                        style: "width: 180px; height: 44px",
+                        style: "width: 180px",
                         type: "datetime",
                     },
                     {
                         field: "created_at",
                         header: "Created",
-                        style: "width: 180px; height: 44px",
+                        style: "width: 180px",
                         type: "datetime",
                     },
                     {
                         field: "updated_at",
                         header: "Updated",
-                        style: "width: 180px; height: 44px",
+                        style: "width: 180px",
                         type: "datetime",
                     },
                 ],
@@ -865,6 +919,113 @@ const getTableConfig = (tableName: string): TableConfig => {
 
 // Computed table configuration
 const tableConfig = computed(() => getTableConfig(tableName.value))
+
+// Map table names to Meilisearch index names. Return null if unsupported.
+const meiliIndexForTable = (name: string): string | null => {
+    switch (name) {
+        case "m3u_channels":
+            return "m3u_channels"
+        case "epg_channels":
+            return "epg_channels"
+        case "programs":
+            return "programs"
+        default:
+            return null
+    }
+}
+
+// Determine if we should use Meili for current query
+// Only when a global search is present, table is supported, Meili isn't known-disabled,
+// and no special rule-view filters (filter_reasons/inverse/normal) are active.
+const shouldUseMeili = (
+    globalFilter: string | null,
+    name: string,
+    columnFilters?: Record<string, any>,
+    effectiveFilterView?: "all" | "normal" | "inverse"
+): boolean => {
+    const idx = meiliIndexForTable(name)
+    
+    // Debug logging
+    console.debug("shouldUseMeili check:", {
+        globalFilter,
+        name,
+        idx,
+        meiliAvailable: meiliAvailable.value,
+        effectiveFilterView,
+        columnFilters,
+        hasFilterReasons: columnFilters && Object.prototype.hasOwnProperty.call(columnFilters, "filter_reasons"),
+        hasColumnFilters: columnFilters && Object.keys(columnFilters).length > 0
+    })
+    
+    // Don't use Meilisearch if index doesn't exist or is disabled
+    if (!idx || meiliAvailable.value === false) return false
+    
+    // Don't use Meilisearch for filter view changes (normal/inverse) as backend handles filter_reasons logic better
+    if (effectiveFilterView && effectiveFilterView !== "all") return false
+    
+    // Don't use Meilisearch for filter_reasons column as backend has special logic for this
+    if (columnFilters && Object.prototype.hasOwnProperty.call(columnFilters, "filter_reasons")) {
+        return false
+    }
+    
+    // Use Meilisearch if we have either a global filter OR column filters
+    const hasGlobalFilter = globalFilter && globalFilter.trim().length > 0
+    const hasColumnFilters = columnFilters && Object.keys(columnFilters).length > 0
+    
+    return hasGlobalFilter || hasColumnFilters
+}
+
+// Build Meili sort parameter
+const buildMeiliSort = (): string[] => {
+    return sortField.value ? [`${sortField.value}:${sortOrder.value}`] : []
+}
+
+// Build a conservative Meili filter expression from column filters (exact match only)
+const buildMeiliFilterExpr = (columnFilters: Record<string, any>): string | undefined => {
+    const parts: string[] = []
+    for (const [field, val] of Object.entries(columnFilters || {})) {
+        if (val === null || val === undefined || val === "") continue
+        if (field === "filter_reasons") continue // skip special semantics; backend handles this better
+        // Normalize value for Meili filter (wrap strings, leave numbers)
+        if (typeof val === "number") {
+            parts.push(`${field} = ${val}`)
+        } else if (val instanceof Date) {
+            parts.push(`${field} = "${val.toISOString()}"`)
+        } else {
+            const escaped = String(val).replace(/"/g, '\\"')
+            parts.push(`${field} = "${escaped}"`)
+        }
+    }
+    return parts.length > 0 ? parts.join(" AND ") : undefined
+}
+
+// Choose facet fields per table to populate filter dropdowns when using Meili
+const meiliFacetsForTable = (name: string): string[] => {
+    switch (name) {
+        case "m3u_channels":
+            return ["source", "group", "stream_mode", "filter_reasons"]
+        case "epg_channels":
+            return ["source", "filter_reasons"]
+        case "programs":
+            return ["source", "channel_id", "filter_reasons"]
+        default:
+            return []
+    }
+}
+
+// Convert Meili facet distributions into Table filter option shape
+const meiliFacetsToFilterValues = (facets: Record<string, any> | null | undefined): Record<string, { value: string; count: number }[]> => {
+    const out: Record<string, { value: string; count: number }[]> = {}
+    if (!facets) return out
+    for (const [key, dist] of Object.entries(facets)) {
+        if (dist && typeof dist === "object") {
+            out[key] = Object.entries(dist as Record<string, number>)
+                .map(([value, count]) => ({ value, count }))
+                .sort((a, b) => b.count - a.count)
+        }
+    }
+    return out
+}
 
 // Register custom filter constraint for filter_reasons
 FilterService.register("filterReasonEquals", (value, filter) => {
@@ -929,12 +1090,12 @@ const initializeFilters = () => {
 }
 
 // Utility functions
-const formatDateTime = (dateString: string): string => {
+const formatDateTime = (dateString: string | null | undefined): string => {
     if (!dateString) return "N/A"
     try {
         return new Date(dateString).toLocaleString()
     } catch {
-        return dateString
+        return dateString || "N/A"
     }
 }
 
@@ -978,27 +1139,204 @@ const goBack = () => {
     router.push("/sources")
 }
 
-// Function to load table data
+// Helper to build current query filters and effective filter view
+const buildCurrentQuery = () => {
+    const config = tableConfig.value
+    const columnFilters: Record<string, any> = {}
+    let effectiveFilterView = filterView.value
+    const globalFilter = (filters.value as any)?.global?.value || null
+
+    for (const col of config.columns) {
+        const f = (filters.value as any)[col.field]
+        if (!f || f.value === null || f.value === undefined || f.value === "")
+            continue
+
+        if (col.field === "filter_reasons") {
+            if (f.value === "Passed") {
+                effectiveFilterView = "normal"
+                continue
+            } else {
+                effectiveFilterView = "inverse"
+                columnFilters[col.field] = f.value
+                continue
+            }
+        }
+
+        if (col.type === "datetime") {
+            const v = f.value
+            columnFilters[col.field] = v instanceof Date ? v.toISOString() : v
+        } else {
+            columnFilters[col.field] = f.value
+        }
+    }
+
+    return {
+        globalFilter,
+        columnFilters,
+        effectiveFilterView,
+    }
+}
+
+// Function to load table data with conditional Meili usage
 const loadTableData = async () => {
     loading.value = true
     error.value = ""
-
+    tableData.value = []
+    totalRecords.value = 0
     try {
-        const response = await apiGet(
-            `/api/${encodeURIComponent(sourceName.value)}/tables/${tableName.value}`
+        const { globalFilter, columnFilters, effectiveFilterView } =
+            buildCurrentQuery()
+        const useMeili = shouldUseMeili(
+            globalFilter,
+            tableName.value,
+            columnFilters,
+            effectiveFilterView
         )
 
-        if (response.success && response.data) {
-            tableData.value = response.data.records || []
+        if (useMeili) {
+            // Attempt Meilisearch; fallback to backend if fails
+            try {
+                const idx = meiliIndexForTable(tableName.value) as string
+                const meiliResp = await searchIndex<Record<string, any>>(
+                    sourceName.value,
+                    idx,
+                    {
+                        q: globalFilter || "",
+                        offset: 0,
+                        limit: pageSize.value,
+                        filter: buildMeiliFilterExpr(columnFilters),
+                        sort: buildMeiliSort(),
+                        facets: meiliFacetsForTable(tableName.value),
+                    },
+                    false
+                )
 
-            // Load precomputed filter values from backend
-            await loadFilterOptions()
+                const hits = meiliResp.hits || []
+                tableData.value = hits
+                const total =
+                    (meiliResp as any).totalHits ?? meiliResp.estimatedTotalHits ?? hits.length
+                totalRecords.value = typeof total === "number" ? total : hits.length
 
-            console.log(
-                `Loaded ${tableData.value.length} records from ${tableName.value}`
-            )
+                // Convert facets to filter options
+                const facetFilters = meiliFacetsToFilterValues(
+                    meiliResp.facetDistribution || meiliResp.facetsDistribution
+                )
+                sourceOptions.value = (facetFilters.source || []).map((x: any) => x.value)
+                if (tableName.value === "m3u_channels") {
+                    groupOptions.value = (facetFilters.group || []).map((x: any) => x.value)
+                    streamModeOptions.value = (facetFilters.stream_mode || []).map(
+                        (x: any) => x.value
+                    )
+                }
+                filterReasonOptions.value = (
+                    (facetFilters.filter_reasons || []).map((x: any) => x.value) || []
+                )
+                    .concat("Passed")
+                    .filter((v: any, i: number, arr: any[]) => arr.indexOf(v) === i)
+
+                // We don't have filter_view_counts from Meili; derive minimal stats
+                passedRecords.value = 0
+                filteredRecords.value = 0
+                meiliAvailable.value = true
+            } catch (meiliErr) {
+                const errMsg = meiliErr instanceof Error ? meiliErr.message : String(meiliErr)
+                console.warn("Meilisearch failed; falling back to backend:", errMsg, meiliErr)
+                meiliAvailable.value = false
+                // Fallback to backend pagination
+                const resp = await fetchTablePage<Record<string, any>>(
+                    sourceName.value,
+                    tableName.value,
+                    {
+                        page: 1,
+                        page_size: pageSize.value,
+                        sort_field: sortField.value,
+                        sort_order: sortOrder.value,
+                        global_filter: globalFilter,
+                        column_filters:
+                            Object.keys(columnFilters).length > 0
+                                ? columnFilters
+                                : null,
+                        apply_rules: applyRules.value,
+                        filter_view: effectiveFilterView,
+                    },
+                    false
+                )
+
+                if (resp && resp.success) {
+                    tableData.value = resp.data || []
+                    totalRecords.value = resp.filter_view_counts?.all ?? resp.total ?? 0
+
+                    const f = resp.filters || {}
+                    sourceOptions.value = (f.source || []).map((x: any) => x.value)
+                    if (tableName.value === "m3u_channels") {
+                        groupOptions.value = (f.group || []).map((x: any) => x.value)
+                        streamModeOptions.value = (f.stream_mode || []).map(
+                            (x: any) => x.value
+                        )
+                    }
+                    filterReasonOptions.value = (
+                        (f.filter_reasons || []).map((x: any) => x.value) || []
+                    )
+                        .concat("Passed")
+                        .filter((v: any, i: number, arr: any[]) => arr.indexOf(v) === i)
+
+                    passedRecords.value = resp.filter_view_counts?.normal ?? 0
+                    filteredRecords.value =
+                        resp.filter_view_counts?.inverse ??
+                        Math.max(0, totalRecords.value - passedRecords.value)
+                } else {
+                    throw new Error("Failed to load table data")
+                }
+            }
         } else {
-            throw new Error(response.error || "Failed to load table data")
+            // Use existing backend pagination
+            const resp = await fetchTablePage<Record<string, any>>(
+                sourceName.value,
+                tableName.value,
+                {
+                    page: 1,
+                    page_size: pageSize.value,
+                    sort_field: sortField.value,
+                    sort_order: sortOrder.value,
+                    global_filter: globalFilter,
+                    column_filters:
+                        Object.keys(columnFilters).length > 0
+                            ? columnFilters
+                            : null,
+                    apply_rules: applyRules.value,
+                    filter_view: effectiveFilterView,
+                },
+                false
+            )
+
+            if (resp && resp.success) {
+                tableData.value = resp.data || []
+
+                // Update counts and totals
+                totalRecords.value = resp.filter_view_counts?.all ?? resp.total ?? 0
+
+                // Update filter options from response
+                const f = resp.filters || {}
+                sourceOptions.value = (f.source || []).map((x: any) => x.value)
+                if (tableName.value === "m3u_channels") {
+                    groupOptions.value = (f.group || []).map((x: any) => x.value)
+                    streamModeOptions.value = (f.stream_mode || []).map(
+                        (x: any) => x.value
+                    )
+                }
+                filterReasonOptions.value = (
+                    (f.filter_reasons || []).map((x: any) => x.value) || []
+                )
+                    .concat("Passed")
+                    .filter((v: any, i: number, arr: any[]) => arr.indexOf(v) === i)
+
+                passedRecords.value = resp.filter_view_counts?.normal ?? 0
+                filteredRecords.value =
+                    resp.filter_view_counts?.inverse ??
+                    Math.max(0, totalRecords.value - passedRecords.value)
+            } else {
+                throw new Error("Failed to load table data")
+            }
         }
     } catch (err) {
         console.error("Error loading table data:", err)
@@ -1016,116 +1354,226 @@ const loadTableData = async () => {
     }
 }
 
-// Load precomputed filter values from backend API
-const loadFilterOptions = async () => {
-    try {
-        console.log(`Loading filter options for table: ${tableName.value}`)
+// Pagination & sorting handlers (server-side)
+const onSort = (event: any) => {
+    const newSortField = event.sortField || sortField.value
+    const newSortOrder = event.sortOrder === 1 ? "asc" : "desc"
 
-        const response = await apiGet(
-            `/api/${encodeURIComponent(sourceName.value)}/tables/${tableName.value}/filters`,
-            false,
-            { showSuccessToast: false }
+    // Avoid reloading if sort hasn't actually changed
+    if (
+        newSortField === sortField.value &&
+        newSortOrder === sortOrder.value
+    ) {
+        return
+    }
+
+    sortField.value = newSortField
+    sortOrder.value = newSortOrder
+    page.value = 1
+    loadTableData()
+}
+
+// Paginator lazy load handler
+const onPage = async (event: any) => {
+    try {
+        console.debug("onPage event", event)
+        loading.value = true
+        error.value = ""
+        const first = Number(event?.first ?? 0)
+        const rows = Number(event?.rows ?? pageSize.value)
+        const newPage = Math.floor(first / rows) + 1
+        pageSize.value = rows
+        page.value = newPage
+
+        const { globalFilter, columnFilters, effectiveFilterView } =
+            buildCurrentQuery()
+        const useMeili = shouldUseMeili(
+            globalFilter,
+            tableName.value,
+            columnFilters,
+            effectiveFilterView
         )
 
-        if (response.success && response.data) {
-            const filterData = response.data
+        if (useMeili) {
+            try {
+                const idx = meiliIndexForTable(tableName.value) as string
+                const meiliResp = await searchIndex<Record<string, any>>(
+                    sourceName.value,
+                    idx,
+                    {
+                        q: globalFilter || "",
+                        offset: (page.value - 1) * pageSize.value,
+                        limit: pageSize.value,
+                        filter: buildMeiliFilterExpr(columnFilters),
+                        sort: buildMeiliSort(),
+                        facets: meiliFacetsForTable(tableName.value),
+                    },
+                    false
+                )
 
-            // Set source options
-            if (filterData.source) {
-                sourceOptions.value = filterData.source.map(
-                    (item) => item.value
-                )
-                console.log(
-                    `Loaded ${sourceOptions.value.length} source options`
-                )
-            }
+                const hits = meiliResp.hits || []
+                tableData.value = hits
+                const total =
+                    (meiliResp as any).totalHits ?? meiliResp.estimatedTotalHits ?? hits.length
+                totalRecords.value = typeof total === "number" ? total : hits.length
 
-            // Set group options for M3U channels
-            if (tableName.value === "m3u_channels" && filterData.group) {
-                groupOptions.value = filterData.group.map((item) => item.value)
-                console.log(`Loaded ${groupOptions.value.length} group options`)
-            }
+                const facetFilters = meiliFacetsToFilterValues(
+                    meiliResp.facetDistribution || meiliResp.facetsDistribution
+                )
+                sourceOptions.value = (facetFilters.source || []).map((x: any) => x.value)
+                if (tableName.value === "m3u_channels") {
+                    groupOptions.value = (facetFilters.group || []).map((x: any) => x.value)
+                    streamModeOptions.value = (facetFilters.stream_mode || []).map(
+                        (x: any) => x.value
+                    )
+                }
+                filterReasonOptions.value = (
+                    (facetFilters.filter_reasons || []).map((x: any) => x.value) || []
+                )
+                    .concat("Passed")
+                    .filter((v: any, i: number, arr: any[]) => arr.indexOf(v) === i)
 
-            // Set stream mode options for M3U channels
-            if (tableName.value === "m3u_channels" && filterData.stream_mode) {
-                streamModeOptions.value = filterData.stream_mode.map(
-                    (item) => item.value
+                passedRecords.value = 0
+                filteredRecords.value = 0
+                meiliAvailable.value = true
+            } catch (meiliErr) {
+                const errMsg = meiliErr instanceof Error ? meiliErr.message : String(meiliErr)
+                console.warn("Meili page search failed; falling back:", errMsg, meiliErr)
+                meiliAvailable.value = false
+                const resp = await fetchTablePage<Record<string, any>>(
+                    sourceName.value,
+                    tableName.value,
+                    {
+                        page: page.value,
+                        page_size: pageSize.value,
+                        sort_field: sortField.value,
+                        sort_order: sortOrder.value,
+                        global_filter: globalFilter,
+                        column_filters:
+                            Object.keys(columnFilters).length > 0
+                                ? columnFilters
+                                : null,
+                        apply_rules: applyRules.value,
+                        filter_view: effectiveFilterView,
+                    },
+                    false
                 )
-                console.log(
-                    `Loaded ${streamModeOptions.value.length} stream mode options`
-                )
-            }
 
-            // Set filter reason options
-            if (filterData.filter_reasons) {
-                filterReasonOptions.value = filterData.filter_reasons.map(
-                    (item) => item.value
-                )
-                console.log(
-                    `Loaded ${filterReasonOptions.value.length} filter reason options`
-                )
+                if (resp && resp.success) {
+                    tableData.value = resp.data || []
+                    totalRecords.value = resp.filter_view_counts?.all ?? resp.total ?? 0
+
+                    const f = resp.filters || {}
+                    sourceOptions.value = (f.source || []).map((x: any) => x.value)
+                    if (tableName.value === "m3u_channels") {
+                        groupOptions.value = (f.group || []).map((x: any) => x.value)
+                        streamModeOptions.value = (f.stream_mode || []).map(
+                            (x: any) => x.value
+                        )
+                    }
+                    filterReasonOptions.value = (
+                        (f.filter_reasons || []).map((x: any) => x.value) || []
+                    )
+                        .concat("Passed")
+                        .filter((v: any, i: number, arr: any[]) => arr.indexOf(v) === i)
+
+                    passedRecords.value = resp.filter_view_counts?.normal ?? 0
+                    filteredRecords.value =
+                        resp.filter_view_counts?.inverse ??
+                        Math.max(0, totalRecords.value - passedRecords.value)
+                } else {
+                    throw new Error("Failed to load page")
+                }
             }
         } else {
-            console.warn(
-                `No filter data received for table: ${tableName.value}`
+            const resp = await fetchTablePage<Record<string, any>>(
+                sourceName.value,
+                tableName.value,
+                {
+                    page: page.value,
+                    page_size: pageSize.value,
+                    sort_field: sortField.value,
+                    sort_order: sortOrder.value,
+                    global_filter: globalFilter,
+                    column_filters:
+                        Object.keys(columnFilters).length > 0
+                            ? columnFilters
+                            : null,
+                    apply_rules: applyRules.value,
+                    filter_view: effectiveFilterView,
+                },
+                false
             )
+
+            if (resp && resp.success) {
+                tableData.value = resp.data || []
+                totalRecords.value = resp.filter_view_counts?.all ?? resp.total ?? 0
+
+                const f = resp.filters || {}
+                sourceOptions.value = (f.source || []).map((x: any) => x.value)
+                if (tableName.value === "m3u_channels") {
+                    groupOptions.value = (f.group || []).map((x: any) => x.value)
+                    streamModeOptions.value = (f.stream_mode || []).map(
+                        (x: any) => x.value
+                    )
+                }
+                filterReasonOptions.value = (
+                    (f.filter_reasons || []).map((x: any) => x.value) || []
+                )
+                    .concat("Passed")
+                    .filter((v: any, i: number, arr: any[]) => arr.indexOf(v) === i)
+
+                passedRecords.value = resp.filter_view_counts?.normal ?? 0
+                filteredRecords.value =
+                    resp.filter_view_counts?.inverse ??
+                    Math.max(0, totalRecords.value - passedRecords.value)
+            } else {
+                throw new Error("Failed to load page")
+            }
         }
     } catch (err) {
-        console.error(
-            `Error loading filter options for ${tableName.value}:`,
-            err
-        )
-        // Fallback to empty arrays
-        sourceOptions.value = []
-        groupOptions.value = []
-        filterReasonOptions.value = []
+        console.error("Error loading page:", err)
+        error.value =
+            err instanceof Error ? err.message : "Unknown error occurred"
+    } finally {
+        loading.value = false
     }
 }
 
-// Load filter statistics from new backend endpoint
-const loadFilterStatistics = async () => {
-    try {
-        console.log(
-            `Loading filter statistics for ${tableName.value}/${sourceName.value}...`
-        )
-
-        const response = await apiGet(
-            `/api/${encodeURIComponent(sourceName.value)}/tables/${tableName.value}/filtered_counts`,
-            false,
-            { showSuccessToast: false }
-        )
-
-        if (response.success && response.data) {
-            const data = response.data
-
-            // Map the new API response to our variables
-            passedRecords.value = data.passed || 0
-            filteredRecords.value = data.all_not_passed || 0
-            totalRecords.value = data.total || 0
-
-            console.log(
-                `Filter statistics loaded: ${passedRecords.value} passed, ${filteredRecords.value} caught by filter, ${totalRecords.value} total`
-            )
-        } else {
-            console.warn(
-                `No filter statistics received for ${tableName.value}/${sourceName.value}`
-            )
-            // Set default values
-            passedRecords.value = 0
-            filteredRecords.value = 0
-            totalRecords.value = 0
-        }
-    } catch (err) {
-        console.error(`Error loading filter statistics:`, err)
-        // Set default values on error
-        passedRecords.value = 0
-        filteredRecords.value = 0
-        totalRecords.value = 0
+// Filter view toggle
+const setFilterView = (view: "all" | "normal" | "inverse") => {
+    if (filterView.value !== view) {
+        filterView.value = view
     }
 }
+
+// Debounced reload on filter changes
+let filterTimer: any = null
+const scheduleReload = () => {
+    // Suppress during initial setup to avoid duplicate initial load
+    if (isInitializing.value) return
+    if (filterTimer) clearTimeout(filterTimer)
+    filterTimer = setTimeout(() => {
+        page.value = 1
+        loadTableData()
+    }, 300)
+}
+watch(
+    () => filters.value,
+    () => {
+        scheduleReload()
+    },
+    { deep: true }
+)
+watch(
+    () => filterView.value,
+    () => {
+        scheduleReload()
+    }
+)
 
 // Load data on component mount
-onMounted(() => {
+onMounted(async () => {
     // Set up toast listener for API notifications
     toastListener.subscribe((message) => {
         toast.add({
@@ -1143,8 +1591,8 @@ onMounted(() => {
     }
 
     initializeFilters()
-    loadFilterStatistics()
-    loadTableData()
+    await loadTableData()
+    isInitializing.value = false
 })
 </script>
 
@@ -1232,8 +1680,19 @@ onMounted(() => {
     overflow: hidden;
 }
 
-.virtual-table {
-    height: 100%;
+/* Allow cells to wrap content for full visibility */
+:deep(.p-datatable-table) {
+    table-layout: auto;
+}
+
+:deep(.p-datatable-tbody > tr > td) {
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
+    line-height: 1.35;
+    vertical-align: top;
+    padding-top: 0.5rem;
+    padding-bottom: 0.5rem;
 }
 
 /* State styling */
@@ -1273,14 +1732,14 @@ onMounted(() => {
     font-size: 0.875rem;
 }
 
-.url-cell {
+.url-link {
     font-family: monospace;
     font-size: 0.875rem;
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
+    white-space: normal;
+    overflow-wrap: anywhere;
+    word-break: break-word;
     max-width: 100%;
-    display: block;
+    display: inline;
 }
 
 .id-cell {

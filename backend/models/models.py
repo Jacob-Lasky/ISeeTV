@@ -25,6 +25,14 @@ class DownloadAllTasksResponse(BaseModel):
     task_ids: list[str]
 
 
+class IndexingTaskResponse(BaseModel):
+    """Response model for indexing operations that includes task and job IDs."""
+
+    message: str
+    task_id: str
+    job_id: str
+
+
 class TotalRecords(BaseModel):
     channels: int = 0
     programs: int = 0
@@ -76,6 +84,22 @@ class IngestProgress(BaseModel):
     source_name: str | None = None  # Source being processed
     current_phase: str | None = None  # For EPG: "channels" or "programs"
     updated_at: dt.datetime | None = None  # Last update timestamp
+
+
+class IndexingProgress(BaseModel):
+    """Progress model for Meilisearch indexing jobs."""
+
+    task_id: str
+    status: Literal["pending", "indexing", "completed", "failed", "cancelled"]
+    index_name: str
+    source_name: str | None = None
+    current_item: str | None
+    total_items: int
+    completed_items: int
+    error_message: str | None
+    started_at: dt.datetime
+    completed_at: dt.datetime | None
+    updated_at: dt.datetime | None = None
 
 
 class Source(BaseModel):
@@ -203,3 +227,40 @@ class TableData(BaseModel):
 class TableResponse(BaseModel):
     success: bool
     data: TableData
+
+
+class TableQueryParams(BaseModel):
+    """Shared query parameters for generic table endpoints.
+
+    Designed to mirror the streams query params while remaining table-agnostic.
+    """
+
+    page: int = 1
+    page_size: int = 100
+    sort_field: str = "id"
+    sort_order: str = "asc"
+    global_filter: str | None = None
+    column_filters: str | None = None
+    apply_rules: bool = True
+    # For generic tables we expose three views aligned to filter_reasons JSON logic
+    # - normal: rows with filter_reasons == '[]'
+    # - inverse: rows with filter_reasons != '[]'
+    # - all: no additional filtering
+    filter_view: str = "all"
+
+
+class TablePaginatedResponse(BaseModel):
+    """Paginated response model for generic table endpoints."""
+
+    success: bool
+    data: list[dict[str, Any]]
+    total: int
+    page: int
+    page_size: int
+    total_pages: int
+    has_next: bool
+    has_prev: bool
+    # Precomputed filter values for filterable columns
+    filters: dict[str, list[dict[str, Any]]] = Field(default_factory=dict)
+    # Counts for filter views (normal/inverse/all)
+    filter_view_counts: dict[str, int] = Field(default_factory=dict)

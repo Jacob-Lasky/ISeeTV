@@ -231,6 +231,57 @@ export interface FilterViewCounts {
 }
 
 /**
+ * Generic paginated table response (table-agnostic)
+ */
+export interface TablePageResponse<T = Record<string, any>> {
+    success: boolean
+    data: T[]
+    total: number
+    page: number
+    page_size: number
+    total_pages: number
+    has_next: boolean
+    has_prev: boolean
+    filters: Record<string, FilterValue[]>
+    filter_view_counts?: FilterViewCounts
+}
+
+/**
+ * Query parameters for generic table pagination endpoint
+ */
+export interface TablePageQueryParams {
+    page?: number
+    page_size?: number
+    sort_field?: string
+    sort_order?: "asc" | "desc"
+    global_filter?: string | null
+    column_filters?: Record<string, any> | null
+    apply_rules?: boolean
+    filter_view?: "all" | "normal" | "inverse"
+}
+
+/**
+ * Generic Meilisearch search response wrapper
+ * Mirrors backend/models/search_models.py SearchResponse (extra fields allowed)
+ */
+export interface MeiliSearchResponse<T = Record<string, any>> {
+    hits: T[]
+    query?: string | null
+    offset?: number
+    limit?: number
+    processingTimeMs?: number | null
+    estimatedTotalHits?: number | null
+    totalHits?: number | null
+    facetDistribution?: Record<string, any> | null
+    facetsDistribution?: Record<string, any> | null
+    facetStats?: Record<string, any> | null
+    indexUid?: string | null
+    // Allow pass-through for additional fields
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    [key: string]: any
+}
+
+/**
  * Streams API response with pagination
  */
 export interface StreamsResponse {
