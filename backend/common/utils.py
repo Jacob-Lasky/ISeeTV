@@ -7,6 +7,8 @@ from common.log_utils import get_logger
 from common.state import get_progress
 from models.models import DownloadProgress
 from common.filter_utils import FILTERABLE_COLUMNS_CONFIG
+from sqlalchemy.orm import Session
+from sqlalchemy import text
 
 logger = get_logger(__name__)
 
@@ -150,3 +152,17 @@ def validate_table_name(table_name: str, include_streams: bool = True) -> None:
             status_code=status.HTTP_400_BAD_REQUEST,
             detail=f"Invalid table name. Must be one of: {valid_tables}",
         )
+async def purge_old_programs(session: Session, source_name: str, cutoff_hours: int=2) -> int:
+    """Purge old program records from the database."""
+    cutoff = dt.datetime.now(dt.UTC) - dt.timedelta(hours=cutoff_hours)
+    logger.info(
+        "Purging programs with end_time before %s (UTC)", cutoff.isoformat()
+    )
+    result = session.execute(
+        text("DELETE FROM programs WHERE end_time < :cutoff AND source_name = :source_name"),
+        {"cutoff": cutoff, "source_name": source_name},
+    )
+    deleted = result.rowcount or 0
+    session.commit()
+    logger.info("Purged %d old program records", deleted)
+    return deleted

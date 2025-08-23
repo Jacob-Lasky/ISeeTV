@@ -2,6 +2,7 @@ import json
 import logging
 import operator
 import os
+import datetime as dt
 from typing import Annotated, Any, Literal, Optional
 
 import httpx
@@ -48,6 +49,7 @@ from common.utils import (
     get_all_progress_response,
     get_progress_response,
     validate_table_name,
+    purge_old_programs,
 )
 from download.downloader import (
     background_single_download_task,
@@ -963,7 +965,8 @@ async def load_file_to_db(
                 channels = file_metadata.total_records.channels or 0
                 programs = file_metadata.total_records.programs or 0
                 total_records = channels + programs
-            total_steps = 5  # download, parse channels, load channels, parse programs, load programs
+                # Steps: download, parse channels, load channels, parse programs, load programs, purge, reindex
+                total_steps = 7
 
         IngestTaskManager.create_ingest_task(
             task_id, file_type, source, total_records, total_steps
@@ -1097,7 +1100,39 @@ async def background_load_task(
                 if result.status == "error":
                     logger.warning(f"Load error in task {task_id}: {result.message}")
 
-        # Precompute all filter values
+
+        # Step 6: Purge old programs
+        IngestTaskManager.update_step_progress(
+            task_id, 6, "Purging old programs", 0, total_steps=7
+        )
+
+        session = SessionLocal()
+        await purge_old_programs(session, source_name)
+        session.close()
+
+        IngestTaskManager.update_step_progress(
+            task_id, 6, "Purging old programs", 100, total_steps=7
+        )
+
+        # Step 7: Rebuild Meilisearch index (if enabled)
+        if meili_enabled():
+            IngestTaskManager.update_step_progress(
+                    task_id, 7, "Rebuilding programs search index", 0, total_steps=7
+                )
+
+            success = await index_manager.rebuild_index("programs")
+            if not success:
+                raise RuntimeError("Failed to rebuild 'programs' Meilisearch index")
+
+            IngestTaskManager.update_step_progress(
+                task_id, 7, "Rebuilding programs search index", 100, total_steps=7
+                )
+        else:
+            logger.info(
+                "Meilisearch disabled (MEILI_ENABLED=false); skipping programs index rebuild"
+            )
+
+        # Precompute all filter values AFTER purge so filters reflect the cleaned data
         precompute_all_filter_values(session)
 
         # Update source total_records with actual parsed counts
@@ -1113,10 +1148,10 @@ async def background_load_task(
             "Completed background load task %s: filter values precomputed", task_id
         )
 
-    except Exception:
+    except Exception as e:
         logger.exception("Background load task %s failed", task_id)
-        TaskManager.fail_task(task_id, "ingest", str(e))
         session.rollback()
+        TaskManager.fail_task(task_id, "ingest", str(e))
     finally:
         session.close()
 

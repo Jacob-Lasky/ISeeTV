@@ -72,7 +72,8 @@ async def refresh_job_callback_wrapper(
                 channels = file_metadata.total_records.channels or 0
                 programs = file_metadata.total_records.programs or 0
                 total_records = channels + programs
-                total_steps = 5  # download, parse channels, load channels, parse programs, load programs
+                # Steps: download, parse channels, load channels, parse programs, load programs, purge, reindex
+                total_steps = 7
 
         # Create ingest task
         IngestTaskManager.create_ingest_task(
