@@ -11,6 +11,9 @@ from datetime import datetime
 
 from .constants import DATA_PATH
 from .file_utils import atomic_write_json, atomic_read_json, ensure_file_exists
+import logging
+
+logger = logging.getLogger(__name__)
 
 
 def get_flows_directory() -> Path:
@@ -158,31 +161,72 @@ def validate_flow_data(flow_data: Dict[str, Any]) -> bool:
         bool: True if valid, False otherwise
     """
     try:
-        # Check required fields
-        required_fields = ["nodes", "edges"]
-        for field in required_fields:
-            if field not in flow_data:
-                return False
-                
-        # Validate nodes structure
-        if not isinstance(flow_data["nodes"], list):
-            return False
+        # Check for frontend format (sources, rules, streams, connections)
+        frontend_fields = ["sources", "rules", "streams", "connections"]
+        has_frontend_format = all(field in flow_data for field in frontend_fields)
+        
+        # Check for backend format (nodes, edges)
+        backend_fields = ["nodes", "edges"]
+        has_backend_format = all(field in flow_data for field in backend_fields)
+        
+        if has_frontend_format:
+            # Validate frontend format
+            for field in frontend_fields:
+                if not isinstance(flow_data[field], list):
+                    return False
             
-        # Validate edges structure
-        if not isinstance(flow_data["edges"], list):
-            return False
+            # Basic validation for sources, rules, streams
+            for item in flow_data["sources"] + flow_data["rules"] + flow_data["streams"]:
+                if not isinstance(item, dict) or "id" not in item:
+                    return False
             
-        # Basic node validation
-        for node in flow_data["nodes"]:
-            if not isinstance(node, dict) or "id" not in node:
-                return False
-                
-        # Basic edge validation
-        for edge in flow_data["edges"]:
-            if not isinstance(edge, dict) or "source" not in edge or "target" not in edge:
-                return False
+            # Basic validation for connections
+            for connection in flow_data["connections"]:
+                if not isinstance(connection, dict) or "from" not in connection or "to" not in connection:
+                    return False
+                    
+        elif has_backend_format:
+            # Validate backend format
+            for field in backend_fields:
+                if not isinstance(flow_data[field], list):
+                    return False
+                    
+            # Basic node validation
+            for node in flow_data["nodes"]:
+                if not isinstance(node, dict) or "id" not in node:
+                    return False
+                    
+            # Basic edge validation
+            for edge in flow_data["edges"]:
+                if not isinstance(edge, dict) or "source" not in edge or "target" not in edge:
+                    return False
+        else:
+            # Neither format is valid
+            return False
                 
         return True
         
     except Exception:
         return False
+
+
+def update_flow_stats(source: str, node_id: str, accepted_count: int, rejected_count: int) -> bool:
+    """Update flow statistics in the flow data."""
+    logger.info(f"Updating flow statistics for source '{source}' and node '{node_id}'")
+    flow_data = load_flow(source)
+    processed_count = accepted_count + rejected_count
+
+    for node in flow_data["nodes"]:
+        if node["id"] == node_id:
+            logger.debug(f"Updating flow statistics for node '{node_id}'")
+            node["data"]["stats"]["processed"] = processed_count
+            node["data"]["stats"]["passed"] = accepted_count
+            node["data"]["stats"]["caught"] = rejected_count
+    
+            save_flow(source, flow_data)
+    
+            logger.info(f"Flow execution results saved for source '{source}'")
+            return True
+
+    logger.warning(f"Node '{node_id}' not found in flow data for source '{source}'")
+    return False

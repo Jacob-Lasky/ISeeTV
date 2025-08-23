@@ -197,7 +197,9 @@ const {
     executeFlowToNode,
     executeFlowFromNode,
     isExecuting,
-} = useNodeExecution()
+} = useNodeExecution({
+    onRefresh: flowContext?.loadFlow
+})
 
 // Check if this node is selected
 const isSelected = computed(() => {

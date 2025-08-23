@@ -505,14 +505,6 @@ const editingRule = ref<any>(null)
 // Provide selection state to node components
 provide("selectedNodeId", selectedNodeId)
 
-// Provide flow context for node execution
-provide("flowContext", {
-    selectedSource,
-    nodes,
-    edges,
-    getDirection,
-})
-
 // Node types registration
 const nodeTypes = {
     source: markRaw(SourceNode),
@@ -1206,7 +1198,7 @@ const executeFlowOnRealData = async (flowConfig: any) => {
 
     try {
         const response = await fetch(
-            `/api/${selectedSource.value}/flows/execute?table_name=${tableName}&limit=500`,
+            `/api/${selectedSource.value}/flows/execute?table_name=${tableName}`,
             {
                 method: "POST",
                 headers: {
@@ -1710,6 +1702,15 @@ watch(
     },
     { immediate: true }
 )
+
+// Provide flow context for node execution (after all functions are defined)
+provide("flowContext", {
+    selectedSource,
+    nodes,
+    edges,
+    getDirection,
+    loadFlow,
+})
 
 // Lifecycle
 onMounted(async () => {

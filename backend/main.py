@@ -4,6 +4,7 @@ import operator
 import os
 import datetime as dt
 from typing import Annotated, Any, Literal, Optional
+from unittest.mock import NonCallableMagicMock
 
 import httpx
 import uvicorn
@@ -32,6 +33,7 @@ from common.job_queue import (
     initialize_job_queue,
     shutdown_job_queue,
 )
+from common.flow_storage import validate_flow_data, save_flow, load_flow, delete_flow, list_saved_flows
 from common.log_utils import get_logger
 from common.rules_storage import (
     load_assignments,
@@ -86,6 +88,7 @@ from rules.ingestion_rules import (
     SourceRuleAssignment,
     get_ingestion_rules_status,
 )
+from rules.node_executor import NodeExecutor
 
 # Import and unapply rules
 from rules.post_load_rules import post_load_engine
@@ -115,6 +118,12 @@ from common.filter_utils import (
     precompute_filter_values,
     FILTERABLE_COLUMNS_CONFIG,
 )
+
+from rules.plugin_integration import get_plugin_integration
+from rules.plugins.registry import get_plugin_registry, load_all_plugins
+from rules.enhanced_rules_engine import EnhancedRulesEngine
+from models.db_models import get_table_model
+import tempfile
 
 logger = get_logger(__name__)
 
@@ -1101,36 +1110,36 @@ async def background_load_task(
                     logger.warning(f"Load error in task {task_id}: {result.message}")
 
 
-        # Step 6: Purge old programs
-        IngestTaskManager.update_step_progress(
-            task_id, 6, "Purging old programs", 0, total_steps=7
-        )
-
-        session = SessionLocal()
-        await purge_old_programs(session, source_name)
-        session.close()
-
-        IngestTaskManager.update_step_progress(
-            task_id, 6, "Purging old programs", 100, total_steps=7
-        )
-
-        # Step 7: Rebuild Meilisearch index (if enabled)
-        if meili_enabled():
+            # Step 6: Purge old programs
             IngestTaskManager.update_step_progress(
-                    task_id, 7, "Rebuilding programs search index", 0, total_steps=7
-                )
-
-            success = await index_manager.rebuild_index("programs")
-            if not success:
-                raise RuntimeError("Failed to rebuild 'programs' Meilisearch index")
-
-            IngestTaskManager.update_step_progress(
-                task_id, 7, "Rebuilding programs search index", 100, total_steps=7
-                )
-        else:
-            logger.info(
-                "Meilisearch disabled (MEILI_ENABLED=false); skipping programs index rebuild"
+                task_id, 6, "Purging old programs", 0, total_steps=7
             )
+
+            session = SessionLocal()
+            await purge_old_programs(session, source_name)
+            session.close()
+
+            IngestTaskManager.update_step_progress(
+                task_id, 6, "Purging old programs", 100, total_steps=7
+            )
+
+            # Step 7: Rebuild Meilisearch index (if enabled)
+            if meili_enabled():
+                IngestTaskManager.update_step_progress(
+                        task_id, 7, "Rebuilding programs search index", 0, total_steps=7
+                    )
+
+                success = await index_manager.rebuild_index("programs")
+                if not success:
+                    raise RuntimeError("Failed to rebuild 'programs' Meilisearch index")
+
+                IngestTaskManager.update_step_progress(
+                    task_id, 7, "Rebuilding programs search index", 100, total_steps=7
+                    )
+            else:
+                logger.info(
+                    "Meilisearch disabled (MEILI_ENABLED=false); skipping programs index rebuild"
+                )
 
         # Precompute all filter values AFTER purge so filters reflect the cleaned data
         precompute_all_filter_values(session)
@@ -2709,9 +2718,6 @@ async def unapply_rules(
 def get_available_plugins():
     """Get all available built-in plugins (without source-specific configuration)."""
     try:
-        from rules.plugin_integration import get_plugin_integration
-        from rules.plugins.registry import get_plugin_registry, load_all_plugins
-
         # Load all plugins
         load_all_plugins()
         registry = get_plugin_registry()
@@ -2736,8 +2742,6 @@ def get_available_plugins():
 def get_source_plugins(source: str):
     """Get plugins configuration for a specific source."""
     try:
-        from rules.plugin_integration import get_plugin_integration
-
         integration = get_plugin_integration()
 
         # Get source-specific plugin configuration
@@ -2761,9 +2765,6 @@ def get_source_plugins(source: str):
 def get_plugin(plugin_name: str):
     """Get details for a specific built-in plugin."""
     try:
-        from rules.plugin_integration import get_plugin_integration
-        from rules.plugins.registry import get_plugin_registry, load_all_plugins
-
         # Load all available plugins
         load_all_plugins()
         registry = get_plugin_registry()
@@ -2814,8 +2815,6 @@ def save_source_plugins_config(
 ):
     """Save built-in plugins configuration for a specific source."""
     try:
-        from rules.plugin_integration import get_plugin_integration
-
         integration = get_plugin_integration()
 
         # Validate configuration
@@ -2857,8 +2856,6 @@ def validate_plugins_config(
 ):
     """Validate built-in plugins configuration without saving."""
     try:
-        from rules.plugin_integration import get_plugin_integration
-
         integration = get_plugin_integration()
 
         # Validate configuration
@@ -2885,9 +2882,6 @@ def validate_plugins_config(
 def enable_plugin(plugin_name: str):
     """Enable a specific built-in plugin."""
     try:
-        from rules.plugin_integration import get_plugin_integration
-        from rules.plugins.registry import get_plugin_registry, load_all_plugins
-
         # Load all available plugins
         load_all_plugins()
         registry = get_plugin_registry()
@@ -2944,9 +2938,6 @@ def enable_plugin(plugin_name: str):
 def disable_plugin(plugin_name: str):
     """Disable a specific built-in plugin."""
     try:
-        from rules.plugin_integration import get_plugin_integration
-        from rules.plugins.registry import get_plugin_registry, load_all_plugins
-
         # Load all available plugins
         load_all_plugins()
         registry = get_plugin_registry()
@@ -3005,9 +2996,6 @@ def configure_plugin(
 ):
     """Configure parameters for a specific built-in plugin."""
     try:
-        from rules.plugin_integration import get_plugin_integration
-        from rules.plugins.registry import get_plugin_registry, load_all_plugins
-
         # Load all available plugins
         load_all_plugins()
         registry = get_plugin_registry()
@@ -3069,7 +3057,6 @@ async def save_flow_for_source(
 ) -> dict[str, Any]:
     """Save flow configuration for a specific source."""
     try:
-        from common.flow_storage import save_flow, validate_flow_data
 
         # Validate flow data structure
         if not validate_flow_data(flow_data):
@@ -3112,8 +3099,6 @@ async def save_flow_for_source(
 async def load_flow_for_source(source: str) -> dict[str, Any]:
     """Load flow configuration for a specific source."""
     try:
-        from common.flow_storage import load_flow
-
         # Load flow
         flow_data = load_flow(source)
 
@@ -3144,8 +3129,6 @@ async def load_flow_for_source(source: str) -> dict[str, Any]:
 async def delete_flow_for_source(source: str) -> dict[str, Any]:
     """Delete flow configuration for a specific source."""
     try:
-        from common.flow_storage import delete_flow
-
         # Delete flow
         success = delete_flow(source)
 
@@ -3179,8 +3162,6 @@ async def delete_flow_for_source(source: str) -> dict[str, Any]:
 async def list_all_flows() -> dict[str, Any]:
     """List all saved flow configurations."""
     try:
-        from common.flow_storage import list_saved_flows
-
         flows = list_saved_flows()
 
         return {"flows": flows, "count": len(flows)}
@@ -3205,24 +3186,14 @@ async def execute_flow_for_source(
     table_name: str = Query(
         default="m3u_channels", description="Table to execute flow on"
     ),
-    limit: int = Query(
-        default=100, ge=1, le=10000, description="Maximum records to process"
-    ),
+    limit: int | None = None
 ) -> dict[str, Any]:
     """Execute a flow configuration on real data from a specific source and table."""
     logger.info(
-        f"Executing flow for source {source} on table {table_name} with limit {limit}"
+        f"Executing flow for source {source} on table {table_name}"
     )
 
     try:
-        from rules.enhanced_rules_engine import EnhancedRulesEngine
-        from common.database import get_session
-        from models.db_models import get_table_model
-        from common.flow_storage import validate_flow_data
-        import tempfile
-        import json
-        import os
-
         # Validate flow data structure
         if not validate_flow_data(flow_data):
             raise HTTPException(
@@ -3250,7 +3221,7 @@ async def execute_flow_for_source(
             rules_engine = EnhancedRulesEngine()
 
             # Get sample data from the specified table and source
-            with get_session() as session:
+            with SessionLocal() as session:
                 query = session.query(table_model)
 
                 # Filter by source if the table has a source column
@@ -3258,7 +3229,10 @@ async def execute_flow_for_source(
                     query = query.filter(table_model.source == source)
 
                 # Limit the number of records for execution
-                records = query.limit(limit).all()
+                if limit:
+                    records = query.limit(limit).all()
+                else:
+                    records = query.all()
 
                 if not records:
                     return {
@@ -3299,9 +3273,13 @@ async def execute_flow_for_source(
 
                 # Execute flow using enhanced rules engine
                 logger.info(f"Processing {len(record_dicts)} records through flow")
+                
+                # Cache the temporary flow configuration
+                rules_engine._flow_cache[source] = flow_data
+                
                 accepted_records, rejected_records = (
-                    rules_engine.apply_flow_to_records_batch(
-                        record_dicts, temp_flow_path
+                    rules_engine.apply_flow_to_records_vectorized(
+                        record_dicts, table_name, source
                     )
                 )
 
@@ -3388,24 +3366,21 @@ async def execute_flow_for_source(
     tags=["Flow Management"],
     status_code=status.HTTP_200_OK,
 )
-async def execute_single_node(
+async def execute_single_node_from_flow(
     source: str,
     node_id: str,
     flow_data: Annotated[dict[str, Any], Body()],
     table_name: str = Query(
         default="m3u_channels", description="Table to execute node on"
     ),
-    limit: int = Query(
-        default=100, ge=1, le=10000, description="Maximum records to process"
-    ),
+    limit: int | None = Query(default=None, description="Limit the number of input rows to process"),
 ) -> dict[str, Any]:
-    """Execute a single node from a flow configuration."""
-    logger.info(f"Executing single node {node_id} for source {source}")
+    """Execute a single node from a flow configuration using filtered input rows."""
+    logger.info(f"Executing single node {node_id} for source {source} on table {table_name}")
+    if limit:
+        logger.info(f"Limiting input rows to {limit}")
 
     try:
-        from rules.node_executor import NodeExecutor
-        from common.flow_storage import validate_flow_data
-
         # Validate flow data structure
         if not validate_flow_data(flow_data):
             raise HTTPException(
@@ -3432,7 +3407,7 @@ async def execute_single_node(
                 detail="Cannot execute source nodes directly",
             )
 
-        # Execute single node
+        # Execute single node with filtered input
         executor = NodeExecutor()
         result = await executor.execute_single_node(
             source=source,
@@ -3444,7 +3419,7 @@ async def execute_single_node(
 
         return {
             "success": True,
-            "data": {"node_id": node_id, "execution_type": "single_node", **result},
+            "data": {"node_id": node_id, "execution_type": "single_node_with_filtered_input", **result},
         }
 
     except HTTPException:
@@ -3454,6 +3429,131 @@ async def execute_single_node(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=f"Error executing node: {str(e)}",
+        )
+
+
+@app.post(
+    "/api/{source}/flows/nodes/{node_id}/filtered-rows",
+    response_model=dict[str, Any],
+    tags=["Flow Management"],
+    status_code=status.HTTP_200_OK,
+)
+async def get_filtered_rows_for_node(
+    source: str,
+    node_id: str,
+    flow_data: Annotated[dict[str, Any], Body()],
+    table_name: str = Query(
+        default="m3u_channels", description="Table to get filtered rows from"
+    ),
+    limit: int | None = Query(default=None, description="Limit the number of rows returned"),
+) -> dict[str, Any]:
+    """Get the filtered rows that will be input to the specified node."""
+    logger.info(f"Getting filtered rows for node {node_id} from source {source}")
+
+    try:
+        # Validate flow data structure
+        if not validate_flow_data(flow_data):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid flow data structure",
+            )
+
+        # Check if node exists in flow
+        node_exists = any(node.get("id") == node_id for node in flow_data.get("nodes", []))
+        if not node_exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Node {node_id} not found in flow",
+            )
+
+        # Get filtered rows using NodeExecutor
+        executor = NodeExecutor()
+        filtered_rows = await executor.get_filtered_rows_for_node(
+            source=source,
+            target_node_id=node_id,
+            flow_data=flow_data,
+            table_name=table_name,
+            limit=limit,
+        )
+
+        return {
+            "success": True,
+            "data": {
+                "node_id": node_id,
+                "source": source,
+                "table_name": table_name,
+                "filtered_rows": filtered_rows,
+                "row_count": len(filtered_rows),
+                "message": f"Retrieved {len(filtered_rows)} filtered rows for node {node_id}",
+            },
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error getting filtered rows for node {node_id} from source {source}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error getting filtered rows: {str(e)}",
+        )
+
+
+@app.post(
+    "/api/{source}/flows/nodes/{node_id}/process",
+    response_model=dict[str, Any],
+    tags=["Flow Management"],
+    status_code=status.HTTP_200_OK,
+)
+async def process_rows_through_node(
+    source: str,
+    node_id: str,
+    flow_data: Annotated[dict[str, Any], Body()],
+    table_name: str = Query(
+        default="m3u_channels", description="Table to process rows from"
+    ),
+    limit: int | None = Query(default=None, description="Limit the number of rows to process"),
+) -> dict[str, Any]:
+    """Process rows through a specific node to see filtering results (passed/caught)."""
+    logger.info(f"Processing rows through node {node_id} from source {source}")
+
+    try:
+        # Validate flow data structure
+        if not validate_flow_data(flow_data):
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="Invalid flow data structure",
+            )
+
+        # Check if node exists in flow
+        node_exists = any(node.get("id") == node_id for node in flow_data.get("nodes", []))
+        if not node_exists:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail=f"Node {node_id} not found in flow",
+            )
+
+        # Process rows through the node
+        executor = NodeExecutor()
+        result = await executor.process_rows_through_node(
+            source=source,
+            target_node_id=node_id,
+            flow_data=flow_data,
+            table_name=table_name,
+            limit=limit,
+        )
+
+        return {
+            "success": True,
+            "data": result,
+        }
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception(f"Error processing rows through node {node_id} from source {source}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error processing rows: {str(e)}",
         )
 
 
@@ -3470,16 +3570,12 @@ async def execute_flow_to_node(
     table_name: str = Query(
         default="m3u_channels", description="Table to execute flow on"
     ),
-    limit: int = Query(
-        default=100, ge=1, le=10000, description="Maximum records to process"
-    ),
+    limit: int | None = None
 ) -> dict[str, Any]:
     """Execute flow from start up to (and including) the specified node."""
     logger.info(f"Executing flow to node {node_id} for source {source}")
 
     try:
-        from rules.node_executor import NodeExecutor
-        from common.flow_storage import validate_flow_data
 
         # Validate flow data structure
         if not validate_flow_data(flow_data):
@@ -3530,17 +3626,12 @@ async def execute_flow_from_node(
     table_name: str = Query(
         default="m3u_channels", description="Table to execute flow on"
     ),
-    limit: int = Query(
-        default=100, ge=1, le=10000, description="Maximum records to process"
-    ),
+    limit: int | None = None,
 ) -> dict[str, Any]:
     """Execute flow from the specified node to the end."""
     logger.info(f"Executing flow from node {node_id} for source {source}")
 
     try:
-        from rules.node_executor import NodeExecutor
-        from common.flow_storage import validate_flow_data
-
         # Validate flow data structure
         if not validate_flow_data(flow_data):
             raise HTTPException(

@@ -496,7 +496,7 @@ class EnhancedRulesEngine:
         """
         total_records = len(records)
         logger.info(
-            f"Starting path-based flow processing for {total_records} records from {source_name}"
+            f"Starting path-based flow processing for {total_records} records from {source_name} on table {table_name}"
         )
 
         if not records:
@@ -517,7 +517,7 @@ class EnhancedRulesEngine:
             records_data.append(record_dict)
 
         # Load flow configuration
-        logger.info(f"Loading flow configuration for source: {source_name}")
+        logger.debug(f"Loading flow configuration for source: {source_name}")
         flow_config = self.load_flow_configuration(source_name)
         if not flow_config:
             logger.warning(
@@ -649,10 +649,10 @@ class EnhancedRulesEngine:
             else:
                 rejected_records.append(record)
 
+        accepted_count = len(accepted_records)
+        rejected_count = len(rejected_records)
         # Report progress
         if progress_callback:
-            accepted_count = len(accepted_records)
-            rejected_count = len(rejected_records)
             logger.info(
                 f"Calling progress callback: {accepted_count} accepted, {rejected_count} rejected"
             )
@@ -668,8 +668,9 @@ class EnhancedRulesEngine:
                 logger.warning(f"Progress callback failed: {e}")
 
         logger.info(
-            f"Processing completed: {len(accepted_records)} accepted, {len(rejected_records)} rejected"
+            f"Processing completed: {accepted_count} accepted, {rejected_count} rejected"
         )
+
         return accepted_records, rejected_records
 
     def _process_record_through_flow(

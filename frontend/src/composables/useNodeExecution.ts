@@ -16,13 +16,17 @@ export interface NodeExecutionOptions {
   limit?: number
 }
 
+export interface NodeExecutionConfig {
+  onRefresh?: () => Promise<void>
+}
+
 export interface NodeExecutionResult {
   success: boolean
   data?: any
   error?: string
 }
 
-export function useNodeExecution() {
+export function useNodeExecution(config?: NodeExecutionConfig) {
   const toast = useToast()
   const isExecuting = ref(false)
   const executionResult: Ref<NodeExecutionResult | null> = ref(null)
@@ -35,7 +39,7 @@ export function useNodeExecution() {
     executionResult.value = null
 
     try {
-      const response = await fetch(`/api/${options.source}/flows/nodes/${options.nodeId}/execute?table_name=${options.tableName || 'm3u_channels'}&limit=${options.limit || 100}`, {
+      const response = await fetch(`/api/${options.source}/flows/nodes/${options.nodeId}/execute?table_name=${options.tableName || 'm3u_channels'}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -66,6 +70,11 @@ export function useNodeExecution() {
         detail: `Successfully executed node with ${result.data?.execution_results?.stats?.total || 0} records processed`,
         life: 3000,
       })
+
+      // Refresh flow data if callback provided
+      if (config?.onRefresh) {
+        await config.onRefresh()
+      }
 
       return executionResult.value
 
@@ -100,7 +109,7 @@ export function useNodeExecution() {
     executionResult.value = null
 
     try {
-      const response = await fetch(`/api/${options.source}/flows/nodes/${options.nodeId}/execute-to?table_name=${options.tableName || 'm3u_channels'}&limit=${options.limit || 100}`, {
+      const response = await fetch(`/api/${options.source}/flows/nodes/${options.nodeId}/execute-to?table_name=${options.tableName || 'm3u_channels'}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -131,6 +140,11 @@ export function useNodeExecution() {
         detail: `Successfully executed flow up to node with ${result.data?.execution_results?.stats?.total || 0} records processed`,
         life: 3000,
       })
+
+      // Refresh flow data if callback provided
+      if (config?.onRefresh) {
+        await config.onRefresh()
+      }
 
       return executionResult.value
 
@@ -165,7 +179,7 @@ export function useNodeExecution() {
     executionResult.value = null
 
     try {
-      const response = await fetch(`/api/${options.source}/flows/nodes/${options.nodeId}/execute-from?table_name=${options.tableName || 'm3u_channels'}&limit=${options.limit || 100}`, {
+      const response = await fetch(`/api/${options.source}/flows/nodes/${options.nodeId}/execute-from?table_name=${options.tableName || 'm3u_channels'}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -196,6 +210,11 @@ export function useNodeExecution() {
         detail: `Successfully executed flow from node with ${result.data?.execution_results?.stats?.total || 0} records processed`,
         life: 3000,
       })
+
+      // Refresh flow data if callback provided
+      if (config?.onRefresh) {
+        await config.onRefresh()
+      }
 
       return executionResult.value
 

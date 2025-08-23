@@ -159,7 +159,7 @@ async def purge_old_programs(session: Session, source_name: str, cutoff_hours: i
         "Purging programs with end_time before %s (UTC)", cutoff.isoformat()
     )
     result = session.execute(
-        text("DELETE FROM programs WHERE end_time < :cutoff AND source_name = :source_name"),
+        text("DELETE FROM programs WHERE end_time < :cutoff AND source = :source_name"),
         {"cutoff": cutoff, "source_name": source_name},
     )
     deleted = result.rowcount or 0

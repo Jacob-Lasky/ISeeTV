@@ -229,7 +229,9 @@ const {
     executeFlowToNode,
     executeFlowFromNode,
     isExecuting,
-} = useNodeExecution()
+} = useNodeExecution({
+    onRefresh: flowContext?.loadFlow
+})
 
 // Computed properties for layout direction awareness
 const inputHandlePosition = computed(() => {

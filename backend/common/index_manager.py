@@ -58,7 +58,8 @@ class IndexManager:
                 "group",
                 "stream_url",
                 "logo_url",
-                "source"
+                "source",
+                "_trace"
             ],
             filterable_attributes=[
                 "source",
@@ -88,7 +89,8 @@ class IndexManager:
                 "channel_id",
                 "display_name",
                 "icon_url",
-                "source"
+                "source",
+                "_trace"
             ],
             filterable_attributes=[
                 "source",
@@ -115,7 +117,8 @@ class IndexManager:
                 "channel_id",
                 "title",
                 "description",
-                "source"
+                "source",
+                "_trace"
             ],
             filterable_attributes=[
                 "source",

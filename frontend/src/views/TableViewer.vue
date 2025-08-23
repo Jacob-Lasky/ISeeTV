@@ -155,22 +155,32 @@
                 <Column
                     field="filter_reasons"
                     header="Filter Reason"
-                    style="width: 200px"
                     :sortable="true"
                     :showFilterMenu="false"
+                    :style="{ width: '300px', minWidth: '300px', maxWidth: '300px' }"
                 >
                     <template #body="{ data }">
+                        <div v-if="data?.filter_reasons" :style="{ maxWidth: '100%', overflow: 'hidden' }">
+                            <pre :style="{
+                                fontFamily: 'Courier New, monospace',
+                                fontSize: '11px',
+                                lineHeight: '1.3',
+                                margin: '0',
+                                padding: '4px 6px',
+                                background: '#2d3748',
+                                border: '1px solid #4a5568',
+                                borderRadius: '4px',
+                                whiteSpace: 'pre-wrap',
+                                wordWrap: 'break-word',
+                                maxHeight: '120px',
+                                overflowY: 'auto',
+                                color: '#e2e8f0'
+                            }">{{ formatJSON(data.filter_reasons) }}</pre>
+                        </div>
                         <Tag
-                            :value="
-                                formatFilterReasons(
-                                    data?.filter_reasons ?? null
-                                )
-                            "
-                            :severity="
-                                getFilterReasonSeverity(
-                                    data?.filter_reasons ?? null
-                                )
-                            "
+                            v-else
+                            value="Passed"
+                            severity="success"
                         />
                     </template>
                     <template #filter="{ filterModel, filterCallback }">
@@ -277,9 +287,9 @@
                     <Column
                         field="stream_mode"
                         header="Stream Mode"
-                        style="width: 150px"
                         :sortable="true"
                         :showFilterMenu="false"
+                        :style="{ width: '100px', minWidth: '100px', maxWidth: '100px' }"
                     >
                         <template #body="{ data }">
                             <Tag
@@ -293,9 +303,9 @@
                                 v-model="filterModel.value"
                                 :options="streamModeOptions"
                                 placeholder="All Stream Modes"
-                                class="w-full"
                                 :show-clear="true"
                                 @change="filterCallback()"
+                                :style="{ width: '90px', minWidth: '90px' }"
                             >
                                 <template #option="slotProps">
                                     <Tag
@@ -378,6 +388,45 @@
                                 placeholder="Search name..."
                                 class="w-full"
                                 @input="filterCallback()"
+                            />
+                        </template>
+                    </Column>
+
+                    <!-- Trace Column -->
+                    <Column
+                        field="_trace"
+                        header="Trace"
+                        :sortable="true"
+                        :showFilterMenu="false"
+                        :style="{ width: '400px', minWidth: '400px', maxWidth: '400px' }"
+                    >
+                        <template #body="{ data }">
+                            <div v-if="data?._trace" :style="{ maxWidth: '100%', overflow: 'hidden' }">
+                                <pre :style="{
+                                    fontFamily: 'Courier New, monospace',
+                                    fontSize: '11px',
+                                    lineHeight: '1.3',
+                                    margin: '0',
+                                    padding: '4px 6px',
+                                    background: '#2d3748',
+                                    border: '1px solid #4a5568',
+                                    borderRadius: '4px',
+                                    whiteSpace: 'pre-wrap',
+                                    wordWrap: 'break-word',
+                                    maxHeight: '120px',
+                                    overflowY: 'auto',
+                                    color: '#e2e8f0'
+                                }">{{ formatJSON(data._trace) }}</pre>
+                            </div>
+                            <span v-else :style="{ color: 'var(--p-text-muted-color)' }">No trace</span>
+                        </template>
+                        <template #filter="{ filterModel, filterCallback }">
+                            <InputText
+                                v-model="filterModel.value"
+                                type="text"
+                                placeholder="Search Trace..."
+                                @input="filterCallback()"
+                                :style="{ width: '380px', minWidth: '380px' }"
                             />
                         </template>
                     </Column>
@@ -817,6 +866,11 @@ const getTableConfig = (tableName: string): TableConfig => {
                         field: "name",
                         header: "Name",
                         style: "width: 250px",
+                    },
+                    {
+                        field: "_trace",
+                        header: "Trace",
+                        style: "width: 200px",
                     },
                     {
                         field: "stream_url",
@@ -1594,9 +1648,62 @@ onMounted(async () => {
     await loadTableData()
     isInitializing.value = false
 })
+
+// Format JSON for display
+const formatJSON = (jsonData: string | object | null): string => {
+    if (!jsonData) return ''
+    
+    try {
+        // If it's already a string, try to parse it first
+        let parsed = jsonData
+        if (typeof jsonData === 'string') {
+            parsed = JSON.parse(jsonData)
+        }
+        
+        // Return formatted JSON with 2-space indentation
+        return JSON.stringify(parsed, null, 2)
+    } catch (error) {
+        // If parsing fails, return the original string
+        return typeof jsonData === 'string' ? jsonData : JSON.stringify(jsonData)
+    }
+}
 </script>
 
 <style scoped>
+.json-display {
+    max-width: 100%;
+    overflow: hidden;
+}
+
+.json-display pre {
+    font-family: 'Courier New', monospace;
+    font-size: 11px;
+    line-height: 1.3;
+    margin: 0;
+    padding: 4px 6px;
+    background: var(--p-surface-50);
+    border: 1px solid var(--p-surface-200);
+    border-radius: 4px;
+    white-space: pre-wrap;
+    word-wrap: break-word;
+    max-height: 120px;
+    overflow-y: auto;
+    color: var(--p-text-color);
+}
+
+.json-display pre::-webkit-scrollbar {
+    width: 4px;
+}
+
+.json-display pre::-webkit-scrollbar-track {
+    background: var(--p-surface-100);
+}
+
+.json-display pre::-webkit-scrollbar-thumb {
+    background: var(--p-surface-300);
+    border-radius: 2px;
+}
+
 .table-viewer {
     height: 100vh;
     display: flex;
