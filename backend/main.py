@@ -186,6 +186,212 @@ app.add_middleware(
 
 init_db()
 
+# --- Flow normalization helpers (frontend -> backend) ---
+def _is_frontend_flow_format(flow_data: dict[str, Any]) -> bool:
+    """Detect if flow_data is in the frontend split-array format."""
+    try:
+        frontend_fields = ["sources", "rules", "streams", "connections"]
+        return all(isinstance(flow_data.get(k), list) for k in frontend_fields)
+    except Exception:
+        return False
+
+
+def _normalize_frontend_flow_to_backend(
+    flow_data: dict[str, Any],
+    source: str,
+    table_name: str,
+) -> dict[str, Any]:
+    """Normalize frontend flow (sources/rules/streams/connections) to backend (nodes/edges).
+
+    Mapping rules:
+    - Source nodes -> type: "source", data.sourceName = source name
+    - Rule nodes   -> type: "rule",   data: {label, ruleName, pattern, table, enabled, action}
+    - Stream nodes -> type: "stream", data: {label, streamName, enabled}
+    - Connections  -> edges with source/target; if from a source node, add sourceHandle=f"table-{table_name}"
+
+    Adds a synthetic source node for the requested 'source' if missing and ensures
+    at least one edge from that source to each rule (with proper handle).
+    """
+    logger.info("[flow-normalize] Starting normalization of frontend flow format")
+
+    sources = flow_data.get("sources", []) or []
+    rules = flow_data.get("rules", []) or []
+    streams = flow_data.get("streams", []) or []
+    connections = flow_data.get("connections", []) or []
+
+    # Collect all tables mentioned in rules (for optional handleBounds)
+    rule_tables: set[str] = set()
+    for r in rules:
+        t = r.get("table")
+        if isinstance(t, str) and t:
+            rule_tables.add(t)
+    if not rule_tables:
+        rule_tables.add(table_name)
+
+    nodes: list[dict[str, Any]] = []
+    edges: list[dict[str, Any]] = []
+
+    # Build nodes
+    id_to_type: dict[str, str] = {}
+    id_exists: set[str] = set()
+
+    for s in sources:
+        sid = s.get("id") or f"source-{s.get('name', 'unknown')}"
+        label = s.get("name") or sid
+        # Provide handle bounds for all rule tables to aid single-node execution flows
+        handle_bounds = {
+            "source": [{"id": f"table-{tbl}"} for tbl in sorted(rule_tables)],
+        }
+        node = {
+            "id": sid,
+            "type": "source",
+            "position": {"x": 0, "y": 0},
+            "data": {
+                "label": label,
+                "sourceName": label,
+            },
+            "handleBounds": handle_bounds,
+        }
+        nodes.append(node)
+        id_to_type[sid] = "source"
+        id_exists.add(sid)
+
+    for r in rules:
+        rid = r.get("id") or f"rule-{r.get('name', 'unnamed')}"
+        name = r.get("name") or rid
+        node = {
+            "id": rid,
+            "type": "rule",
+            "position": {"x": 0, "y": 0},
+            "data": {
+                "label": name,
+                "ruleName": name,
+                "pattern": r.get("pattern", ".*"),
+                "table": r.get("table", table_name),
+                "enabled": r.get("enabled", True),
+                "action": r.get("action", "filter"),
+                # Optional: default field for fallback typed rule creation
+                "field": r.get("field", "name"),
+            },
+        }
+        nodes.append(node)
+        id_to_type[rid] = "rule"
+        id_exists.add(rid)
+
+    for st in streams:
+        tid = st.get("id") or f"stream-{st.get('name', 'unnamed')}"
+        name = st.get("name") or tid
+        node = {
+            "id": tid,
+            "type": "stream",
+            "position": {"x": 0, "y": 0},
+            "data": {
+                "label": name,
+                "streamName": name,
+                "enabled": st.get("enabled", True),
+            },
+        }
+        nodes.append(node)
+        id_to_type[tid] = "stream"
+        id_exists.add(tid)
+
+    logger.info(
+        f"[flow-normalize] Built nodes from frontend: sources={len(sources)}, rules={len(rules)}, streams={len(streams)} -> total nodes={len(nodes)}"
+    )
+
+    # Build edges
+    edge_index = 0
+    for c in connections:
+        src = c.get("from")
+        dst = c.get("to")
+        if not src or not dst:
+            logger.warning(f"[flow-normalize] Skipping connection missing endpoints: {c}")
+            continue
+        if src not in id_exists or dst not in id_exists:
+            logger.warning(
+                f"[flow-normalize] Skipping connection with unknown node(s): from={src} to={dst}"
+            )
+            continue
+
+        src_type = id_to_type.get(src, "unknown")
+        edge = {
+            "id": f"edge-{edge_index}-{src}-{dst}",
+            "source": src,
+            "target": dst,
+            # Rule-based path routing relies on sourceHandle for source nodes
+            "sourceHandle": f"table-{table_name}" if src_type == "source" else c.get("type", "default"),
+            "targetHandle": "input",
+        }
+        edges.append(edge)
+        edge_index += 1
+
+    # Ensure a source node exists for the requested 'source'
+    matching_source_node = None
+    for n in nodes:
+        if n.get("type") == "source" and n.get("data", {}).get("sourceName") == source:
+            matching_source_node = n
+            break
+
+    if not matching_source_node:
+        logger.info(
+            f"[flow-normalize] No matching source node for '{source}' found; creating synthetic source node"
+        )
+        synthetic_id = f"source-{source}"
+        matching_source_node = {
+            "id": synthetic_id,
+            "type": "source",
+            "position": {"x": 0, "y": 0},
+            "data": {"label": source, "sourceName": source},
+            "handleBounds": {"source": [{"id": f"table-{tbl}"} for tbl in sorted(rule_tables)]},
+        }
+        nodes.append(matching_source_node)
+        id_to_type[synthetic_id] = "source"
+        id_exists.add(synthetic_id)
+
+    # Ensure edges from matching source to rules for this table
+    existing_targets_from_matching = {
+        e["target"]
+        for e in edges
+        if e.get("source") == matching_source_node["id"]
+        and e.get("sourceHandle") == f"table-{table_name}"
+    }
+
+    added_edges = 0
+    for n in nodes:
+        if n.get("type") == "rule":
+            if n["id"] not in existing_targets_from_matching:
+                edges.append(
+                    {
+                        "id": f"edge-auto-{matching_source_node['id']}-{n['id']}",
+                        "source": matching_source_node["id"],
+                        "target": n["id"],
+                        "sourceHandle": f"table-{table_name}",
+                        "targetHandle": "input",
+                    }
+                )
+                added_edges += 1
+
+    if added_edges:
+        logger.info(
+            f"[flow-normalize] Added {added_edges} source->rule edges for table '{table_name}' from source '{matching_source_node['id']}'"
+        )
+
+    backend_flow = {
+        "nodes": nodes,
+        "edges": edges,
+        "source": source,
+        "version": "1.0",
+    }
+
+    logger.info(
+        f"[flow-normalize] Completed normalization: nodes={len(nodes)}, edges={len(edges)}"
+    )
+    logger.debug(
+        f"[flow-normalize] Sample edges: {[ (e.get('source'), e.get('target'), e.get('sourceHandle')) for e in edges[:5] ]}"
+    )
+
+    return backend_flow
+
 # Initialize scheduler
 sources_file = os.path.join(DATA_PATH, "sources.json")
 initialize_scheduler(sources_file)
@@ -3194,11 +3400,35 @@ async def execute_flow_for_source(
     )
 
     try:
-        # Validate flow data structure
+        # Log the received flow data for debugging
+        logger.info(f"[execute_flow_for_source]: Received flow_data keys: {list(flow_data.keys())}")
+
+        # Detect and normalize frontend format to backend format
+        if _is_frontend_flow_format(flow_data):
+            logger.info(
+                f"[execute_flow_for_source]: Detected frontend flow format. counts: "
+                f"sources={len(flow_data.get('sources', []))}, "
+                f"rules={len(flow_data.get('rules', []))}, streams={len(flow_data.get('streams', []))}, "
+                f"connections={len(flow_data.get('connections', []))}"
+            )
+
+            flow_data = _normalize_frontend_flow_to_backend(flow_data, source, table_name)
+
+            logger.info(
+                f"[execute_flow_for_source]: Normalized to backend format. nodes={len(flow_data.get('nodes', []))}, "
+                f"edges={len(flow_data.get('edges', []))}"
+            )
+        else:
+            logger.info(
+                f"[execute_flow_for_source]: Using backend flow format. nodes={len(flow_data.get('nodes', []))}, "
+                f"edges={len(flow_data.get('edges', []))}"
+            )
+
+        # Validate flow data structure (post-normalization)
         if not validate_flow_data(flow_data):
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Invalid flow data structure",
+                detail="Invalid flow data structure after normalization",
             )
 
         # Get table model
@@ -3209,153 +3439,116 @@ async def execute_flow_for_source(
                 detail=f"Invalid table name: {table_name}",
             )
 
-        # Create temporary flow configuration file
-        with tempfile.NamedTemporaryFile(
-            mode="w", suffix=".json", delete=False
-        ) as temp_file:
-            json.dump(flow_data, temp_file, indent=2)
-            temp_flow_path = temp_file.name
+        # Use NodeExecutor to ensure in-memory override builds typed FlowConfiguration
+        executor = NodeExecutor()
 
-        try:
-            # Initialize enhanced rules engine
-            rules_engine = EnhancedRulesEngine()
+        # Ensure flow_data carries the correct source for override keying
+        if flow_data.get("source") != source:
+            flow_data = {**flow_data, "source": source}
 
-            # Get sample data from the specified table and source
-            with SessionLocal() as session:
-                query = session.query(table_model)
+        # Fetch input ORM records (let the engine convert to dicts efficiently)
+        records = await executor._get_input_records(source, table_name, limit)
 
-                # Filter by source if the table has a source column
-                if hasattr(table_model, "source"):
-                    query = query.filter(table_model.source == source)
-
-                # Limit the number of records for execution
-                if limit:
-                    records = query.limit(limit).all()
-                else:
-                    records = query.all()
-
-                if not records:
-                    return {
-                        "success": True,
-                        "data": {
-                            "message": f"No records found for source '{source}' in table '{table_name}'",
-                            "source": source,
-                            "table_name": table_name,
-                            "total_records": 0,
-                            "execution_results": {
-                                "accepted": [],
-                                "rejected": [],
-                                "stats": {
-                                    "total": 0,
-                                    "accepted": 0,
-                                    "rejected": 0,
-                                    "with_trace": 0,
-                                    "with_filter_reasons": 0,
-                                },
-                            },
+        if not records:
+            return {
+                "success": True,
+                "data": {
+                    "message": f"No records found for source '{source}' in table '{table_name}'",
+                    "source": source,
+                    "table_name": table_name,
+                    "total_records": 0,
+                    "execution_results": {
+                        "accepted": [],
+                        "rejected": [],
+                        "stats": {
+                            "total": 0,
+                            "accepted": 0,
+                            "rejected": 0,
+                            "with_trace": 0,
+                            "with_filter_reasons": 0,
                         },
-                    }
+                    },
+                },
+            }
 
-                # Convert ORM objects to dictionaries for processing
-                record_dicts = []
-                for record in records:
-                    record_dict = {}
-                    for column in table_model.__table__.columns:
-                        value = getattr(record, column.name)
-                        # Handle JSON columns
-                        if hasattr(value, "__dict__") or isinstance(
-                            value, (dict, list)
-                        ):
-                            record_dict[column.name] = value
-                        else:
-                            record_dict[column.name] = value
-                    record_dicts.append(record_dict)
+        logger.info(f"Processing {len(records)} records through flow")
 
-                # Execute flow using enhanced rules engine
-                logger.info(f"Processing {len(record_dicts)} records through flow")
-                
-                # Cache the temporary flow configuration
-                rules_engine._flow_cache[source] = flow_data
-                
-                accepted_records, rejected_records = (
-                    rules_engine.apply_flow_to_records_vectorized(
-                        record_dicts, table_name, source
+        # Execute full flow using the in-memory override path
+        accepted_records, rejected_records = await executor._execute_flow_with_records(
+            records, flow_data, table_name
+        )
+
+        # Persist trace/filter/accepted flags back to DB
+        await executor._persist_trace_data(accepted_records + rejected_records, table_name, source)
+
+        # Calculate comprehensive statistics
+        total_records = len(records)
+        accepted_count = len(accepted_records)
+        rejected_count = len(rejected_records)
+
+        # Calculate tracing statistics
+        records_with_trace = len(
+            [
+                r
+                for r in accepted_records + rejected_records
+                if r.get("_trace") and len(r.get("_trace", [])) > 0
+            ]
+        )
+
+        records_with_filter_reasons = len(
+            [
+                r
+                for r in accepted_records + rejected_records
+                if r.get("filter_reasons")
+                and (
+                    (
+                        isinstance(r["filter_reasons"], dict)
+                        and len(r["filter_reasons"]) > 0
+                    )
+                    or (
+                        isinstance(r["filter_reasons"], str)
+                        and r["filter_reasons"] not in ["{}", "[]", ""]
                     )
                 )
+            ]
+        )
 
-                # Calculate comprehensive statistics
-                total_records = len(record_dicts)
-                accepted_count = len(accepted_records)
-                rejected_count = len(rejected_records)
+        # Prepare execution results
+        execution_results = {
+            "accepted": accepted_records,
+            "rejected": rejected_records,
+            "stats": {
+                "total": total_records,
+                "accepted": accepted_count,
+                "rejected": rejected_count,
+                "with_trace": records_with_trace,
+                "with_filter_reasons": records_with_filter_reasons,
+            },
+        }
 
-                # Calculate tracing statistics
-                records_with_trace = len(
-                    [
-                        r
-                        for r in accepted_records + rejected_records
-                        if r.get("_trace") and len(r.get("_trace", [])) > 0
-                    ]
-                )
+        logger.info(
+            f"Flow execution completed: {accepted_count} accepted, "
+            f"{rejected_count} rejected out of {total_records} total records"
+        )
 
-                records_with_filter_reasons = len(
-                    [
-                        r
-                        for r in accepted_records + rejected_records
-                        if r.get("filter_reasons")
-                        and (
-                            (
-                                isinstance(r["filter_reasons"], dict)
-                                and len(r["filter_reasons"]) > 0
-                            )
-                            or (
-                                isinstance(r["filter_reasons"], str)
-                                and r["filter_reasons"] not in ["{}", "[]", ""]
-                            )
-                        )
-                    ]
-                )
+        # Synchronize Meilisearch index with updated database records
+        try:
+            await sync_table_to_index(table_name, source)
+            logger.info(f"Synchronized Meilisearch index '{table_name}' after flow processing")
+        except Exception as e:
+            logger.warning(f"Failed to sync Meilisearch after flow processing: {e}")
 
-                # Prepare execution results
-                execution_results = {
-                    "accepted": accepted_records,
-                    "rejected": rejected_records,
-                    "stats": {
-                        "total": total_records,
-                        "accepted": accepted_count,
-                        "rejected": rejected_count,
-                        "with_trace": records_with_trace,
-                        "with_filter_reasons": records_with_filter_reasons,
-                    },
-                }
-
-                logger.info(
-                    f"Flow execution completed: {accepted_count} accepted, "
-                    f"{rejected_count} rejected out of {total_records} total records"
-                )
-
-                # Synchronize Meilisearch index with updated database records
-                try:
-                    await sync_table_to_index(table_name, source)
-                    logger.info(f"Synchronized Meilisearch index '{table_name}' after flow processing")
-                except Exception as e:
-                    logger.warning(f"Failed to sync Meilisearch after flow processing: {e}")
-
-                return {
-                    "success": True,
-                    "data": {
-                        "message": f"Flow executed successfully on {total_records} records",
-                        "source": source,
-                        "table_name": table_name,
-                        "total_records": total_records,
-                        "execution_results": execution_results,
-                        "flow_config": flow_data,
-                    },
-                }
-
-        finally:
-            # Clean up temporary file
-            if os.path.exists(temp_flow_path):
-                os.unlink(temp_flow_path)
+        return {
+            "success": True,
+            "data": {
+                "message": f"Flow executed successfully on {total_records} records",
+                "source": source,
+                "table_name": table_name,
+                "total_records": total_records,
+                "execution_results": execution_results,
+                "flow_config": flow_data,
+            },
+        }
 
     except HTTPException:
         raise

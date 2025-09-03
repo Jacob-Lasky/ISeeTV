@@ -100,6 +100,8 @@ class EnhancedRulesEngine:
         self._flow_cache: Dict[str, FlowConfiguration] = {}
         self._cache_timestamp: Optional[float] = None
         self._compiled_patterns: Dict[str, re.Pattern] = {}
+        # Optional in-memory override for flow JSON (used for partial/minimal flows)
+        self._flow_json_override: Dict[str, Dict[str, Any]] = {}
 
     def _should_reload_cache(self) -> bool:
         """Check if cache should be reloaded based on file modification times."""
@@ -138,6 +140,20 @@ class EnhancedRulesEngine:
 
     def load_flow_configuration(self, source_name: str) -> Optional[FlowConfiguration]:
         """Load flow configuration for a specific source."""
+        logger.info(f"[load_flow_configuration]: Loading flow configuration for source: {source_name}")
+        
+        # If an in-memory flow override exists, build a typed config from it (no caching)
+        if hasattr(self, "_flow_json_override") and source_name in self._flow_json_override:
+            logger.info(f"[load_flow_configuration]: Using in-memory flow override for {source_name}")
+            try:
+                override_data = self._flow_json_override[source_name]
+                logger.info(f"[load_flow_configuration]: Override data has {len(override_data.get('nodes', []))} nodes and {len(override_data.get('edges', []))} edges")
+                return self._build_flow_from_data(source_name, override_data)
+            except Exception as e:
+                logger.warning(
+                    f"Failed to build flow configuration from override for {source_name}: {e}"
+                )
+
         # Check if we need to reload this specific source's configuration
         if self._should_reload_source_cache(source_name):
             self._reload_source_cache(source_name)
@@ -302,13 +318,20 @@ class EnhancedRulesEngine:
                         rules.append(rule)
 
                 elif node.get("type") == "source":
-                    # Source node is the entry point
-                    entry_point = self._find_first_rule_from_source(
-                        node["id"], edges, nodes
-                    )
+                    # Source node is the entry point for the matching source; don't overwrite once set
+                    if node.get("data", {}).get("sourceName") == source_name and not entry_point:
+                        candidate = self._find_first_rule_from_source(
+                            node["id"], edges, nodes
+                        )
+                        if candidate:
+                            entry_point = candidate
 
             # Build next_rules relationships from edges
             self._build_rule_relationships(rules, edges, nodes)
+
+            # Fallback: if no entry point for this source, use the first rule (ensures typed config)
+            if not entry_point and rules:
+                entry_point = rules[0].name
 
             if not entry_point:
                 logger.warning(f"No entry point found for flow: {source_name}")
@@ -325,6 +348,111 @@ class EnhancedRulesEngine:
             logger.error(f"Error loading flow configuration for {source_name}: {e}")
             return None
 
+    def _build_flow_from_data(
+        self, source_name: str, flow_data: Dict[str, Any]
+    ) -> Optional[FlowConfiguration]:
+        """Build a FlowConfiguration directly from provided flow_data (no file I/O).
+
+        Does not modify the persistent _flow_cache. Used when an in-memory override
+        is present to keep typed objects consistent with the current edges/nodes.
+        """
+        try:
+            # Load rule definitions from rules.json
+            rule_definitions = self._load_rule_definitions()
+
+            # Extract rules from flow nodes
+            rules: List[FlowRule] = []
+            entry_point = None
+
+            nodes = flow_data.get("nodes", [])
+            edges = flow_data.get("edges", [])
+            logger.info(f"[_build_flow_from_data]: Analyzing flow for {source_name}: {len(nodes)} nodes, {len(edges)} edges")
+
+            # Log node types for debugging
+            node_types = {}
+            source_nodes = []
+            rule_nodes = []
+            for node in nodes:
+                node_type = node.get("type", "unknown")
+                node_types[node_type] = node_types.get(node_type, 0) + 1
+                if node_type == "source":
+                    source_name_in_node = node.get("data", {}).get("sourceName", "unknown")
+                    source_nodes.append(f"{node['id']}({source_name_in_node})")
+                elif node_type == "rule":
+                    rule_name = node.get("data", {}).get("ruleName", node.get("data", {}).get("label", node["id"]))
+                    rule_nodes.append(f"{node['id']}({rule_name})")
+            
+            logger.info(f"[_build_flow_from_data]: Node types: {node_types}")
+            logger.info(f"[_build_flow_from_data]: Source nodes: {source_nodes}")
+            logger.info(f"[_build_flow_from_data]: Rule nodes: {rule_nodes}")
+            logger.info(f"[_build_flow_from_data]: Edges: {[(e.get('source'), e.get('target'), e.get('sourceHandle', 'default')) for e in edges]}")
+
+            # Build rule objects from nodes
+            for node in nodes:
+                if node.get("type") == "rule":
+                    node_data = node.get("data", {})
+                    rule_name = node_data.get(
+                        "ruleName", node_data.get("label", f"rule_{node['id']}")
+                    )
+
+                    # Look up rule definition from rules.json
+                    rule_def = rule_definitions.get(rule_name)
+                    if rule_def:
+                        rule = FlowRule(
+                            name=rule_name,
+                            tables=rule_def["tables"],
+                            field=rule_def["field"],
+                            regex=rule_def["regex"],
+                            enabled=rule_def.get("enabled", True),
+                            not_=rule_def.get("not_", False),
+                            is_terminal=self._is_terminal_node(node["id"], edges),
+                        )
+                        rules.append(rule)
+                    else:
+                        # Fallback to node data if rule definition not found
+                        rule = FlowRule(
+                            name=rule_name,
+                            tables=[node_data.get("table", "unknown")],
+                            field=node_data.get("field", "name"),
+                            regex=node_data.get("pattern", ".*"),
+                            enabled=node_data.get("enabled", True),
+                            not_=node_data.get("not_", False),
+                            is_terminal=self._is_terminal_node(node["id"], edges),
+                        )
+                        rules.append(rule)
+
+                elif node.get("type") == "source":
+                    # Source node is the entry point for the matching source; don't overwrite once set
+                    if node.get("data", {}).get("sourceName") == source_name and not entry_point:
+                        candidate = self._find_first_rule_from_source(
+                            node["id"], edges, nodes
+                        )
+                        if candidate:
+                            entry_point = candidate
+
+            # Build next_rules relationships from edges
+            self._build_rule_relationships(rules, edges, nodes)
+
+            # Fallback: if no entry point for this source, use the first rule (ensures typed config)
+            if not entry_point and rules:
+                entry_point = rules[0].name
+
+            if not entry_point:
+                logger.warning(f"No entry point found for flow: {source_name}")
+                return None
+
+            return FlowConfiguration(
+                source_name=source_name,
+                entry_point=entry_point,
+                rules=rules,
+                mode="sequential",
+            )
+        except Exception as e:
+            logger.error(
+                f"Error building flow configuration from override for {source_name}: {e}"
+            )
+            return None
+
     def _is_terminal_node(self, node_id: str, edges: List[Dict]) -> bool:
         """Check if a node is terminal (has no outgoing edges to other rules)."""
         for edge in edges:
@@ -336,13 +464,25 @@ class EnhancedRulesEngine:
         self, source_node_id: str, edges: List[Dict], nodes: List[Dict]
     ) -> Optional[str]:
         """Find the first rule node connected to the source node."""
-        for edge in edges:
-            if edge.get("source") == source_node_id:
-                target_node_id = edge.get("target")
-                # Find the target node and check if it's a rule
-                for node in nodes:
-                    if node["id"] == target_node_id and node.get("type") == "rule":
-                        return node.get("data", {}).get("label", f"rule_{node['id']}")
+        connected_edges = [e for e in edges if e.get("source") == source_node_id]
+        logger.info(f"[_find_first_rule_from_source]: Source {source_node_id} has {len(connected_edges)} outgoing edges")
+        
+        for edge in connected_edges:
+            target_node_id = edge.get("target")
+            source_handle = edge.get("sourceHandle", "default")
+            logger.info(f"[_find_first_rule_from_source]: Checking edge to {target_node_id} via handle '{source_handle}'")
+            
+            # Find the target node and check if it's a rule
+            for node in nodes:
+                if node["id"] == target_node_id:
+                    node_type = node.get("type")
+                    logger.info(f"[_find_first_rule_from_source]: Target node {target_node_id} is type: {node_type}")
+                    if node_type == "rule":
+                        rule_name = node.get("data", {}).get("ruleName", node.get("data", {}).get("label", f"rule_{node['id']}"))
+                        logger.info(f"[_find_first_rule_from_source]: Found connected rule: {rule_name}")
+                        return rule_name
+        
+        logger.info(f"[_find_first_rule_from_source]: No rule node found connected to source {source_node_id}")
         return None
 
     def _build_rule_relationships(
@@ -540,14 +680,32 @@ class EnhancedRulesEngine:
             logger.info(f"Completed with {len(records_data)} accepted (no flow config)")
             return records_data, []
 
-        # Load the flow JSON to get edge information
-        flow_file_path = os.path.join(self.flows_dir, f"{source_name}_flow.json")
-        if not os.path.exists(flow_file_path):
-            logger.error(f"Flow file not found: {flow_file_path}")
-            return records_data, []  # Fallback to accepting all
+        # Load the flow JSON to get edge information (allow in-memory override)
+        flow_data = None
+        if hasattr(self, "_flow_json_override") and source_name in self._flow_json_override:
+            flow_data = self._flow_json_override[source_name]
 
-        with open(flow_file_path, "r") as f:
-            flow_data = json.load(f)
+        if not flow_data:
+            flow_file_path = os.path.join(self.flows_dir, f"{source_name}_flow.json")
+            if not os.path.exists(flow_file_path):
+                logger.error(f"Flow file not found: {flow_file_path}")
+                # Accept all records with minimal trace when flow JSON is missing
+                for record in records_data:
+                    record["_trace"] = [
+                        {
+                            "node_id": f"source:{source_name.lower()}",
+                            "type": "source",
+                            "input_table": table_name,
+                            "output": table_name,
+                        },
+                        {"node_id": "stream:accepted", "type": "sink", "accepted": True},
+                    ]
+                    record["filter_reasons"] = {}
+                    record["accepted"] = True
+                return records_data, []
+
+            with open(flow_file_path, "r") as f:
+                flow_data = json.load(f)
 
         nodes = flow_data.get("nodes", [])
         edges = flow_data.get("edges", [])

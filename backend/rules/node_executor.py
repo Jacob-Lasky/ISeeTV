@@ -16,6 +16,7 @@ Architecture:
 import json
 import tempfile
 import os
+from contextlib import nullcontext
 from typing import Any, Dict, List, Optional, Tuple, Set
 from datetime import datetime
 from sqlalchemy import text
@@ -402,36 +403,26 @@ class NodeExecutor:
         flow_data: Dict[str, Any], 
         table_name: str = "m3u_channels"
     ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]]]:
-        """Execute flow configuration on the provided records."""
-        # Create temporary flow file for the rules engine
-        with tempfile.NamedTemporaryFile(mode="w", suffix=".json", delete=False) as temp_file:
-            json.dump(flow_data, temp_file, indent=2)
-            temp_flow_path = temp_file.name
-        
+        """Execute flow on provided records using an in-memory flow JSON override."""
+        source_name = flow_data.get("source", "unknown")
+
+        # Install in-memory JSON override for edges/nodes while keeping typed FlowConfiguration
+        original_override = getattr(self.rules_engine, "_flow_json_override", {}).get(source_name)
+        if not hasattr(self.rules_engine, "_flow_json_override"):
+            self.rules_engine._flow_json_override = {}
+        self.rules_engine._flow_json_override[source_name] = flow_data
+
         try:
-            # Execute the flow using the enhanced rules engine with custom flow
-            # Override the flow configuration to use our minimal flow
-            source_name = flow_data.get("source", "unknown")
-            
-            # Temporarily override the flow configuration
-            original_config = self.rules_engine._flow_cache.get(source_name)
-            self.rules_engine._flow_cache[source_name] = flow_data
-            
-            try:
-                accepted_records, rejected_records = self.rules_engine.apply_flow_to_records_vectorized(
-                    records, table_name, source_name
-                )
-                return accepted_records, rejected_records
-            finally:
-                # Restore original configuration
-                if original_config is not None:
-                    self.rules_engine._flow_cache[source_name] = original_config
-                else:
-                    self.rules_engine._flow_cache.pop(source_name, None)
+            accepted_records, rejected_records = self.rules_engine.apply_flow_to_records_vectorized(
+                records, table_name, source_name
+            )
+            return accepted_records, rejected_records
         finally:
-            # Clean up temporary file
-            if os.path.exists(temp_flow_path):
-                os.unlink(temp_flow_path)
+            # Restore prior override to avoid side effects
+            if original_override is not None:
+                self.rules_engine._flow_json_override[source_name] = original_override
+            else:
+                self.rules_engine._flow_json_override.pop(source_name, None)
     
     def _create_execution_result(
         self,
@@ -502,8 +493,12 @@ class NodeExecutor:
         if limit:
             logger.info(f"Limiting output rows to {limit}")
         
-        # Get all records from the source
-        all_records = await self._get_input_records(source, table_name)
+        # Get records from the source (optimize: bounded fetch when limit is provided)
+        fetch_limit = None
+        if limit is not None:
+            # Oversample to account for pre-filter rejections before the target node
+            fetch_limit = max(1, min(limit * 5, limit * 10))  # simple cap to avoid runaway
+        all_records = await self._get_input_records(source, table_name, fetch_limit)
         if not all_records:
             logger.warning(f"No records found for source '{source}' in table '{table_name}'")
             return []
