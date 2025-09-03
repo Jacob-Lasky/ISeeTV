@@ -646,8 +646,12 @@ class EnhancedRulesEngine:
             record["accepted"] = record_accepted
             if record_accepted:
                 accepted_records.append(record)
+                if len(accepted_records) < 2:  # Debug first few records
+                    logger.info(f"Record {i} added to accepted_records with trace: {record.get('_trace', [])}")
             else:
                 rejected_records.append(record)
+                if len(rejected_records) < 2:  # Debug first few records
+                    logger.info(f"Record {i} added to rejected_records with trace: {record.get('_trace', [])}")
 
         accepted_count = len(accepted_records)
         rejected_count = len(rejected_records)
@@ -751,42 +755,16 @@ class EnhancedRulesEngine:
                 "field": rule.field,
                 "result": match,
                 "path": path,
-                "continued": True,  # Will be updated if we actually continue
+                "continued": True,  # Rules don't continue to next nodes for record processing
             }
-        )
-
+        )        
         # Find outgoing connections for this path
         rule_node_id = rule_node["id"]
         if rule_node_id not in edge_lookup:
             # No outgoing connections, record stops here
             record["_trace"][-1]["continued"] = False
-            return False
-
-        # Look for connections from the appropriate handle (passed/caught)
-        handle_name = path  # "passed" or "caught"
-        if handle_name not in edge_lookup[rule_node_id]:
-            # No connection for this path, record stops here
-            record["_trace"][-1]["continued"] = False
-            return False
-
-        # Follow the connected path
-        connections = edge_lookup[rule_node_id][handle_name]
-        for connection in connections:
-            target_node_id = connection["target_id"]
-            target_node = node_lookup.get(target_node_id)
-
-            if not target_node:
-                continue
-
-            # Recursively process the next node
-            if self._process_record_through_flow(
-                record, target_node, edge_lookup, node_lookup, flow_config, table_name
-            ):
-                return True
-
-        # No successful path found
-        record["_trace"][-1]["continued"] = False
-        return False
+            
+        return match
 
     def _process_stream_node(
         self, record: Dict[str, Any], stream_node: Dict[str, Any]

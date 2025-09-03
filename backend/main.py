@@ -3333,6 +3333,13 @@ async def execute_flow_for_source(
                     f"{rejected_count} rejected out of {total_records} total records"
                 )
 
+                # Synchronize Meilisearch index with updated database records
+                try:
+                    await sync_table_to_index(table_name, source)
+                    logger.info(f"Synchronized Meilisearch index '{table_name}' after flow processing")
+                except Exception as e:
+                    logger.warning(f"Failed to sync Meilisearch after flow processing: {e}")
+
                 return {
                     "success": True,
                     "data": {
@@ -3416,6 +3423,13 @@ async def execute_single_node_from_flow(
             table_name=table_name,
             limit=limit,
         )
+
+        # Synchronize Meilisearch index with updated database records
+        try:
+            await sync_table_to_index(table_name, source)
+            logger.info(f"Synchronized Meilisearch index '{table_name}' after flow processing")
+        except Exception as e:
+            logger.warning(f"Failed to sync Meilisearch after flow processing: {e}")
 
         return {
             "success": True,
@@ -3593,6 +3607,13 @@ async def execute_flow_to_node(
             table_name=table_name,
             limit=limit,
         )
+
+        # Synchronize Meilisearch index with updated database records
+        try:
+            await sync_table_to_index(table_name, source)
+            logger.info(f"Synchronized Meilisearch index '{table_name}' after flow processing")
+        except Exception as e:
+            logger.warning(f"Failed to sync Meilisearch after flow processing: {e}")
 
         return {
             "success": True,
