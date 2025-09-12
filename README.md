@@ -1,3 +1,7 @@
+Development on this has stopped in favor of Dispatcharr - https://github.com/Dispatcharr/Dispatcharr
+
+I will be contributing to that repo. I've learned a ton in the past year on this project but have lost interest in owning this after seeing how fleshed out Dispatcharr is.
+
 <p align="center"><img src=https://github.com/user-attachments/assets/16ca67e4-b7ec-430b-82c5-65042506797d/></p>
 
 <hr></hr>
