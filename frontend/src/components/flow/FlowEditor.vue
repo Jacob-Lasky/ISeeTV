@@ -1242,38 +1242,78 @@ const updateNodesWithExecutionResults = (executionData: any) => {
         return
     }
 
-    const { stats, accepted, rejected } = execution_results
+    const {
+        accepted: acceptedRecs = [],
+        rejected: rejectedRecs = [],
+    } = execution_results
 
-    // Update all nodes with execution timestamp
+    // Aggregate per-stream stats by parsing trace entries
+    const perStreamCounters: Record<
+        "accepted" | "rejected",
+        { accepted: number; rejected: number }
+    > = {
+        accepted: { accepted: 0, rejected: 0 },
+        rejected: { accepted: 0, rejected: 0 },
+    }
+
+    const getStreamTypeFromTrace = (
+        trace: any[],
+        fallback: "accepted" | "rejected"
+    ): "accepted" | "rejected" => {
+        if (!Array.isArray(trace)) return fallback
+        // Find the last sink entry for robustness
+        const sinkEntry = [...trace]
+            .reverse()
+            .find((t: any) => t?.type === "sink" && typeof t?.node_id === "string" && t.node_id.startsWith("stream:"))
+        if (!sinkEntry) return fallback
+        const suffix = String(sinkEntry.node_id).split(":")[1] || ""
+        if (suffix === "accepted" || suffix === "rejected") return suffix as "accepted" | "rejected"
+        return sinkEntry.accepted ? "accepted" : "rejected"
+    }
+
+    // Count accepted records per stream
+    for (const rec of acceptedRecs as any[]) {
+        const streamType = getStreamTypeFromTrace(rec?._trace || [], "accepted")
+        perStreamCounters[streamType].accepted += 1
+    }
+
+    // Count rejected records per stream
+    for (const rec of rejectedRecs as any[]) {
+        const streamType = getStreamTypeFromTrace(rec?._trace || [], "rejected")
+        perStreamCounters[streamType].rejected += 1
+    }
+
     const executionTime = new Date()
 
+    // Update only stream nodes with their specific counts
     nodes.value.forEach((node) => {
-        if (node.data.stats) {
-            // Update with real execution data
-            node.data.stats.processed = stats.total || 0
-            node.data.stats.passed = stats.accepted || 0
-            node.data.stats.caught = stats.rejected || 0
-            node.data.lastExecuted = executionTime
-
-            // Add tracing information if available
-            if (stats.with_trace > 0) {
-                node.data.stats.with_trace = stats.with_trace
-            }
-            if (stats.with_filter_reasons > 0) {
-                node.data.stats.with_filter_reasons = stats.with_filter_reasons
-            }
+        if (node.type !== "stream") return
+        const streamType = (node.data as StreamNodeData).streamType
+        const counts = perStreamCounters[streamType as "accepted" | "rejected"] || { accepted: 0, rejected: 0 }
+        if (!node.data.stats) {
+            node.data.stats = { processed: 0, passed: 0, caught: 0 }
         }
+        if (streamType === "accepted") {
+            node.data.stats.processed = counts.accepted
+            node.data.stats.passed = counts.accepted
+            node.data.stats.caught = 0
+        } else {
+            node.data.stats.processed = counts.rejected
+            node.data.stats.passed = 0
+            node.data.stats.caught = counts.rejected
+        }
+        node.data.lastExecuted = executionTime
     })
 
-    // Store detailed results for potential inspection
-    if (accepted?.length > 0 || rejected?.length > 0) {
-        console.log("Flow execution results:", {
-            accepted: accepted?.length || 0,
-            rejected: rejected?.length || 0,
-            sample_accepted: accepted?.slice(0, 3),
-            sample_rejected: rejected?.slice(0, 3),
-        })
-    }
+    // Debug output for verification
+    console.log("Per-stream execution summary:", {
+        accepted_stream_processed: perStreamCounters.accepted.accepted,
+        rejected_stream_processed: perStreamCounters.rejected.rejected,
+        samples: {
+            accepted: (acceptedRecs as any[]).slice(0, 2),
+            rejected: (rejectedRecs as any[]).slice(0, 2),
+        },
+    })
 }
 
 // Sidebar management

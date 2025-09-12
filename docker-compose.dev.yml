@@ -78,7 +78,7 @@ services:
       - MEILI_HTTP_ADDR=0.0.0.0:7700
       - MEILI_LOG_LEVEL=WARN
     volumes:
-      - meili_data:/meili_data
+      - ./meili_data:/meili_data
 
 volumes:
   meili_data:
