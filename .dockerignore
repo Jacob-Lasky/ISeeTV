@@ -1,41 +1,19 @@
-# Node
-**/node_modules
-**/npm-debug.log*
-**/yarn-debug.log*
-**/yarn-error.log*
-**/.pnpm-debug.log*
-**/build
-**/.cache
-**/.npm
+# Frontend
+frontend/node_modules
+frontend/dist
+frontend/.vscode
 
-# Python
-**/__pycache__
-**/*.py[cod]
-**/*.so
-**/.pytest_cache
-**/.ruff_cache
-**/.coverage
-**/.venv
-**/*.egg-info
+# Backend caches and venv
+backend/__pycache__/
+backend/.mypy_cache/
+backend/.ruff_cache/
+backend/.venv/
 
-# Dev environments
+# Python-related junk anywhere
+**/__pycache__/
+**/.mypy_cache/
+**/.ruff_cache/
+**/.venv/
+
+# Optional: VSCode workspace
 .vscode/
-.idea/
-*.swp
-*.swo
-.DS_Store
-
-# Misc
-.git/
-.github/
-docs/
-tests/
-*.md
-*.log
-*.tmp
-.env*
-!.env.example
-
-# Build
-**/dist
-**/build

@@ -1,59 +1,75 @@
-[tool.poetry]
-name = "iseetv-backend"
+[project]
+name = "backend"
 version = "0.1.0"
-description = "IPTV Backend"
-packages = [{include = "app"}]
-authors = ["Jacob Lasky <jacob.s.lasky@gmail.com>"]
+description = "Backend for the ISeeTV app"
+authors = [{ name = "Jacob Lasky", email = "jacob.s.lasky@gmail.com" }]
+requires-python = ">=3.11,<3.12"
+readme = "README.md"
+dependencies = [
+    "fastapi (>=0.115.13,<0.116.0)",
+    "uvicorn (>=0.34.3,<0.35.0)",
+    "pydantic (>=2.11.7,<3.0.0)",
+    "asyncio (>=3.4.3,<4.0.0)",
+    "httpx (>=0.28.1,<0.29.0)",
+    "pytz>=2025.2,<2026.0",
+    "lxml (>=6.0.0,<7.0.0)",
+    "sqlalchemy (>=2.0.41,<3.0.0)",
+    "apscheduler (>=3.11.0,<4.0.0)",
+    "pandas (>=2.3.1,<3.0.0)",
+    "meilisearch>=0.36.0",
+]
 
-[tool.poetry.dependencies]
-python = "^3.11"
-fastapi = "^0.115.8"
-uvicorn = "^0.34.0"
-sqlalchemy = {extras = ["asyncio"], version = "^2.0.38"}
-aiohttp = "^3.11.12"
-httpx = "^0.28.1"
-requests = "^2.32.3"
-aiosqlite = "^0.21.0"
-watchgod = "^0.8.2"
-python-ffmpeg-video-streaming = "^0.1.16"
-apscheduler = "^3.11.0"
+[dependency-groups]
+dev = [
+    "pytest>=8.4.1,<9",
+    "coverage>=7.9.2,<8",
+    "pytest-cov>=6.2.1,<7",
+    "ruff>=0.12.2,<0.13",
+    "pyright>=1.1.402,<2",
+    "pytest>=8.4.1",
+    "pytest-cov>=6.2.1",
+    "pytest-mock>=3.14.1",
+    "pytest-asyncio>=1.1.0",
+]
 
-[tool.poetry.group.dev.dependencies]
-ruff = "^0.9.5"
-mypy = "^1.15.0"
-black = "^25.1.0"
-types-requests = "^2.32.0.20241016"
-
-[tool.black]
-line-length = 88
-target-version = ['py311']
-include = '\.pyi?$'
-
-[tool.ruff]
-line-length = 88
-lint.select = ["E", "F", "I", "UP"]
-lint.ignore = ["E501"]
-
-[tool.ruff.lint.isort]
-force-single-line = true
-order-by-type = true
-
-[tool.ruff.lint.per-file-ignores]
-"__init__.py" = ["F401"]
-
-[tool.ruff.lint.pydocstyle]
-convention = "google"
-
-[tool.mypy]
-python_version = "3.11"
-disallow_untyped_defs = true
-check_untyped_defs = true
-warn_redundant_casts = true
-warn_unused_ignores = true
-warn_return_any = true
-strict_optional = true
-exclude = ["dev.py", "_dev.py"]
+[tool.uv]
+package = false
 
 [build-system]
-requires = ["poetry-core"]
-build-backend = "poetry.core.masonry.api"
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.coverage.run]
+omit = ["tests/*", "*/tests/*"]
+
+[tool.coverage.report]
+exclude_lines = [
+    "if __name__ == .__main__.:",
+    "pragma: no cover",
+]
+
+[tool.ruff]
+lint.select = ["ALL"]
+lint.preview = true
+lint.ignore = [
+    "COM812",  # missing-trailing-comma
+    "CPY001",  # missing copyright notice at top of file
+    "D203",    # blank line required before class docstring
+    "D211",    # no-blank-line-before-class
+    "D213",    # multi-line-summary-second-line
+    "FAST001", # routes should use the response_model parameter
+    "FIX002", # allow TODO
+
+    # temporarily ignore
+    "S608", # need to figure out a better way to sanitize SQL
+
+    "E501", # line too long
+
+    "PLR0912", # need to simplify functions (too many branches)
+    "PLR0913", # need to simplify functions (too many arguments)
+    "PLR0915", # need to simplify functions (too many statements)
+    "PLR0917", # need to simplify functions (too many positional arguments)
+    "C901", # need to simplify functions (too complex)
+    "FBT001", # split functions (boolean-typed positional argument)
+    "FBT002", # split functions (boolean-typed default argument)
+]

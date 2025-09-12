@@ -1,2 +1,26 @@
-node_modules
-package-lock.json
+# Dependency directories
+node_modules/
+dist/
+coverage/
+.build/
+.cache/
+
+# IDE/editor files
+.vscode/
+*.log
+
+# Build artifacts
+*.tsbuildinfo
+
+# Environment files
+.env
+.env.*.local
+
+# Docker & system-specific
+Dockerfile*
+docker-compose*.yml
+*.pid
+*.swp
+
+# Ignore lockfiles if you're not formatting them
+pnpm-lock.yaml

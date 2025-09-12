@@ -1,0 +1,170 @@
+"""SQLAlchemy database models for ISeeTV ETL pipeline.
+table definitions for EpgChannel, M3uChannel, and Program.
+"""
+
+from sqlalchemy import Column, DateTime, Index, Integer, String, Boolean, JSON
+from sqlalchemy.inspection import inspect
+from sqlalchemy.sql import func
+
+from common.db import Base
+from typing import Optional, Type
+
+
+class MetadataMixin:
+    @classmethod
+    def get_metadata(cls):
+        inspector = inspect(cls)
+        return [
+            {
+                "field": col.key,
+                "type": str(col.type),
+                "nullable": col.nullable,
+                "primary_key": col.primary_key,
+            }
+            for col in inspector.columns
+        ]
+
+
+class EpgChannelTable(Base, MetadataMixin):
+    """SQLAlchemy table model for EPG channels."""
+
+    __tablename__ = "epg_channels"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source = Column(String, nullable=False)
+    channel_id = Column(String, nullable=False)
+    display_name = Column(String, nullable=False)
+    icon_url = Column(String, nullable=True)
+    filter_reasons = Column(
+        JSON, nullable=True
+    )  # JSON object mapping rule names to boolean results
+    _trace = Column(
+        JSON, nullable=True
+    )  # JSON array of rule execution trace steps
+    accepted = Column(
+        Boolean, nullable=True, default=None
+    )  # Whether this record was accepted for streams table
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    # Composite unique constraint for source + channel_id
+    __table_args__ = (
+        Index("idx_epg_source_channel", "source", "channel_id", unique=True),
+        Index("idx_epg_source", "source"),
+    )
+
+
+class M3uChannelTable(Base, MetadataMixin):
+    """SQLAlchemy table model for M3U channels."""
+
+    __tablename__ = "m3u_channels"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source = Column(String, nullable=False)
+    tvg_id = Column(String, nullable=False)
+    name = Column(String, nullable=False)
+    stream_url = Column(String, nullable=False)
+    logo_url = Column(String, nullable=True)
+    group = Column(String, nullable=True)
+    stream_mode = Column(String, nullable=False, default="live")
+    filter_reasons = Column(
+        JSON, nullable=True
+    )  # JSON object mapping rule names to boolean results
+    _trace = Column(
+        JSON, nullable=True
+    )  # JSON array of rule execution trace steps
+    accepted = Column(
+        Boolean, nullable=True, default=None
+    )  # Whether this record was accepted for streams table
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    # Composite unique constraint for source + tvg_id
+    __table_args__ = (
+        Index("idx_m3u_source_tvg", "source", "tvg_id", unique=True),
+        Index("idx_m3u_source", "source"),
+        Index("idx_m3u_group", "group"),
+    )
+
+
+class ProgramTable(Base, MetadataMixin):
+    """SQLAlchemy table model for EPG programs."""
+
+    __tablename__ = "programs"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    source = Column(String, nullable=False)
+    program_id = Column(String, nullable=False)
+    channel_id = Column(String, nullable=False)
+    start_time = Column(DateTime, nullable=False)
+    end_time = Column(DateTime, nullable=False)
+    title = Column(String, nullable=True)
+    description = Column(String, nullable=True)
+    filter_reasons = Column(
+        JSON, nullable=True
+    )  # JSON object mapping rule names to boolean results
+    _trace = Column(
+        JSON, nullable=True
+    )  # JSON array of rule execution trace steps
+    accepted = Column(
+        Boolean, nullable=True, default=None
+    )  # Whether this record was accepted for streams table
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    # Composite unique constraint for source + program_id
+    __table_args__ = (
+        Index("idx_program_source_id", "source", "program_id", unique=True),
+        Index("idx_program_source_channel", "source", "channel_id"),
+        Index("idx_program_time_range", "start_time", "end_time"),
+        Index("idx_program_source", "source"),
+    )
+
+
+class FilterValueTable(Base):
+    """SQLAlchemy table model for precomputed filter values."""
+
+    __tablename__ = "filter_values"
+
+    id = Column(Integer, primary_key=True, autoincrement=True)
+    table_name = Column(
+        String, nullable=False
+    )  # e.g., 'm3u_channels', 'epg_channels', 'programs'
+    column_name = Column(String, nullable=False)  # e.g., 'source', 'group'
+    value = Column(String, nullable=False)  # The unique value
+    count = Column(
+        Integer, nullable=False, default=0
+    )  # Number of records with this value
+    created_at = Column(DateTime, server_default=func.now())
+    updated_at = Column(DateTime, server_default=func.now(), onupdate=func.now())
+
+    # Composite unique constraint for table + column + value
+    __table_args__ = (
+        Index(
+            "idx_filter_table_column_value",
+            "table_name",
+            "column_name",
+            "value",
+            unique=True,
+        ),
+        Index("idx_filter_table_column", "table_name", "column_name"),
+    )
+
+
+def get_table_model(table_name: str) -> Optional[Type[Base]]:
+    """Get SQLAlchemy table model by table name.
+    
+    Args:
+        table_name: Name of the table (e.g., 'epg_channels', 'm3u_channels', 'programs')
+        
+    Returns:
+        SQLAlchemy model class or None if table not found
+    """
+    table_mapping = {
+        'epg_channels': EpgChannelTable,
+        'm3u_channels': M3uChannelTable,
+        'programs': ProgramTable,
+        'filter_values': FilterValueTable
+    }
+    
+    return table_mapping.get(table_name)

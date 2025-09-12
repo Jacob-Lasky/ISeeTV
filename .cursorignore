@@ -1,5 +1,0 @@
-# Ignore all files in frontend/node_modules
-frontend/node_modules/
-
-# Ignore all files in backend/venv
-backend/venv/

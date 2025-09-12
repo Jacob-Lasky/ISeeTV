@@ -1,0 +1,24 @@
+# Frontend (Vite) Dev Image
+FROM node:22-slim AS frontend
+
+WORKDIR /app
+
+RUN corepack enable && corepack prepare pnpm@10.13.1 --activate
+
+COPY frontend/pnpm-lock.yaml frontend/package.json ./
+RUN pnpm install
+COPY frontend/ ./
+
+# Backend (FastAPI) Dev Image
+FROM ghcr.io/astral-sh/uv:0.7.20-python3.11-bookworm-slim AS backend
+
+WORKDIR /app
+
+# Copy project files
+COPY backend/pyproject.toml backend/uv.lock* ./
+
+# Install dependencies
+RUN uv sync --frozen --no-cache --link-mode copy
+
+# Copy the rest of the backend code
+COPY backend/ /app

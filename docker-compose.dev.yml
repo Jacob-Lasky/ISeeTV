@@ -1,0 +1,84 @@
+services:
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: frontend
+    working_dir: /app/frontend
+    command: pnpm run dev -- --host 0.0.0.0 --port 80
+    ports:
+      - "1313:80"
+    volumes:
+      - ./frontend:/app/frontend
+    environment:
+      - NODE_ENV=development
+      - VITE_BACKEND_URL=http://192.168.86.183:1314
+    develop:
+      watch:
+        # Sync frontend source code changes
+        - action: sync
+          path: ./frontend/src
+          target: /app/frontend/src
+        # Sync frontend public assets
+        - action: sync
+          path: ./frontend/public
+          target: /app/frontend/public
+        # Rebuild on package.json changes
+        - action: rebuild
+          path: ./frontend/package.json
+    depends_on:
+      - backend
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.dev
+      target: backend
+    working_dir: /app/backend
+    command: uv run uvicorn main:app --host 0.0.0.0 --port 1314 --reload
+    ports:
+      - "1314:1314"
+    depends_on:
+      - meilisearch
+    volumes:
+      - ./backend:/app/backend
+      - ./data:/app/data
+    environment:
+      - PYTHONUNBUFFERED=1
+      - UV_PROJECT_ENVIRONMENT=/tmp/.venv
+      - MEILI_ENABLED=true
+      - MEILI_HOST=http://meilisearch:7700
+      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY:-meili_dev_master_key}
+    develop:
+      watch:
+        # Sync backend source code changes
+        - action: sync
+          path: ./backend
+          target: /app/backend
+          ignore:
+            - .venv/
+            - __pycache__/
+            - .mypy_cache/
+            - .ruff_cache/
+        # Rebuild on dependency changes
+        - action: rebuild
+          path: ./backend/pyproject.toml
+        # Rebuild on uv.lock changes
+        - action: rebuild
+          path: ./backend/uv.lock
+
+  meilisearch:
+    image: getmeili/meilisearch:v1.7
+    restart: unless-stopped
+    ports:
+      - "7700:7700"
+    environment:
+      - MEILI_MASTER_KEY=${MEILI_MASTER_KEY:-meili_dev_master_key}
+      - MEILI_NO_ANALYTICS=true
+      - MEILI_HTTP_ADDR=0.0.0.0:7700
+      - MEILI_LOG_LEVEL=WARN
+    volumes:
+      - ./meili_data:/meili_data
+
+volumes:
+  meili_data:

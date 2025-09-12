@@ -1,11 +1,10 @@
 import requests
 import os
 import re
-import logging
 
-logging.basicConfig(level=logging.INFO)
+from common.log_utils import get_logger
 
-logger = logging.getLogger(__name__)
+logger = get_logger(__name__)
 
 GITHUB_TOKEN = os.getenv("GITHUB_TOKEN")
 REPO = "Jacob-Lasky/ISeeTV"

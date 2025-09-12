@@ -1,0 +1,257 @@
+import re
+from collections import defaultdict
+
+from fastapi import HTTPException, status
+
+from common.log_utils import get_logger
+from common.task_manager import IngestTaskManager
+from models.models import M3uChannel
+
+logger = get_logger(__name__)
+
+"""
+M3U are usually text-based with a structure similar to:
+
+#EXTM3U
+#EXT-X-SESSION-DATA:DATA-ID="com.data.1_0_0"
+#EXTINF:-1 tvg-id="Channel1.us" tvg-name="Channel 1" tvg-logo="https://channel1.png" group-title="Group 1",Channel 1
+https://url.to.stream/extrainfo
+#EXTINF:-1 tvg-id="Channel2.us" tvg-name="Channel 2" tvg-logo="https://channel2.png" group-title="Group 2",Channel 2
+https://url.to.stream/extrainfo
+#EXTINF:-1 tvg-id="Channel3.us" tvg-name="Channel 3" tvg-logo="https://channel3.png" group-title="Group 1",Channel 3
+https://url.to.stream/extrainfo
+"""
+
+# Expected M3U tags (case-insensitive)
+EXPECTED_M3U_TAGS = {
+    "#EXTM3U",
+    "#EXT-X-SESSION-DATA",  # HLS session data tag
+    "#EXTINF",
+}
+
+# Expected EXTINF attributes/keys
+EXPECTED_EXTINF_KEYS = {
+    "tvg-id",
+    "tvg-name",
+    "tvg-logo",
+    "group-title",
+    "timeshift",  # Time-shifting functionality
+}
+
+
+class M3uValidationResults:
+    """Container for M3U validation results and logging."""
+
+    def __init__(self) -> None:
+        self.unhandled_tags = defaultdict(int)
+        self.unhandled_extinf_keys = defaultdict(int)
+        self.channels_without_urls = []
+
+    def log_results(self, context: str = "") -> None:
+        """Log all validation results."""
+        prefix = f"[{context}] " if context else ""
+
+        if self.unhandled_tags:
+            logger.warning("%sUnhandled M3U tags found:", prefix)
+            for tag, count in self.unhandled_tags.items():
+                logger.warning("  - %s: %s occurrences", tag, count)
+
+        if self.unhandled_extinf_keys:
+            logger.warning("%sUnhandled EXTINF keys found:", prefix)
+            for key, count in self.unhandled_extinf_keys.items():
+                logger.warning("  - %s: %s occurrences", key, count)
+
+        if self.channels_without_urls:
+            logger.warning("%sChannels without playlist URLs found:", prefix)
+            for channel_name in self.channels_without_urls:
+                logger.warning("  - '%s'", channel_name)
+
+
+# Global validation results tracker
+validation_results = M3uValidationResults()
+
+
+def detect_stream_mode(stream_url: str) -> str:
+    """Detect stream mode based on URL pattern.
+
+    Returns 'on_demand' if URL ends with common video file extensions,
+    otherwise returns 'live' for streaming URLs.
+    """
+    logger.debug("Detecting stream mode for URL: %s", stream_url)
+    if not stream_url:
+        return "live"
+
+    # Common video file extensions that indicate on-demand content
+    on_demand_extensions = {
+        ".avi",
+        ".mkv",
+        ".mp4",
+        ".mov",
+        ".wmv",
+        ".flv",
+        ".webm",
+        ".m4v",
+        ".3gp",
+        ".ogv",
+        ".ts",
+        ".m2ts",
+        ".vob",
+        ".divx",
+    }
+
+    # Extract the path part of the URL (ignore query parameters)
+    url_path = stream_url.split("?")[0].lower()
+
+    # Check if URL ends with any on-demand file extension
+    for ext in on_demand_extensions:
+        if url_path.endswith(ext):
+            return "on_demand"
+
+    # Default to live streaming
+    return "live"
+
+
+def parse_extinf_line(line: str) -> tuple[dict, str]:
+    """Parse an EXTINF line and return attributes dict and channel name."""
+    # EXTINF format: #EXTINF:duration attr1="val1" attr2="val2",Channel Name
+    # Remove #EXTINF: prefix and split on comma to separate attributes from name
+    logger.debug("Parsing EXTINF line: %s", line)
+    should_be_empty, line = line.split("#EXTINF:")
+    if should_be_empty.strip():
+        logger.warning(
+            "Found unexpected text before #EXTINF: %s", should_be_empty.strip()
+        )
+
+    # Find the last comma to separate attributes from channel name
+    comma_idx = line.rfind(",")
+    if comma_idx == -1:
+        return {}, line.strip()
+
+    attrs_part = line[:comma_idx]
+    channel_name = line[comma_idx + 1 :].strip()
+
+    attrs = {}
+    # Use regex to parse attributes, handling both quoted and unquoted values
+    # Pattern matches: key="value" or key=value
+    attr_pattern = r'(\w[\w-]*?)=(?:"([^"]*)"|([^\s]+))'
+
+    for match in re.finditer(attr_pattern, attrs_part):
+        key = match.group(1)
+        # Use quoted value if present, otherwise unquoted value
+        value = match.group(2) if match.group(2) is not None else match.group(3)
+        attrs[key] = value or ""
+
+        if key not in EXPECTED_EXTINF_KEYS:
+            validation_results.unhandled_extinf_keys[key] += 1
+
+    return attrs, channel_name
+
+
+def validate_m3u_channel(
+    attrs: dict, channel_name: str, stream_url: str | None
+) -> M3uChannel | None:
+    """Validate and create M3uChannel from parsed data."""
+    logger.debug("Validating M3U channel: %s", channel_name)
+    # Warn if no stream URL
+    if not stream_url or not stream_url.strip():
+        validation_results.channels_without_urls.append(channel_name)
+        logger.warning("Channel '%s' has no playlist URL", channel_name)
+        return None
+
+    # Extract required and optional fields
+    tvg_id = attrs.get("tvg-id", "").strip()
+    name = attrs.get("tvg-name", channel_name).strip() or channel_name
+    logo_url = attrs.get("tvg-logo", "").strip() or None
+    group = attrs.get("group-title", "").strip() or None
+
+    # Use channel name as fallback for tvg-id if not provided
+    if not tvg_id:
+        tvg_id = channel_name
+
+    # Detect stream mode based on URL pattern
+    stream_mode = detect_stream_mode(stream_url)
+
+    return M3uChannel(
+        source="m3u",  # Will be overridden by caller with actual source
+        tvg_id=tvg_id,
+        name=name,
+        stream_url=stream_url.strip(),
+        logo_url=logo_url,
+        group=group,
+        stream_mode=stream_mode,
+    )
+
+
+def parse_m3u(
+    m3u_file: str, source: str = "m3u", task_id: str | None = None
+) -> list[M3uChannel]:
+    """Parse an M3U file and return a list of M3uChannel objects."""
+    logger.info("Parsing M3U file: %s", m3u_file)
+
+    if task_id:
+        IngestTaskManager.update_step_progress(task_id, 2, "Parsing", 0)
+
+    channels = []
+    current_extinf_attrs = None
+    current_channel_name = None
+
+    try:
+        with open(m3u_file, encoding="utf-8") as f:
+            for line_num, line in enumerate(f, 1):
+                line = line.strip()
+
+                # Skip empty lines
+                if not line:
+                    continue
+
+                # Handle M3U tags
+                if line.startswith("#"):
+                    # Extract tag name (everything before first space or colon)
+                    tag_match = re.match(r"^(#[A-Z-]+)", line, re.IGNORECASE)
+                    if tag_match:
+                        tag = tag_match.group(1).upper()
+
+                        if tag == "#EXTINF":
+                            # Parse EXTINF line
+                            current_extinf_attrs, current_channel_name = (
+                                parse_extinf_line(line)
+                            )
+                        elif tag not in EXPECTED_M3U_TAGS:
+                            # Track unhandled tags
+                            validation_results.unhandled_tags[tag] += 1
+
+                # Handle stream URLs (non-comment lines)
+                elif line.startswith("http"):
+                    if (
+                        current_extinf_attrs is not None
+                        and current_channel_name is not None
+                    ):
+                        # Create channel from current EXTINF data
+                        channel = validate_m3u_channel(
+                            current_extinf_attrs, current_channel_name, line
+                        )
+                        if channel:
+                            # Set the actual source
+                            channel.source = source
+                            channels.append(channel)
+
+                        # Reset for next channel
+                        current_extinf_attrs = None
+                        current_channel_name = None
+                    else:
+                        logger.warning(
+                            "Found stream URL without EXTINF at line %s: %s",
+                            line_num,
+                            line,
+                        )
+    except Exception as e:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Error parsing M3U file {m3u_file}: {e}",
+        )
+
+    # Log validation results
+    validation_results.log_results(context="parse_m3u")
+
+    logger.info("Successfully parsed %s channels from M3U file", len(channels))
+    return channels

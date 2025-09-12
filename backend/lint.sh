@@ -2,11 +2,11 @@
 # lint.sh
 set -e
 
+echo "Running Ruff Format..."
+uv run ruff format .
+
 echo "Running Ruff..."
-poetry run ruff check .
+uv run ruff check .
 
-echo "Running Black..."
-poetry run black .
-
-echo "Running MyPy..."
-poetry run mypy .
+echo "Running Pyright..."
+uv run pyright .

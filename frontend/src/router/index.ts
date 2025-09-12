@@ -1,0 +1,28 @@
+import { createRouter, createWebHistory } from "vue-router"
+import type { RouteRecordRaw } from "vue-router"
+
+import Home from "@/views/Home.vue"
+import Sources from "@/views/Sources.vue"
+import Flows from "@/views/Flows.vue"
+import Streams from "@/views/Streams.vue"
+import TableViewer from "@/views/TableViewer.vue"
+
+const routes: RouteRecordRaw[] = [
+    { path: "/", name: "Home", component: Home },
+    { path: "/sources", name: "Sources", component: Sources },
+    { path: "/streams", name: "Streams", component: Streams },
+    { path: "/rules", name: "Rules", component: Flows },
+    {
+        path: "/table/:sourceName/:tableName",
+        name: "TableViewer",
+        component: TableViewer,
+        props: true,
+    },
+]
+
+const router = createRouter({
+    history: createWebHistory(),
+    routes,
+})
+
+export default router
